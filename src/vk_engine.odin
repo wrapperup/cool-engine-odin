@@ -1240,12 +1240,12 @@ draw_geometry :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 	vk.CmdBindPipeline(cmd, .GRAPHICS, engine.mesh_pipeline)
 
 	push_constants: GPUDrawPushConstants
-	push_constants.world_matrix = 1.0
 	push_constants.view_matrix = linalg.matrix4_look_at_f32(
 		game_state.camera_pos,
 		game_state.camera_target,
 		{0.0, 1.0, 0.0},
 	)
+	push_constants.view_it_matrix = linalg.matrix4_inverse_transpose(push_constants.view_matrix)
 	push_constants.projection_matrix = linalg.matrix4_perspective_f32(
 		linalg.to_radians(game_state.camera_fov_deg),
 		f32(engine.window_extent.width) / f32(engine.window_extent.height),
@@ -1255,7 +1255,6 @@ draw_geometry :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 	push_constants.projection_matrix[1][1] *= -1.0;
 
 	push_constants.voxel_buffer = engine.voxel_buffer_address
-	push_constants.frame_time = u32(engine.frame_number)
 
 	vk.CmdPushConstants(cmd, engine.mesh_pipeline_layout, {.VERTEX}, 0, size_of(GPUDrawPushConstants), &push_constants)
 

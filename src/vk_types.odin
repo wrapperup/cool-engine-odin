@@ -26,14 +26,15 @@ Vertex :: struct {
 	color:    hlsl.float4,
 }
 
+#assert(size_of(GPUDrawPushConstants) <= 256)
 GPUDrawPushConstants :: struct {
-	world_matrix:      hlsl.float4x4,
 	view_matrix:       hlsl.float4x4,
+	view_it_matrix:    hlsl.float4x4,
 	projection_matrix: hlsl.float4x4,
 	voxel_buffer:      vk.DeviceAddress, // ^PackedVoxelData
-	frame_time:        u32,
 }
 
+#assert(size_of(ComputePushConstants) <= 256)
 ComputePushConstants :: struct {
 	voxel_buffer:     vk.DeviceAddress, // ^PackedVoxelData
 	draw_cmds_buffer: vk.DeviceAddress, // ^vk.DrawIndirectCommand

@@ -38,7 +38,7 @@ void write_draw_cmd() {
   DrawIndirectCommand draw_cmd;
 
   // We only draw 18 verts (3 faces) that are facing the camera.
-  draw_cmd.vertexCount = ((3 * 2) * 6) * (32 * 32 * 32);
+  draw_cmd.vertexCount = ((3 * 2) * 3) * (32 * 32 * 32);
   draw_cmd.firstVertex = 0;
   draw_cmd.instanceCount = 1;
   draw_cmd.firstInstance = 0;

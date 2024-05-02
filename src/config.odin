@@ -34,8 +34,8 @@ REQUIRED_VK_13_FEATURES := vk.PhysicalDeviceVulkan13Features {
 // Set required extensions to support.
 DEVICE_EXTENSIONS := []cstring {
 	vk.KHR_SWAPCHAIN_EXTENSION_NAME,
-	vk.KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-	vk.KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+	// vk.KHR_DYNAMIC_RENDERING_EXTENSION_NAME, // Enabled by default in 1.3
+	// vk.KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, // Enable by default in 1.3
 }
 
 // Set validation layers to enable.

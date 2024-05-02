@@ -24,7 +24,6 @@ struct Vertex {
 };
 
 struct GPUDrawPushConstants {
-  float4x4 world_matrix;
   float4x4 view_matrix;
   float4x4 projection_matrix;
   uint8_t *voxel_buffer;
@@ -71,13 +70,12 @@ uint3 index_to_pos(uint idx) {
   return uint3(x, y, z);
 }
 
-static const float3 fake_light = {0.0976, 0.9759, 0.1952};
+static const float3 fake_light = { 0.0976, 0.9759, 0.1952 };
 
 [shader("vertex")]
 V2P vertex_main(VertexInput input) {
   let voxel = push_constants.voxel_buffer[input.vertex_index / 36];
 
-  let world_matrix = push_constants.world_matrix;
   let view_matrix = push_constants.view_matrix;
   let projection_matrix = push_constants.projection_matrix;
 
@@ -93,12 +91,12 @@ V2P vertex_main(VertexInput input) {
 
     V2P output;
     output.pos =
-        mul(projection_matrix,
-            mul(view_matrix, mul(world_matrix, float4(v.position, 1.0))));
+        mul(projection_matrix, mul(view_matrix, float4(v.position, 1.0)));
     // output.pos = mul(view_matrix, mul(world_matrix,
     // float4(v.position, 1.0))); output.color = v.color.xyz; output.color =
     // v.position.xyz / 8;
-    output.color = lerp(((dot(v.normal, fake_light) / 0.5) + 0.5), 1.f, 1.2f - (voxel / 8.f));
+    output.color = lerp(((dot(v.normal, fake_light) / 0.5) + 0.5), 1.f,
+                        1.2f - (voxel / 8.f));
     // output.color = 1.0;
     output.color.r *= max(log(voxel / 8.f) + 0.25, 0.0);
     output.color.g *= max(log(voxel / 8.f) + 0.5, 0.3);
