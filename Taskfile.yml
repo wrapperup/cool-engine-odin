@@ -1,0 +1,33 @@
+version: '3'
+
+tasks:
+  default:
+    - task: run
+
+  run:
+    cmds:
+      - task build-debug
+      - ./build/main.exe
+
+  debug:
+    cmds:
+      - task build-debug
+      - powershell ./debug-rad.ps1
+
+  build-shaders:
+    sources:
+      - shaders/**/*.slang
+    cmds:
+      - pwsh ./build-shaders.ps1
+
+  build-debug:
+    deps: [build-shaders]
+    sources:
+      - src/**/*
+    cmds:
+      - pwsh ./build-debug.ps1
+
+  check:
+    cmds:
+      - odin check . -strict-style -warnings-as-errors -vet
+
