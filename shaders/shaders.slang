@@ -8,6 +8,16 @@ struct V2P {
   float3 color : COLOR0;
   [vk_location(1)]
   float2 uv : TEXCOORD0;
+  [vk_location(2)]
+  float3 normal;
+  [vk_location(3)]
+  float3 frag_pos;
+  [vk_location(4)]
+  float4 sun_space_pos;
+};
+
+struct V2PShadow {
+  float4 pos : SV_Position;
 };
 
 struct PSOutput {
@@ -23,164 +33,207 @@ struct Vertex {
   float4 color;
 };
 
+struct GlobalData {
+  float4x4 view_projection_matrix;
+  float4x4 view_projection_i_matrix;
+  float4x4 sun_view_projection_matrix;
+  float4x4 sun_view_projection_i_matrix;
+  float3 sun_color;
+  float bias;
+  float3 sky_color;
+  float pad_0;
+  float3 camera_pos;
+  float pad_1;
+  float3 sun_pos;
+  float pad_2;
+}
+
 struct GPUDrawPushConstants {
-  float4x4 view_matrix;
-  float4x4 view_it_matrix;
-  float4x4 projection_matrix;
-  uint8_t *voxel_buffer;
+  GlobalData *global_data_buffer;
+  Vertex *vertex_buffer;
 };
+
+[vk_location(0)]
+Sampler2D<float> DepthTextureSampler;
 
 [vk_push_constant]
-ConstantBuffer<GPUDrawPushConstants> push_constants;
+ConstantBuffer<GPUDrawPushConstants> pc;
 
-static const uint3 dir_face_lut_x[2][6] = {
-  {
-    { 0, 1, 1 }, // x-
-    { 0, 0, 0 },
-    { 0, 1, 0 },
-    { 0, 0, 0 },
-    { 0, 1, 1 },
-    { 0, 0, 1 },
-  },
-  {
-    { 1, 1, 1 }, // x+
-    { 1, 1, 0 },
-    { 1, 0, 0 },
-    { 1, 0, 0 },
-    { 1, 0, 1 },
-    { 1, 1, 1 },
-  },
+static const float4x4 biasMat = {
+  0.5, 0.0, 0.0, 0.5, //
+  0.0, 0.5, 0.0, 0.5, //
+  0.0, 0.0, 1.0, 0.0, //
+  0.0, 0.0, 0.0, 1.0, //
 };
-
-static const uint3 dir_face_lut_y[2][6] = {
-  {
-    { 1, 1, 1 }, // y-
-    { 0, 1, 1 },
-    { 0, 1, 0 },
-    { 0, 1, 0 },
-    { 1, 1, 0 },
-    { 1, 1, 1 },
-  },
-  {
-    { 0, 0, 1 }, // y+
-    { 1, 0, 1 },
-    { 0, 0, 0 },
-    { 1, 0, 0 },
-    { 0, 0, 0 },
-    { 1, 0, 1 },
-  },
-};
-
-static const uint3 dir_face_lut_z[2][6] = {
-  {
-    { 0, 0, 0 }, // z-
-    { 1, 0, 0 },
-    { 1, 1, 0 },
-    { 1, 1, 0 },
-    { 0, 1, 0 },
-    { 0, 0, 0 },
-  },
-  {
-    { 0, 1, 1 }, // z+
-    { 1, 1, 1 },
-    { 0, 0, 1 },
-    { 1, 0, 1 },
-    { 0, 0, 1 },
-    { 1, 1, 1 },
-  },
-};
-
-static const int3 normals[6] = {
-  { 0, 0, 1 },  // z+
-  { 0, 0, -1 }, // z-
-  { 1, 0, 0 },  // x+
-  { -1, 0, 0 }, // x-
-  { 0, 1, 0 },  // y+
-  { 0, -1, 0 }, // y-
-};
-
-uint3 index_to_pos(uint idx) {
-  uint x = (idx % 32);
-  uint y = (idx / 32) % 32;
-  uint z = (idx / 32) / 32;
-
-  return uint3(x, y, z);
-}
 
 static const float3 fake_light = { 0.0976, 0.9759, 0.1952 };
 
-float3 get_position_from_lut_index(uint idx, bool x_pos, bool y_pos, bool z_pos) {
-  let table = (idx / 3) % 3;
-  let vert_idx = idx % 6;
+[shader("vertex")]
+V2PShadow vertex_shadow_main(VertexInput input) {
+  let vertex = pc.vertex_buffer[input.vertex_index];
 
-  switch (table) {
-  case 0:
-    return dir_face_lut_x[x_pos > 0 ? 1 : 0][vert_idx];
-  case 1:
-    return dir_face_lut_y[y_pos > 0 ? 1 : 0][vert_idx];
-  case 2:
-    return dir_face_lut_z[z_pos > 0 ? 1 : 0][vert_idx];
-  }
+  let view_projection_matrix = pc.global_data_buffer.sun_view_projection_matrix;
 
-  return float3(0);
+  V2PShadow output;
+  output.pos = mul(view_projection_matrix, float4(vertex.position, 1.0));
+
+  return output;
 }
 
-float3 get_normal_from_lut_index(uint idx, bool x_pos, bool y_pos, bool z_pos) {
-  let table = (idx / 3) % 3;
+[shader("fragment")]
+PSOutput fragment_shadow_main(V2PShadow input) {
+  PSOutput output;
+  return output;
+}
 
-  switch (table) {
-  case 0:
-    return float3(x_pos > 0 ? -1 : 1, 0, 0);
-  case 1:
-    return float3(0, x_pos > 0 ? -1 : 1, 0);
-  case 2:
-    return float3(0, 0, x_pos > 0 ? -1 : 1);
+float shadow_calc(float4 shadow_coord, float2 offset = 0.0) {
+  // perform perspective divide
+  float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
+
+  // float closest_depth = DepthTextureSampler.Sample(proj_coords.xy + offset);
+  // float current_depth = proj_coords.z;
+
+  // float shadow = current_depth - pc.global_data_buffer.bias > closest_depth ?
+  // 0.0 : 1.0; float4 shadow = DepthTextureSampler.GatherCmp(proj_coords.xy +
+  // offset, proj_coords.z - pc.global_data_buffer.bias); return (shadow.x +
+  // shadow.y + shadow.z + shadow.w) / 4.f;
+
+  let shadow = DepthTextureSampler.SampleCmpLevelZero(proj_coords.xy + offset, proj_coords.z - pc.global_data_buffer.bias);
+
+  // let shadow = DepthTextureSampler.GatherCmp(
+  //     proj_coords.xy + offset,
+  //     proj_coords.z - pc.global_data_buffer.bias,
+  //     {1, 0},
+  //     {-1, 0},
+  //     {0, 1},
+  //     {0, -1},
+  //   );
+
+  return shadow;
+}
+
+// 9 imad (+ 6 iops with final shuffle) -- https://vkguide.dev
+uint3 pcg_3d(uint3 v) {
+
+  v = v * 1664525u + 1013904223u;
+
+  v.x += v.y * v.z;
+  v.y += v.z * v.x;
+  v.z += v.x * v.y;
+
+  v ^= v >> 16u;
+
+  v.x += v.y * v.z;
+  v.y += v.z * v.x;
+  v.z += v.x * v.y;
+
+  return v;
+}
+
+float filter_pcf(float2 screen_pos, float4 shadow_coord) {
+  int2 texDim;
+  DepthTextureSampler.GetDimensions(texDim.x, texDim.y);
+  float scale = 1.5;
+  float dx = scale * 1.0 / float(texDim.x);
+  float dy = scale * 1.0 / float(texDim.y);
+
+  float shadow_factor = 0.0;
+  int count = 0;
+  int range = 2;
+
+  float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
+
+  proj_coords = proj_coords;
+
+  uint4 u = uint4(uint2(screen_pos), uint(screen_pos.x) ^ uint(screen_pos.y),
+                  uint(screen_pos.x) + uint(screen_pos.y));
+  float3 rand = pcg_3d(u.xyz);
+  rand = normalize(rand);
+
+  float2 dirA = normalize(rand.xy);
+  float2 dirB = normalize(float2(-dirA.y, dirA.x));
+
+  dirA *= dx;
+  dirB *= dy;
+
+  float current_depth = proj_coords.z;
+
+  for (int x = -range; x <= range; x++) {
+    for (int y = -range; y <= range; y++) {
+      shadow_factor += shadow_calc(shadow_coord, dirA * x + dirB * y);
+      count++;
+    }
   }
 
-  return float3(0);
+  return shadow_factor / count;
+}
+
+float3 specular(float3 frag_pos, float spec_strength, float3 light_dir,
+                float shininess, float3 light_color, float3 view_pos,
+                float3 normal) {
+  float3 view_dir = normalize(view_pos - frag_pos);
+  float3 reflect_dir = reflect(-light_dir, normal);
+
+  float spec = pow(max(dot(view_dir, reflect_dir), 0.0), shininess);
+  float3 specular = spec_strength * spec;
+
+  return specular;
 }
 
 [shader("vertex")]
 V2P vertex_main(VertexInput input) {
-  let voxel = push_constants.voxel_buffer[input.vertex_index / 18];
+  let vertex = pc.vertex_buffer[input.vertex_index];
 
-  let view_matrix = push_constants.view_matrix;
-  let projection_matrix = push_constants.projection_matrix;
+  let view_projection_matrix = pc.global_data_buffer.view_projection_matrix;
 
-  Vertex v;
-  if (voxel > 3) {
-    v.position = get_position_from_lut_index(input.vertex_index, false, false, false);
-    v.position *= voxel / 9.f;
-    // v.position.y = -v.position.y;
-    v.position += index_to_pos(input.vertex_index / 18);
-    v.position -= 16;
+  V2P output;
+  output.pos = mul(view_projection_matrix, float4(vertex.position, 1.0));
+  output.normal = vertex.normal;
+  output.uv = float2(vertex.uv_x, vertex.uv_y);
+  output.frag_pos = vertex.position;
 
-    v.normal = get_normal_from_lut_index(input.vertex_index, false, false, false);
+  let light_contrib = dot(fake_light, vertex.normal);
 
-    V2P output;
-    output.pos =
-        mul(projection_matrix, mul(view_matrix, float4(v.position, 1.0)));
-    // output.pos = mul(view_matrix, mul(world_matrix,
-    // float4(v.position, 1.0))); output.color = v.color.xyz; output.color =
-    // v.position.xyz / 8;
-    output.color = lerp(((dot(v.normal, fake_light) / 0.5) + 0.5), 1.f,
-                        1.2f - (voxel / 8.f));
-    // output.color = 1.0;
-    output.color.r *= max(log(voxel / 8.f) + 0.25, 0.0);
-    output.color.g *= max(log(voxel / 8.f) + 0.5, 0.3);
-    output.color.b *= max(log(voxel / 8.f) + 0.5, 0.4);
+  // output.color = vertex.color.xyz;
+  output.color = lerp(float3(0.75, 0.24, 0.32), float3(1, 0.75, 0.70),
+                      saturate(light_contrib));
+  // output.color = 1.f - DepthTextureSampler.Sample(float2(0.5, 0.5)) * 100.0;
 
-    return output;
-  } else {
-    V2P x;
-    return x;
-  }
+  let sun_view_projection_matrix =
+      pc.global_data_buffer.sun_view_projection_matrix;
+
+  output.sun_space_pos = mul(
+      biasMat, mul(sun_view_projection_matrix, float4(vertex.position, 1.0)));
+
+  return output;
 }
 
 [shader("fragment")]
 PSOutput fragment_main(V2P input) {
   PSOutput output;
-  output.frag_color = float4(input.color, 1.f);
+  let coord = float4(input.pos.x / 1700, input.pos.y / 900, 0.0, 1.0);
+  // let shadow = shadow_calc(input.sun_space_pos);
+  let shadow = filter_pcf(input.pos.xy, input.sun_space_pos);
+  let normal = normalize(input.normal);
+
+  output.frag_color =
+      float4(lerp(input.color * pc.global_data_buffer.sun_color,
+                  input.color * pc.global_data_buffer.sky_color, 1.0 - shadow),
+             1.0);
+  // output.frag_color = shadow;
+  // output.frag_color = float4(input.color, 1.0);
+  // output.frag_color = input.sun_space_pos.z;
+
+  let view_pos = pc.global_data_buffer.camera_pos;
+  let light_pos = pc.global_data_buffer.sun_pos;
+
+  let light_dir = normalize(light_pos - input.frag_pos);
+
+  let specular_val =
+      specular(input.frag_pos, 0.5 * shadow, light_dir, 32.f, 1.0, view_pos, normal);
+
+  output.frag_color += float4(specular_val, 1.0);
 
   return output;
 }
+
