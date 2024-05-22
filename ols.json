@@ -3,5 +3,6 @@
 		{ "name": "deps", "path": "./deps" }
 	],
     "enable_fake_methods": true,
-    "enable_references": true
+    "enable_references": true,
+    "checker_args": "-ignore-unknown-attributes"
 }
