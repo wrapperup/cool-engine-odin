@@ -1,4 +1,4 @@
-package main
+package renderer
 
 import "core:mem"
 import vk "vendor:vulkan"

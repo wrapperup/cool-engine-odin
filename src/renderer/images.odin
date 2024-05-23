@@ -1,4 +1,4 @@
-package main
+package renderer
 
 import vk "vendor:vulkan"
 import vma "deps:odin-vma"
