@@ -4,16 +4,15 @@ import "core:fmt"
 import "core:mem"
 import "core:reflect"
 
-import vk "vendor:vulkan"
-import win "core:sys/windows"
-import "vendor:cgltf"
-import vkr "./renderer"
-import glfw "vendor:glfw"
 import "core:math"
 import "core:math/linalg"
+import win "core:sys/windows"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
+import "vendor:cgltf"
+import glfw "vendor:glfw"
+import vk "vendor:vulkan"
 
 main :: proc() {
 	when ODIN_OS == .Windows {
@@ -42,35 +41,63 @@ main :: proc() {
 		}
 	}
 
-	engine()
+	run_engine()
 }
 
-engine :: proc() {
-	engine := vkr.VulkanEngine {
+run_engine :: proc() {
+	engine := VulkanEngine {
 		window_extent = {1700, 900},
 	}
 
 	init_game_state()
 
-	if !vkr.init(&engine) {
+	if !init(&engine) {
 		fmt.println("App could not be initialized.")
 	}
 
-	if !glfw.WindowShouldClose(engine.window) {
+	for !glfw.WindowShouldClose(engine.window) {
 		update(&engine)
-		vkr.render(&engine)
+		render(&engine)
 
 		// Free temp allocations
 		free_all(context.temp_allocator)
 	}
+
+	free_game_state()
 }
 
-update :: proc(engine: ^vkr.VulkanEngine) {
-	update_game_state(engine)
+update :: proc(engine: ^VulkanEngine) {
+	update_game_state(engine, engine.delta_time)
 	update_imgui(engine)
 }
 
-update_game_state :: proc(engine: ^vkr.VulkanEngine) {
+update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
+	{
+		yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(engine.window)
+
+		yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(engine.window_extent.width)) - 0.5) * 100
+		pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(engine.window_extent.height)) - 0.5) * -50
+
+		wants_rotate_camera := glfw.GetMouseButton(engine.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+		if wants_rotate_camera {
+			glfw.SetCursorPos(engine.window, f64(engine.window_extent.width) / 2, f64(engine.window_extent.height) / 2)
+		}
+
+		if game_state.camera.rotating_camera {
+			game_state.camera.camera_rot += {f32(pitch_delta), f32(yaw_delta)}
+		}
+
+		if game_state.camera.rotating_camera != wants_rotate_camera {
+			if wants_rotate_camera {
+				glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+				glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
+			} else {
+				glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+			}
+		}
+
+		game_state.camera.rotating_camera = wants_rotate_camera
+	}
 	{
 		pitch := linalg.quaternion_angle_axis(game_state.camera.camera_rot.x, [3]f32{1, 0, 0})
 		yaw := linalg.quaternion_angle_axis(game_state.camera.camera_rot.y, [3]f32{0, -1, 0})
@@ -88,65 +115,46 @@ update_game_state :: proc(engine: ^vkr.VulkanEngine) {
 		key_shift := glfw.GetKey(engine.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
 		key_shift |= glfw.GetKey(engine.window, glfw.KEY_Q) == glfw.PRESS
 
+		accelleration: f32 = 120
+
 		if key_w {
-			game_state.camera.velocity += forward * 20 * engine.delta_time
+			game_state.camera.velocity += forward * accelleration * f32(dt)
 		}
 		if key_a {
-			game_state.camera.velocity += right * -20 * engine.delta_time
+			game_state.camera.velocity += right * -accelleration * f32(dt)
 		}
 		if key_s {
-			game_state.camera.velocity += forward * -20 * engine.delta_time
+			game_state.camera.velocity += forward * -accelleration * f32(dt)
 		}
 		if key_d {
-			game_state.camera.velocity += right * 20 * engine.delta_time
+			game_state.camera.velocity += right * accelleration * f32(dt)
 		}
 		if key_space {
-			game_state.camera.velocity += {0, 1, 0} * 20 * engine.delta_time
+			game_state.camera.velocity += {0, 1, 0} * accelleration * f32(dt)
 		}
 		if key_shift {
-			game_state.camera.velocity += {0, -1, 0} * 20 * engine.delta_time
+			game_state.camera.velocity += {0, -1, 0} * accelleration * f32(dt)
 		}
 
-		game_state.camera.translation += game_state.camera.velocity * engine.delta_time
+		game_state.camera.translation += game_state.camera.velocity * f32(dt)
 		if linalg.length(game_state.camera.velocity) > 0.0 {
-			friction: f32 = 0.1
-			game_state.camera.velocity = linalg.lerp(game_state.camera.velocity, 0.0, 1-math.pow_f32(friction, engine.delta_time))
+			friction: f32 = 0.0005
+			game_state.camera.velocity = linalg.lerp(
+				game_state.camera.velocity,
+				0.0,
+				1 - math.pow_f32(friction, f32(dt)),
+			)
 		}
 	}
 }
 
-update_imgui :: proc(engine: ^vkr.VulkanEngine) {
+update_imgui :: proc(engine: ^VulkanEngine) {
 	io := im.GetIO()
 	glfw.PollEvents()
 
 	im_vk.NewFrame()
 	im_glfw.NewFrame()
 	im.NewFrame()
-
-	yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(engine.window)
-
-	yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(engine.window_extent.width)) - 0.5) * 100
-	pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(engine.window_extent.height)) - 0.5) * -50
-
-	wants_rotate_camera := glfw.GetMouseButton(engine.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
-	if wants_rotate_camera {
-		glfw.SetCursorPos(engine.window, f64(engine.window_extent.width) / 2, f64(engine.window_extent.height) / 2)
-	}
-
-	if game_state.camera.rotating_camera {
-		game_state.camera.camera_rot += {f32(pitch_delta), f32(yaw_delta)}
-	}
-
-	if game_state.camera.rotating_camera != wants_rotate_camera {
-		if wants_rotate_camera {
-			glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-			glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
-		} else {
-			glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
-		}
-	}
-
-	game_state.camera.rotating_camera = wants_rotate_camera
 
 	if (im.Begin("Camera")) {
 		im.InputFloat3("pos", &game_state.camera.translation)

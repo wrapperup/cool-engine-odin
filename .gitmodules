@@ -1,0 +1,6 @@
+[submodule "deps/odin-libktx"]
+	path = deps/odin-libktx
+	url = https://github.com/DanielGavin/odin-libktx
+[submodule "deps/jolt"]
+	path = deps/jolt
+	url = https://gitlab.com/raygarner13/jolt

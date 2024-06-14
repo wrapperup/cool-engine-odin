@@ -1,6 +1,25 @@
 package main
 
 import "core:/math/linalg/hlsl"
+import "core:math/linalg"
+
+Entity :: struct {
+	translation: [3]f32,
+	velocity:    [3]f32,
+	rotation:    linalg.Quaternionf32,
+}
+
+entities: [dynamic]Entity
+
+EntityId :: distinct u32
+
+new_entity :: proc($T: typeid) -> T {
+	type_t := T{}
+	append(&entities, Entity{})
+	type_t.entity = &entities[len(entities) - 1]
+
+	return type_t
+}
 
 GameState :: struct {
 	environment: Environment,
@@ -52,4 +71,8 @@ init_game_state :: proc() {
 			bias = 0.001,
 		},
 	}
+}
+
+free_game_state :: proc() {
+	clear_dynamic_array(&entities)
 }

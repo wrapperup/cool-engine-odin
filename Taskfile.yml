@@ -22,8 +22,6 @@ tasks:
 
   build-debug:
     deps: [build-shaders]
-    sources:
-      - main/**/*
     cmds:
       - pwsh ./build-debug.ps1
 

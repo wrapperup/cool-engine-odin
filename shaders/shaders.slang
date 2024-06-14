@@ -4,15 +4,10 @@ struct VertexInput {
 
 struct V2P {
   float4 pos : SV_Position;
-  [vk_location(0)]
   float3 color : COLOR0;
-  [vk_location(1)]
   float2 uv : TEXCOORD0;
-  [vk_location(2)]
   float3 normal;
-  [vk_location(3)]
   float3 frag_pos;
-  [vk_location(4)]
   float4 sun_space_pos;
 };
 
@@ -53,7 +48,7 @@ struct GPUDrawPushConstants {
   Vertex *vertex_buffer;
 };
 
-[vk_location(0)]
+[vk_binding(0, 0)]
 Sampler2D<float> DepthTextureSampler;
 
 [vk_push_constant]
