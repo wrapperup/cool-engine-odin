@@ -29,3 +29,7 @@ tasks:
     cmds:
       - odin check . -strict-style -warnings-as-errors -vet
 
+  test:
+    cmds:
+      - odin test src -collection:deps=deps -debug -ignore-unknown-attributes
+

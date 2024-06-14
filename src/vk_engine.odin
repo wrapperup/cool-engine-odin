@@ -1261,19 +1261,21 @@ is_shaders_updated :: proc() -> bool {
 update_buffers :: proc(engine: ^VulkanEngine) {
 	global_uniform_data: GPUGlobalData
 
+	camera := get_entity(game_state.camera_id)
+
 	// Camera matrices
 	{
 		aspect_ratio := f32(engine.window_extent.width) / f32(engine.window_extent.height)
 
-		translation := linalg.matrix4_translate(game_state.camera.translation)
-		rotation := linalg.matrix4_from_quaternion(game_state.camera.rotation)
+		translation := linalg.matrix4_translate(camera != nil ? camera.translation : {})
+		rotation := linalg.matrix4_from_quaternion(camera != nil ? camera.rotation : {})
 
 		view_matrix := linalg.inverse(linalg.mul(translation, rotation))
 
 		// view_matrix := linalg.matrix4_look_at_f32(game_state.camera_pos, {0, 0, 0}, {0, 1, 0})
 
 		projection_matrix := linalg.matrix4_infinite_perspective_f32(
-			linalg.to_radians(game_state.camera.camera_fov_deg),
+			linalg.to_radians(camera != nil ? camera.camera_fov_deg : 0),
 			aspect_ratio,
 			0.1,
 			zero_to_one = true,
@@ -1308,7 +1310,7 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 	global_uniform_data.sky_color = game_state.environment.sky_color
 	global_uniform_data.bias = game_state.environment.bias
 
-	global_uniform_data.camera_pos = hlsl.float3(game_state.camera.translation)
+	global_uniform_data.camera_pos = hlsl.float3(camera != nil ? camera.translation : [3]f32{0, 0, 0})
 	global_uniform_data.sun_pos = hlsl.float3(game_state.environment.sun_pos)
 
 	write_buffer(&current_frame(engine).global_uniform_buffer, &global_uniform_data)

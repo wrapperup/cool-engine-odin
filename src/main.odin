@@ -1,11 +1,13 @@
 package main
 
+import "base:runtime"
 import "core:fmt"
 import "core:mem"
 import "core:reflect"
 
 import "core:math"
 import "core:math/linalg"
+import "core:strings"
 import win "core:sys/windows"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
@@ -71,7 +73,33 @@ update :: proc(engine: ^VulkanEngine) {
 	update_imgui(engine)
 }
 
+init_game_state :: proc() {
+	camera_id, camera := new_entity_with_typed_id(Camera)
+	player := new_entity(Player)
+	camera.translation = {-9, 9.5, 14}
+	camera.camera_rot = {-0.442, 0.448}
+	camera.camera_fov_deg = 45
+	camera.view_state = .SceneColor
+
+	game_state = GameState {
+		camera_id = camera_id,
+		environment = Environment {
+			sun_pos = {12, 15, 10},
+			sun_target = 0.0,
+			sun_color = 1.0,
+			sky_color = {.4, .35, .55},
+			bias = 0.001,
+		},
+	}
+}
+
+free_game_state :: proc() {
+	clear_dynamic_array(&entities)
+}
+
 update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
+	camera := get_entity(game_state.camera_id)
+
 	{
 		yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(engine.window)
 
@@ -83,27 +111,30 @@ update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
 			glfw.SetCursorPos(engine.window, f64(engine.window_extent.width) / 2, f64(engine.window_extent.height) / 2)
 		}
 
-		if game_state.camera.rotating_camera {
-			game_state.camera.camera_rot += {f32(pitch_delta), f32(yaw_delta)}
-		}
-
-		if game_state.camera.rotating_camera != wants_rotate_camera {
-			if wants_rotate_camera {
-				glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-				glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
-			} else {
-				glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+		if camera != nil {
+			if camera.rotating_camera {
+				camera.camera_rot += {f32(pitch_delta), f32(yaw_delta)}
 			}
+
+			if camera.rotating_camera != wants_rotate_camera {
+				if wants_rotate_camera {
+					glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+					glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
+				} else {
+					glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+				}
+			}
+
+			camera.rotating_camera = wants_rotate_camera
 		}
-
-		game_state.camera.rotating_camera = wants_rotate_camera
 	}
-	{
-		pitch := linalg.quaternion_angle_axis(game_state.camera.camera_rot.x, [3]f32{1, 0, 0})
-		yaw := linalg.quaternion_angle_axis(game_state.camera.camera_rot.y, [3]f32{0, -1, 0})
-		game_state.camera.rotation = linalg.mul(yaw, pitch)
 
-		forward := linalg.vector_normalize(linalg.quaternion_mul_vector3(game_state.camera.rotation, [3]f32{0, 0, -1}))
+	if camera != nil {
+		pitch := linalg.quaternion_angle_axis(camera.camera_rot.x, [3]f32{1, 0, 0})
+		yaw := linalg.quaternion_angle_axis(camera.camera_rot.y, [3]f32{0, -1, 0})
+		camera.rotation = linalg.mul(yaw, pitch)
+
+		forward := linalg.vector_normalize(linalg.quaternion_mul_vector3(camera.rotation, [3]f32{0, 0, -1}))
 		right := linalg.vector_cross3(forward, [3]f32{0, 1, 0})
 
 		key_w := glfw.GetKey(engine.window, glfw.KEY_W) == glfw.PRESS
@@ -118,34 +149,34 @@ update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
 		accelleration: f32 = 120
 
 		if key_w {
-			game_state.camera.velocity += forward * accelleration * f32(dt)
+			camera.velocity += forward * accelleration * f32(dt)
 		}
 		if key_a {
-			game_state.camera.velocity += right * -accelleration * f32(dt)
+			camera.velocity += right * -accelleration * f32(dt)
 		}
 		if key_s {
-			game_state.camera.velocity += forward * -accelleration * f32(dt)
+			camera.velocity += forward * -accelleration * f32(dt)
 		}
 		if key_d {
-			game_state.camera.velocity += right * accelleration * f32(dt)
+			camera.velocity += right * accelleration * f32(dt)
 		}
 		if key_space {
-			game_state.camera.velocity += {0, 1, 0} * accelleration * f32(dt)
+			camera.velocity += {0, 1, 0} * accelleration * f32(dt)
 		}
 		if key_shift {
-			game_state.camera.velocity += {0, -1, 0} * accelleration * f32(dt)
+			camera.velocity += {0, -1, 0} * accelleration * f32(dt)
 		}
 
-		game_state.camera.translation += game_state.camera.velocity * f32(dt)
-		if linalg.length(game_state.camera.velocity) > 0.0 {
+		camera.translation += camera.velocity * f32(dt)
+		if linalg.length(camera.velocity) > 0.0 {
 			friction: f32 = 0.0005
-			game_state.camera.velocity = linalg.lerp(
-				game_state.camera.velocity,
-				0.0,
-				1 - math.pow_f32(friction, f32(dt)),
-			)
+			camera.velocity = linalg.lerp(camera.velocity, 0.0, 1 - math.pow_f32(friction, f32(dt)))
 		}
 	}
+}
+
+update_players :: proc() {
+
 }
 
 update_imgui :: proc(engine: ^VulkanEngine) {
@@ -156,16 +187,47 @@ update_imgui :: proc(engine: ^VulkanEngine) {
 	im_glfw.NewFrame()
 	im.NewFrame()
 
-	if (im.Begin("Camera")) {
-		im.InputFloat3("pos", &game_state.camera.translation)
-		im.InputFloat2("pitch yaw", &game_state.camera.camera_rot)
-		im.InputFloat("fov", cast(^f32)(&game_state.camera.camera_fov_deg))
-		items := [3]cstring{"SceneColor", "SceneDepth", "SunShadowDepth"}
-		im.ComboChar("view", cast(^i32)(&game_state.camera.view_state), raw_data(&items), len(items))
+	if im.Begin("Entities") {
+		if im.Button("create player entity") {
+			new_entity(Player)
+		}
+		if im.Button("create camera entity") {
+			new_entity(Camera)
+		}
+		if im.Button("delete last entity") {
+			#reverse for &entity_gen_ptr, i in entities {
+				if entity_gen_ptr.entity_ptr != nil {
+					remove_entity(entities[i].entity_ptr.entity_id)
+					break
+				}
+			}
+		}
+		for &entity_gen_ptr in &entities {
+			if entity_gen_ptr.entity_ptr != nil {
+				im.Text("entity")
+				im.BulletText("id %d", entity_gen_ptr.entity_ptr.entity_id.index)
+				im.BulletText("gen %d", entity_gen_ptr.entity_ptr.entity_id.generation)
+			} else {
+				im.Text("deleted entity")
+			}
+		}
 	}
 	im.End()
 
-	if (im.Begin("Environment")) {
+	camera := get_entity(game_state.camera_id)
+
+	if camera != nil {
+		if im.Begin("Camera") {
+			im.InputFloat3("pos", &camera.translation)
+			im.InputFloat2("pitch yaw", &camera.camera_rot)
+			im.InputFloat("fov", cast(^f32)(&camera.camera_fov_deg))
+			items := [3]cstring{"SceneColor", "SceneDepth", "SunShadowDepth"}
+			im.ComboChar("view", cast(^i32)(&camera.view_state), raw_data(&items), len(items))
+		}
+		im.End()
+	}
+
+	if im.Begin("Environment") {
 		im.InputFloat3("pos", cast(^[3]f32)(&game_state.environment.sun_pos))
 		im.InputFloat3("target", cast(^[3]f32)(&game_state.environment.sun_target))
 		im.InputFloat3("sun_color", cast(^[3]f32)(&game_state.environment.sun_color))
