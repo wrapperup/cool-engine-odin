@@ -36,3 +36,14 @@ Environment :: struct {
 	sun_pos:    [3]f32,
 	sun_target: [3]f32,
 }
+
+PlayerController :: struct {
+	input: struct {
+		forward: bool,
+		back: bool,
+		left: bool,
+		right: bool,
+		jump: bool,
+		crouch: bool,
+	}
+}

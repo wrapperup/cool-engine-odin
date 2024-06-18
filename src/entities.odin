@@ -8,61 +8,74 @@ import "core:math/linalg"
 import "core:testing"
 
 // Entity Id is a packed u32 number that contains
-// the generation and index in entity array.
-// First byte: u8 generation
-// Remaining bytes: u24 index
+// the liveness, generation and index in entity array.
+// Live entities are always valid and updated.
 EntityId :: bit_field u32 {
-	generation: u8  | 8,
-	index:      u32 | 24,
+	live:       bool | 1,
+	generation: u8   | 7,
+	index:      u32  | 24,
 }
 
 TypedEntityId :: struct($T: typeid) {
 	id: EntityId,
 }
 
+// The entity struct contains very common components
+// that every entity needs. The core struct is designed
+// to be reasonably cache-friendly, so keep it small when
+// possible.
 Entity :: struct {
 	entity_id:   EntityId,
+	type:        typeid,
 	translation: [3]f32,
 	velocity:    [3]f32,
 	rotation:    linalg.Quaternionf32,
 }
 
-EntityGenerationalPointer :: struct {
-	entity_ptr: ^Entity,
-	type:       typeid,
-	generation: u8,
-}
+// Cache locality assurance
+#assert (size_of(Entity) <= 64)
 
-entities: [dynamic]EntityGenerationalPointer
+MAX_ENTITIES :: 16_777_216
+
+entities: [dynamic]Entity
 
 // Create typed entity
-new_entity :: proc($T: typeid) -> ^T where intrinsics.type_is_subtype_of(T, Entity) {
+new_entity_subtype :: proc($T: typeid) -> ^T where intrinsics.type_is_subtype_of(T, ^Entity) {
 	type_t := new(T)
 
 	for &v, i in &entities {
 		// Find empty hole in entity list
-		if v.entity_ptr == nil {
+		if v.entity_id.live == false {
 			// Update the entity gen pointer with the new entity
 			type_t.entity_id = EntityId {
+				live       = true,
 				generation = v.generation,
 				index      = cast(u32)i,
 			}
-			v.entity_ptr = type_t
-			v.type = T
 
 			return type_t
 		}
 	}
 
-	entity_gen_ptr := EntityGenerationalPointer {
-		entity_ptr = type_t,
-		generation = 0,
-		type = T
-	}
+	append(&entities, entity_gen_ptr)
 
-	type_t.entity_id = EntityId {
-		generation = 0,
-		index      = cast(u32)len(entities),
+	return type_t
+}
+
+// Returns a pointer to a new entity. If the entity array was 
+new_entity_raw :: proc($T: typeid) -> (^Entity, bool) where intrinsics.type_is_subtype_of(T, ^Entity) {
+	for &v, i in &entities {
+		// Find empty hole in entity list
+		if v.entity_id.live == false {
+			// Update the entity gen pointer with the new entity
+			type_t.entity_id = EntityId {
+				live       = true,
+				generation = v.generation,
+				index      = cast(u32)i,
+			}
+
+			return type_t
+		}
 	}
 
 	append(&entities, entity_gen_ptr)
@@ -71,14 +84,19 @@ new_entity :: proc($T: typeid) -> ^T where intrinsics.type_is_subtype_of(T, Enti
 }
 
 // Create typed entity, returns a typed Id.
-new_entity_with_typed_id :: proc($T: typeid) -> (TypedEntityId(T), ^T) where intrinsics.type_is_subtype_of(T, Entity) {
+new_entity_with_typed_id :: proc(
+	$T: typeid,
+) -> (
+	TypedEntityId(T),
+	^T,
+) where intrinsics.type_is_subtype_of(T, ^Entity) {
 	entity := new_entity(T)
 	return TypedEntityId(T){id = entity.entity_id}, entity
 }
 
 // Get entity safely. Generational index ensures that the entity
 // you get is a valid entity, don't persist the pointer. Can return nil.
-get_entity_untyped :: proc($T: typeid, id: EntityId) -> ^T where intrinsics.type_is_subtype_of(T, Entity) {
+get_entity_untyped :: proc($T: typeid, id: EntityId) -> ^T where intrinsics.type_is_subtype_of(T, ^Entity) {
 	entity_gen_ptr := entities[id.index]
 
 	// Safety: Check type

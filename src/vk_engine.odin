@@ -1274,11 +1274,10 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 
 		// view_matrix := linalg.matrix4_look_at_f32(game_state.camera_pos, {0, 0, 0}, {0, 1, 0})
 
-		projection_matrix := linalg.matrix4_infinite_perspective_f32(
+		projection_matrix := linalg.matrix4_infinite_perspective_z0_f32(
 			linalg.to_radians(camera != nil ? camera.camera_fov_deg : 0),
 			aspect_ratio,
 			0.1,
-			zero_to_one = true,
 		)
 		projection_matrix[1][1] *= -1.0
 
@@ -1296,7 +1295,7 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 			game_state.environment.sun_target,
 			{0.0, 1.0, 0.0},
 		)
-		sun_projection_matrix := linalg.matrix_ortho3d_f32(-10, 10, -10, 10, 0.1, 100.0, zero_to_one = true)
+		sun_projection_matrix := linalg.matrix_ortho3d_z0_f32(-10, 10, -10, 10, 0.1, 100.0)
 		sun_projection_matrix[1][1] *= -1.0
 
 		global_uniform_data.sun_view_projection_matrix = sun_projection_matrix * sun_view_matrix
