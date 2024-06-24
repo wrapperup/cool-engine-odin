@@ -46,6 +46,7 @@ struct GlobalData {
 struct GPUDrawPushConstants {
   GlobalData *global_data_buffer;
   Vertex *vertex_buffer;
+  float4x4 model_matrix;
 };
 
 [vk_binding(0, 0)]
@@ -70,7 +71,7 @@ V2PShadow vertex_shadow_main(VertexInput input) {
   let view_projection_matrix = pc.global_data_buffer.sun_view_projection_matrix;
 
   V2PShadow output;
-  output.pos = mul(view_projection_matrix, float4(vertex.position, 1.0));
+  output.pos = mul(view_projection_matrix, mul(pc.model_matrix, float4(vertex.position, 1.0)));
 
   return output;
 }
@@ -182,7 +183,7 @@ V2P vertex_main(VertexInput input) {
   let view_projection_matrix = pc.global_data_buffer.view_projection_matrix;
 
   V2P output;
-  output.pos = mul(view_projection_matrix, float4(vertex.position, 1.0));
+  output.pos = mul(view_projection_matrix, mul(pc.model_matrix, float4(vertex.position, 1.0)));
   output.normal = vertex.normal;
   output.uv = float2(vertex.uv_x, vertex.uv_y);
   output.frag_pos = vertex.position;
@@ -198,7 +199,7 @@ V2P vertex_main(VertexInput input) {
       pc.global_data_buffer.sun_view_projection_matrix;
 
   output.sun_space_pos = mul(
-      biasMat, mul(sun_view_projection_matrix, float4(vertex.position, 1.0)));
+      biasMat, mul(sun_view_projection_matrix, mul(pc.model_matrix, float4(vertex.position, 1.0))));
 
   return output;
 }

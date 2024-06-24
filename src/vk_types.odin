@@ -31,6 +31,7 @@ Vertex :: struct {
 
 GPUMeshBuffers :: struct {
 	index_buffer:          AllocatedBuffer,
+	index_count:           u32,
 	vertex_buffer:         AllocatedBuffer,
 	vertex_buffer_address: vk.DeviceAddress,
 }
@@ -43,20 +44,21 @@ GPUMeshBuffers :: struct {
 GPUDrawPushConstants :: struct {
 	global_data_buffer_address: vk.DeviceAddress `GlobalData`,
 	vertex_buffer_address:      vk.DeviceAddress `Vertex`,
+	model_matrix:               hlsl.float4x4,
 }
 
 @(ShaderShared)
 GPUGlobalData :: struct {
-	view_projection_matrix:        hlsl.float4x4,
+	view_projection_matrix:       hlsl.float4x4,
 	view_projection_i_matrix:     hlsl.float4x4,
-	sun_view_projection_matrix:    hlsl.float4x4,
+	sun_view_projection_matrix:   hlsl.float4x4,
 	sun_view_projection_i_matrix: hlsl.float4x4,
-	sun_color:                     hlsl.float3,
-	bias: f32,
-	sky_color:                     hlsl.float3,
-	pad_0:                          f32,
-	camera_pos : hlsl.float3,
-	pad_1: f32,
-	sun_pos : hlsl.float3,
-	pad_2: f32,
+	sun_color:                    hlsl.float3,
+	bias:                         f32,
+	sky_color:                    hlsl.float3,
+	pad_0:                        f32,
+	camera_pos:                   hlsl.float3,
+	pad_1:                        f32,
+	sun_pos:                      hlsl.float3,
+	pad_2:                        f32,
 }

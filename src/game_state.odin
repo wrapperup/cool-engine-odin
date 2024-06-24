@@ -13,7 +13,7 @@ GameState :: struct {
 game_state: GameState
 
 Camera :: struct {
-	using entity:    Entity,
+	using entity:    ^Entity,
 	//
 	camera_rot:      [2]f32,
 	camera_fov_deg:  f32,
@@ -26,7 +26,8 @@ Camera :: struct {
 }
 
 Player :: struct {
-	using entity: Entity,
+	using entity: ^Entity,
+	coolness: u32,
 }
 
 Environment :: struct {

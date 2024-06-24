@@ -89,14 +89,13 @@ VulkanEngine :: struct {
 	mesh_pipeline:                vk.Pipeline,
 	mesh_shadow_pipeline:         vk.Pipeline,
 	mesh_buffers:                 GPUMeshBuffers,
-	mesh_indices_count:           u32,
+	sphere_mesh_buffers:          GPUMeshBuffers,
 	mesh_descriptors:             vk.DescriptorSet,
 	mesh_descriptor_layout:       vk.DescriptorSetLayout,
 
 	// Stats
 	frame_time:                   f32,
 	delta_time:                   f64,
-	tri_count:                    u32,
 }
 
 FrameData :: struct {
@@ -419,7 +418,7 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 	for &expected_extension in DEVICE_EXTENSIONS {
 		found := false
 
-		for available in &available_extensions {
+		for &available in &available_extensions {
 			if libc.strcmp(cstring(&available.extensionName[0]), expected_extension) == 0 {
 				found = true
 				break
@@ -491,7 +490,7 @@ check_validation_layers :: proc() -> bool {
 	for layer_name in VALIDATION_LAYERS {
 		layer_found := false
 
-		for layer_property in &available_layers {
+		for &layer_property in &available_layers {
 			if libc.strcmp(layer_name, cstring(&layer_property.layerName[0])) == 0 {
 				layer_found = true
 				break
@@ -590,7 +589,7 @@ create_instance :: proc(engine: ^VulkanEngine) -> bool {
 
 	bytes, ok := os.read_entire_file("")
 
-	for ext in &extension_props {
+	for &ext in &extension_props {
 		fmt.printfln(" - %s", cstring(&ext.extensionName[0]))
 	}
 
@@ -925,27 +924,51 @@ init_mesh_pipelines :: proc(engine: ^VulkanEngine) {
 		panic("flip")
 	}
 
-	opts := cgltf.options{}
-	data, ok := cgltf.parse_file(opts, "assets/bunny.glb")
-	if ok != .success {
-		panic("ASGASDGSDGSD")
-	}
-	if cgltf.load_buffers(opts, data, "assets/bunny.glb") != .success {
-		panic("gnar")
-	}
-	defer cgltf.free(data)
+	{
+		opts := cgltf.options{}
+		data, ok := cgltf.parse_file(opts, "assets/bunny.glb")
+		if ok != .success {
+			panic("ASGASDGSDGSD")
+		}
+		if cgltf.load_buffers(opts, data, "assets/bunny.glb") != .success {
+			panic("gnar")
+		}
+		defer cgltf.free(data)
 
-	indices, vertices, parse_ok := temp_parse_mesh_into_mesh_data(data, 0)
-	defer delete(indices)
-	defer delete(vertices)
+		indices, vertices, parse_ok := temp_parse_mesh_into_mesh_data(data, 0)
+		defer delete(indices)
+		defer delete(vertices)
 
-	if !parse_ok {
-		panic("yuh")
+		if !parse_ok {
+			panic("yuh")
+		}
+
+		engine.mesh_buffers = create_mesh_buffers(engine, indices, vertices)
+		engine.mesh_buffers.index_count = u32(len(indices))
+	}
+	{
+		opts := cgltf.options{}
+		data, ok := cgltf.parse_file(opts, "assets/cube.glb")
+		if ok != .success {
+			panic("ASGASDGSDGSD")
+		}
+		if cgltf.load_buffers(opts, data, "assets/cube.glb") != .success {
+			panic("gnar")
+		}
+		defer cgltf.free(data)
+
+		indices, vertices, parse_ok := temp_parse_mesh_into_mesh_data(data, 0)
+		defer delete(indices)
+		defer delete(vertices)
+
+		if !parse_ok {
+			panic("yuh")
+		}
+
+		engine.sphere_mesh_buffers = create_mesh_buffers(engine, indices, vertices)
+		engine.sphere_mesh_buffers.index_count = u32(len(indices))
 	}
 
-	engine.mesh_buffers = create_mesh_buffers(engine, indices, vertices)
-	engine.mesh_indices_count = u32(len(indices))
-	engine.tri_count = u32(len(indices) / 3)
 
 	buffer_range := vk.PushConstantRange {
 		offset     = 0,
@@ -1118,11 +1141,8 @@ render_imgui :: proc(engine: ^VulkanEngine) {
 }
 
 render :: proc(engine: ^VulkanEngine) {
-	start := time.now()
 	render_imgui(engine)
 	draw(engine)
-	engine.frame_time = f32(time.since(start)) / f32(time.Millisecond)
-	engine.delta_time = f64(time.since(start)) / f64(time.Second)
 }
 
 draw_imgui :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer, target_image_view: vk.ImageView) {
@@ -1150,15 +1170,18 @@ draw_shadow_map :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 	//begin a render pass  connected to our draw image
 	depth_attachment := init_depth_attachment_info(engine.shadow_depth_image.image_view, .DEPTH_ATTACHMENT_OPTIMAL)
 
-	render_info := init_rendering_info({1024, 1024}, nil, &depth_attachment)
+	width := engine.shadow_depth_image.extent.width
+	height := engine.shadow_depth_image.extent.height
+
+	render_info := init_rendering_info({width, height}, nil, &depth_attachment)
 	vk.CmdBeginRendering(cmd, &render_info)
 
 	//set dynamic viewport and scissor
 	viewport := vk.Viewport {
 		x        = 0,
 		y        = 0,
-		width    = f32(1024),
-		height   = f32(1024),
+		width    = f32(width),
+		height   = f32(height),
 		minDepth = 0.0,
 		maxDepth = 1.0,
 	}
@@ -1189,7 +1212,33 @@ draw_shadow_map :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
 	vk.CmdBindIndexBuffer(cmd, engine.mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
-	vk.CmdDrawIndexed(cmd, engine.mesh_indices_count, 1, 0, 0, 0)
+	vk.CmdDrawIndexed(cmd, engine.mesh_buffers.index_count, 1, 0, 0, 0)
+
+	player_iter := make_entity_iter(Player)
+	for player, i in iter_entities(&player_iter) {
+		if i > 10 do break
+		push_constants: GPUDrawPushConstants
+		push_constants.vertex_buffer_address = engine.sphere_mesh_buffers.vertex_buffer_address
+		push_constants.global_data_buffer_address = current_frame(engine).global_uniform_address
+
+		translation := linalg.matrix4_translate(player.translation)
+		rotation := linalg.matrix4_from_quaternion(player.rotation)
+
+		push_constants.model_matrix = linalg.mul(translation, rotation)
+
+		vk.CmdPushConstants(
+			cmd,
+			engine.mesh_pipeline_layout,
+			{.VERTEX, .FRAGMENT},
+			0,
+			size_of(GPUDrawPushConstants),
+			&push_constants,
+		)
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
+		vk.CmdBindIndexBuffer(cmd, engine.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
+
+		vk.CmdDrawIndexed(cmd, engine.sphere_mesh_buffers.index_count, 1, 0, 0, 0)
+	}
 
 	vk.CmdEndRendering(cmd)
 }
@@ -1239,7 +1288,33 @@ draw_geometry :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
 	vk.CmdBindIndexBuffer(cmd, engine.mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
-	vk.CmdDrawIndexed(cmd, engine.mesh_indices_count, 1, 0, 0, 0)
+	vk.CmdDrawIndexed(cmd, engine.mesh_buffers.index_count, 1, 0, 0, 0)
+
+	player_iter := make_entity_iter(Player)
+	for player, i in iter_entities(&player_iter) {
+		if i > 10 do break
+		push_constants: GPUDrawPushConstants
+		push_constants.vertex_buffer_address = engine.sphere_mesh_buffers.vertex_buffer_address
+		push_constants.global_data_buffer_address = current_frame(engine).global_uniform_address
+
+		translation := linalg.matrix4_translate(player.translation)
+		rotation := linalg.matrix4_from_quaternion(player.rotation)
+
+		push_constants.model_matrix = linalg.mul(translation, rotation)
+
+		vk.CmdPushConstants(
+			cmd,
+			engine.mesh_pipeline_layout,
+			{.VERTEX, .FRAGMENT},
+			0,
+			size_of(GPUDrawPushConstants),
+			&push_constants,
+		)
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
+		vk.CmdBindIndexBuffer(cmd, engine.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
+
+		vk.CmdDrawIndexed(cmd, engine.sphere_mesh_buffers.index_count, 1, 0, 0, 0)
+	}
 
 	vk.CmdEndRendering(cmd)
 }
@@ -1274,7 +1349,7 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 
 		// view_matrix := linalg.matrix4_look_at_f32(game_state.camera_pos, {0, 0, 0}, {0, 1, 0})
 
-		projection_matrix := linalg.matrix4_infinite_perspective_z0_f32(
+		projection_matrix := matrix4_infinite_perspective_z0_f32(
 			linalg.to_radians(camera != nil ? camera.camera_fov_deg : 0),
 			aspect_ratio,
 			0.1,
@@ -1295,7 +1370,7 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 			game_state.environment.sun_target,
 			{0.0, 1.0, 0.0},
 		)
-		sun_projection_matrix := linalg.matrix_ortho3d_z0_f32(-10, 10, -10, 10, 0.1, 100.0)
+		sun_projection_matrix := matrix_ortho3d_z0_f32(-10, 10, -10, 10, 0.1, 100.0)
 		sun_projection_matrix[1][1] *= -1.0
 
 		global_uniform_data.sun_view_projection_matrix = sun_projection_matrix * sun_view_matrix

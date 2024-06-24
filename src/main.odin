@@ -1,5 +1,6 @@
 package main
 
+import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:mem"
@@ -8,7 +9,9 @@ import "core:reflect"
 import "core:math"
 import "core:math/linalg"
 import "core:strings"
+import "core:sync"
 import win "core:sys/windows"
+import "core:time"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
@@ -43,6 +46,9 @@ main :: proc() {
 		}
 	}
 
+	init_parallel_for_thread_pool(12)
+	defer destroy_parallel_for_thread_pool()
+
 	run_engine()
 }
 
@@ -51,15 +57,20 @@ run_engine :: proc() {
 		window_extent = {1700, 900},
 	}
 
-	init_game_state()
-
 	if !init(&engine) {
 		fmt.println("App could not be initialized.")
 	}
 
+	init_game_state()
+
 	for !glfw.WindowShouldClose(engine.window) {
+		start := time.now()
+
 		update(&engine)
 		render(&engine)
+
+		engine.frame_time = f32(time.since(start)) / f32(time.Millisecond)
+		engine.delta_time = f64(time.since(start)) / f64(time.Second)
 
 		// Free temp allocations
 		free_all(context.temp_allocator)
@@ -74,15 +85,18 @@ update :: proc(engine: ^VulkanEngine) {
 }
 
 init_game_state :: proc() {
-	camera_id, camera := new_entity_with_typed_id(Camera)
-	player := new_entity(Player)
+	camera := new_entity(Camera)
+	for i in 0 ..< 1_000_000 {
+		player := new_entity(Player)
+		player.coolness = u32(i)
+	}
 	camera.translation = {-9, 9.5, 14}
 	camera.camera_rot = {-0.442, 0.448}
 	camera.camera_fov_deg = 45
 	camera.view_state = .SceneColor
 
 	game_state = GameState {
-		camera_id = camera_id,
+		camera_id = TypedEntityId(Camera){id = camera.id},
 		environment = Environment {
 			sun_pos = {12, 15, 10},
 			sun_target = 0.0,
@@ -94,7 +108,6 @@ init_game_state :: proc() {
 }
 
 free_game_state :: proc() {
-	clear_dynamic_array(&entities)
 }
 
 update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
@@ -173,10 +186,20 @@ update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
 			camera.velocity = linalg.lerp(camera.velocity, 0.0, 1 - math.pow_f32(friction, f32(dt)))
 		}
 	}
+
+	parallel_for_entities(proc(entity: ^Player, index: int) {
+		entity.translation.y += f32(entity.coolness) * 0.001
+	})
 }
+
+epic: int = 0
 
 update_players :: proc() {
 
+}
+
+Big_Hack_Wtf :: struct {
+	foo: u32,
 }
 
 update_imgui :: proc(engine: ^VulkanEngine) {
@@ -188,27 +211,95 @@ update_imgui :: proc(engine: ^VulkanEngine) {
 	im.NewFrame()
 
 	if im.Begin("Entities") {
-		if im.Button("create player entity") {
-			new_entity(Player)
-		}
-		if im.Button("create camera entity") {
-			new_entity(Camera)
-		}
-		if im.Button("delete last entity") {
-			#reverse for &entity_gen_ptr, i in entities {
-				if entity_gen_ptr.entity_ptr != nil {
-					remove_entity(entities[i].entity_ptr.entity_id)
-					break
+		if im.CollapsingHeader("Raw Entities") {
+			clipper: im.ListClipper
+			im.ListClipper_Begin(&clipper, i32(NUM_ENTITIES))
+
+			for im.ListClipper_Step(&clipper) {
+				for i in clipper.DisplayStart ..< clipper.DisplayEnd {
+					entity := ENTITIES[i]
+					if entity.id.live {
+						im.Text("entity")
+						im.BulletText("id %d", entity.id.index)
+						im.BulletText("gen %d", entity.id.generation)
+					} else {
+						im.Text("deleted entity")
+					}
 				}
 			}
 		}
-		for &entity_gen_ptr in &entities {
-			if entity_gen_ptr.entity_ptr != nil {
-				im.Text("entity")
-				im.BulletText("id %d", entity_gen_ptr.entity_ptr.entity_id.index)
-				im.BulletText("gen %d", entity_gen_ptr.entity_ptr.entity_id.generation)
+
+		imgui_draw_type :: proc(t: typeid, data: rawptr = nil) {
+			info_base := type_info_of(t)
+
+			info_named: runtime.Type_Info_Named
+			info_struct: runtime.Type_Info_Struct
+
+			#partial switch info in info_base.variant {
+			case runtime.Type_Info_Pointer:
+				info_ptr := info_base.variant.(runtime.Type_Info_Pointer)
+				info_named = info_ptr.elem.variant.(runtime.Type_Info_Named)
+				info_struct = info_named.base.variant.(runtime.Type_Info_Struct)
+			case runtime.Type_Info_Named:
+				info_named = info_base.variant.(runtime.Type_Info_Named)
+				info_struct = info_named.base.variant.(runtime.Type_Info_Struct)
+			case:
+				return // we don't support this case.
+			}
+
+			display_string: cstring
+
+			if data == nil {
+				display_string = strings.clone_to_cstring(info_named.name, context.temp_allocator)
 			} else {
-				im.Text("deleted entity")
+				entity := (^Entity)(data)
+				display_string = fmt.ctprintf("%s %p", info_named.name, data)
+			}
+
+			im.Text(display_string)
+			for i in 0 ..< len(info_struct.names) {
+				name := info_struct.names[i]
+				ty := info_struct.types[i]
+				offset := info_struct.offsets[i]
+				is_using := info_struct.usings[i]
+
+				if data == nil {
+					im.Text(strings.clone_to_cstring(name, context.temp_allocator))
+				} else {
+					data_ptr := (rawptr)(mem.ptr_offset((^u8)(data), offset))
+
+					// #partial switch info in ty.variant {
+					// 	case runtime.Type_Info_Pointer, runtime.Type_Info_Struct:
+					// 		imgui_draw_type(ty.id, data_ptr)
+					// 		continue
+					// }
+
+					data_typed := any {
+						id   = ty.id,
+						data = data_ptr,
+					}
+
+					im.Text(fmt.ctprintf("   %s %v %p @ %d = %v", name, ty, data_ptr, offset, data_typed))
+				}
+			}
+			im.Text("")
+		}
+
+		for key, subtype_ptr in SUBTYPE_STORAGE {
+			storage_raw := cast(^RawSparseSet)subtype_ptr
+			size_t := type_info_of(key).size
+
+			if im.TreeNode(fmt.ctprintf("%s Entities", type_info_of(key).variant.(runtime.Type_Info_Named).name)) {
+				clipper: im.ListClipper
+				im.ListClipper_Begin(&clipper, i32(storage_raw.dense.len))
+
+				for im.ListClipper_Step(&clipper) {
+					for i in clipper.DisplayStart ..< clipper.DisplayEnd {
+						data_ptr := (rawptr)(mem.ptr_offset((^u8)(storage_raw.dense.data), int(i) * size_t))
+						imgui_draw_type(key, data_ptr)
+					}
+				}
+				im.TreePop()
 			}
 		}
 	}
@@ -238,7 +329,6 @@ update_imgui :: proc(engine: ^VulkanEngine) {
 
 	if (im.Begin("Stats")) {
 		im.Text("frametime %f ms", engine.frame_time)
-		im.Text("tri count %d", engine.tri_count)
 	}
 	im.End()
 }
