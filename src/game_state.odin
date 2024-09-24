@@ -4,10 +4,12 @@ import "base:intrinsics"
 import "core:/math/linalg/hlsl"
 import "core:math/linalg"
 
+import "deps:jolt"
+
 GameState :: struct {
 	environment: Environment,
 	camera_id:   TypedEntityId(Camera),
-	players:     [dynamic]^Player,
+	player_id:   TypedEntityId(Player),
 }
 
 game_state: GameState
@@ -27,7 +29,14 @@ Camera :: struct {
 
 Player :: struct {
 	using entity: ^Entity,
-	coolness: u32,
+	body:         ^jolt.BodyInterface,
+	coolness:     u32,
+}
+
+Ball :: struct {
+	using entity: ^Entity,
+	body:         ^jolt.BodyInterface,
+	body_id:      jolt.BodyID,
 }
 
 Environment :: struct {
@@ -41,10 +50,10 @@ Environment :: struct {
 PlayerController :: struct {
 	input: struct {
 		forward: bool,
-		back: bool,
-		left: bool,
-		right: bool,
-		jump: bool,
-		crouch: bool,
-	}
+		back:    bool,
+		left:    bool,
+		right:   bool,
+		jump:    bool,
+		crouch:  bool,
+	},
 }
