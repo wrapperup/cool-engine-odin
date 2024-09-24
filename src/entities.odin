@@ -113,11 +113,15 @@ new_entity_subtype :: proc($T: typeid) -> ^T where intrinsics.type_is_subtype_of
 	data := T{}
 	data.entity = new_entity_raw()
 
-	en := new_entity_raw()
-
 	storage := new_or_get_entity_subtype_storage(T)
 
 	return assign_at_sparse_set(storage, data.entity.id, data)
+}
+
+new_entity_subtype_id :: proc($T: typeid) -> (^T, TypedEntityId(T)) where intrinsics.type_is_subtype_of(T, ^Entity) {
+	subtype := new_entity_subtype(T)
+
+	return subtype, TypedEntityId(T){id = subtype.entity.id}
 }
 
 // Returns a pointer to a new entity. If the entity array was 
@@ -225,6 +229,10 @@ remove_entity :: proc {
 	remove_entity_subtype_typed,
 }
 
+entity_id_of :: proc(subtype_entity: ^$T) -> TypedEntityId(T) where intrinsics.type_is_subtype_of(T, ^Entity) {
+	return TypedEntityId(T){id = subtype_entity.entity.id}
+}
+
 EntityIterator :: struct($T: typeid) {
 	index:   int,
 	storage: ^SparseSet(T),
@@ -249,8 +257,37 @@ iter_entities :: proc(iter: ^EntityIterator($T)) -> (val: ^T, idx: int, cond: bo
 	return
 }
 
+len_entities :: proc($T: typeid) -> int {
+	return len(get_entity_subtype_storage(T).dense)
+}
 
-parallel_for_entities :: proc(
+
+parallel_for_entities_data :: proc(
+	procedure: proc(entity: ^$T, index: int, data: rawptr = nil),
+	data: rawptr = nil,
+) where intrinsics.type_is_subtype_of(T, ^Entity) {
+	storage := get_entity_subtype_storage(T)
+
+	Parallel_For_Entity_Data :: struct {
+		storage:   rawptr,
+		data:      rawptr,
+		procedure: proc(entity: ^T, index: int, data: rawptr),
+	}
+
+	parallel_for_entity_data := Parallel_For_Entity_Data {
+		storage   = storage,
+		data      = data,
+		procedure = procedure,
+	}
+
+	parallel_for(len(storage.dense), proc(index: int, data: rawptr) {
+			entity_data := cast(^Parallel_For_Entity_Data)data
+			storage := cast(^SparseSet(T))entity_data.storage
+			entity_data.procedure(&storage.dense[index], index, entity_data.data)
+		}, &parallel_for_entity_data)
+}
+
+parallel_for_entities_no_data :: proc(
 	procedure: proc(entity: ^$T, index: int),
 ) where intrinsics.type_is_subtype_of(T, ^Entity) {
 	storage := get_entity_subtype_storage(T)
@@ -270,4 +307,9 @@ parallel_for_entities :: proc(
 			storage := cast(^SparseSet(T))entity_data.storage
 			entity_data.procedure(&storage.dense[index], index)
 		}, &parallel_for_entity_data)
+}
+
+parallel_for_entities :: proc {
+	parallel_for_entities_data,
+	parallel_for_entities_no_data,
 }
