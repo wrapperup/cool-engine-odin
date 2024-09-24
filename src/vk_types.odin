@@ -44,7 +44,7 @@ GPUMeshBuffers :: struct {
 GPUDrawPushConstants :: struct {
 	global_data_buffer_address: vk.DeviceAddress `GlobalData`,
 	vertex_buffer_address:      vk.DeviceAddress `Vertex`,
-	model_matrix:               hlsl.float4x4,
+	model_matrices_address:     vk.DeviceAddress `hlsl.float4x4`,
 }
 
 @(ShaderShared)

@@ -1,7 +1,7 @@
 package main
 
-import vk "vendor:vulkan"
 import vma "deps:odin-vma"
+import vk "vendor:vulkan"
 
 util_transition_image :: proc(
 	cmd: vk.CommandBuffer,
@@ -10,29 +10,28 @@ util_transition_image :: proc(
 	new_layout: vk.ImageLayout,
 ) {
 	image_barrier := vk.ImageMemoryBarrier2 {
-		sType = .IMAGE_MEMORY_BARRIER_2,
+		sType         = .IMAGE_MEMORY_BARRIER_2,
+		pNext         = nil,
+		srcStageMask  = {.ALL_COMMANDS},
+		srcAccessMask = {.MEMORY_WRITE},
+		dstStageMask  = {.ALL_COMMANDS},
+		dstAccessMask = {.MEMORY_WRITE, .MEMORY_READ},
+		oldLayout     = current_layout,
+		newLayout     = new_layout,
 	}
 
-	image_barrier.pNext = nil
+	aspect_mask: vk.ImageAspectFlags =
+		(new_layout == .DEPTH_ATTACHMENT_OPTIMAL || new_layout == .DEPTH_READ_ONLY_OPTIMAL) ? {.DEPTH} : {.COLOR}
 
-	image_barrier.srcStageMask = {.ALL_COMMANDS}
-	image_barrier.srcAccessMask = {.MEMORY_WRITE}
-	image_barrier.dstStageMask = {.ALL_COMMANDS}
-	image_barrier.dstAccessMask = {.MEMORY_WRITE, .MEMORY_READ}
-
-	image_barrier.oldLayout = current_layout
-	image_barrier.newLayout = new_layout
-
-	aspect_mask: vk.ImageAspectFlags = (new_layout == .DEPTH_ATTACHMENT_OPTIMAL || new_layout == .DEPTH_READ_ONLY_OPTIMAL) ? {.DEPTH} : {.COLOR}
 	image_barrier.subresourceRange = init_image_subresource_range(aspect_mask)
 	image_barrier.image = image
 
-	dep_info := vk.DependencyInfo{}
-	dep_info.sType = .DEPENDENCY_INFO
-	dep_info.pNext = nil
-
-	dep_info.imageMemoryBarrierCount = 1
-	dep_info.pImageMemoryBarriers = &image_barrier
+	dep_info := vk.DependencyInfo {
+		sType                   = .DEPENDENCY_INFO,
+		pNext                   = nil,
+		imageMemoryBarrierCount = 1,
+		pImageMemoryBarriers    = &image_barrier,
+	}
 
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }

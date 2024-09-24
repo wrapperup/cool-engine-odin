@@ -56,12 +56,13 @@ init_command_buffer_begin_info :: proc(flags: vk.CommandBufferUsageFlags) -> vk.
 }
 
 init_image_subresource_range :: proc(aspect_mask: vk.ImageAspectFlags) -> vk.ImageSubresourceRange {
-	sub_image := vk.ImageSubresourceRange{}
-	sub_image.aspectMask = aspect_mask
-	sub_image.baseMipLevel = 0
-	sub_image.levelCount = vk.REMAINING_MIP_LEVELS
-	sub_image.baseArrayLayer = 0
-	sub_image.layerCount = vk.REMAINING_ARRAY_LAYERS
+	sub_image := vk.ImageSubresourceRange {
+		aspectMask     = aspect_mask,
+		baseMipLevel   = 0,
+		levelCount     = vk.REMAINING_MIP_LEVELS,
+		baseArrayLayer = 0,
+		layerCount     = vk.REMAINING_ARRAY_LAYERS,
+	}
 
 	return sub_image
 }
@@ -70,23 +71,25 @@ init_semaphore_submit_info :: proc(
 	stage_mask: vk.PipelineStageFlags2,
 	semaphore: vk.Semaphore,
 ) -> vk.SemaphoreSubmitInfo {
-	info := vk.SemaphoreSubmitInfo{}
-	info.sType = .SEMAPHORE_SUBMIT_INFO
-	info.pNext = nil
-	info.semaphore = semaphore
-	info.stageMask = stage_mask
-	info.deviceIndex = 0
-	info.value = 1
+	info := vk.SemaphoreSubmitInfo {
+		sType       = .SEMAPHORE_SUBMIT_INFO,
+		pNext       = nil,
+		semaphore   = semaphore,
+		stageMask   = stage_mask,
+		deviceIndex = 0,
+		value       = 1,
+	}
 
 	return info
 }
 
 init_command_buffer_submit_info :: proc(cmd: vk.CommandBuffer) -> vk.CommandBufferSubmitInfo {
-	info := vk.CommandBufferSubmitInfo{}
-	info.sType = .COMMAND_BUFFER_SUBMIT_INFO
-	info.pNext = nil
-	info.commandBuffer = cmd
-	info.deviceMask = 0
+	info := vk.CommandBufferSubmitInfo {
+		sType         = .COMMAND_BUFFER_SUBMIT_INFO,
+		pNext         = nil,
+		commandBuffer = cmd,
+		deviceMask    = 0,
+	}
 
 	return info
 }
@@ -96,18 +99,16 @@ init_submit_info :: proc(
 	signal_semaphore_info: ^vk.SemaphoreSubmitInfo,
 	wait_semaphore_info: ^vk.SemaphoreSubmitInfo,
 ) -> vk.SubmitInfo2 {
-	info := vk.SubmitInfo2{}
-	info.sType = .SUBMIT_INFO_2
-	info.pNext = nil
-
-	info.waitSemaphoreInfoCount = wait_semaphore_info == nil ? 0 : 1
-	info.pWaitSemaphoreInfos = wait_semaphore_info
-
-	info.signalSemaphoreInfoCount = signal_semaphore_info == nil ? 0 : 1
-	info.pSignalSemaphoreInfos = signal_semaphore_info
-
-	info.commandBufferInfoCount = 1
-	info.pCommandBufferInfos = cmd
+	info := vk.SubmitInfo2 {
+		sType                    = .SUBMIT_INFO_2,
+		pNext                    = nil,
+		waitSemaphoreInfoCount   = wait_semaphore_info == nil ? 0 : 1,
+		pWaitSemaphoreInfos      = wait_semaphore_info,
+		signalSemaphoreInfoCount = signal_semaphore_info == nil ? 0 : 1,
+		pSignalSemaphoreInfos    = signal_semaphore_info,
+		commandBufferInfoCount   = 1,
+		pCommandBufferInfos      = cmd,
+	}
 
 	return info
 }
@@ -143,7 +144,7 @@ init_imageview_create_info :: proc(
 		viewType = .D2,
 		image = image,
 		format = format,
-		subresourceRange =  {
+		subresourceRange = {
 			baseMipLevel = 0,
 			levelCount = 1,
 			baseArrayLayer = 0,
@@ -172,10 +173,7 @@ init_attachment_info :: proc(
 	return color_attachment
 }
 
-init_depth_attachment_info :: proc(
-	view: vk.ImageView,
-	layout: vk.ImageLayout,
-) -> vk.RenderingAttachmentInfo {
+init_depth_attachment_info :: proc(view: vk.ImageView, layout: vk.ImageLayout) -> vk.RenderingAttachmentInfo {
 	depth_attachment := vk.RenderingAttachmentInfo {
 		sType = .RENDERING_ATTACHMENT_INFO,
 	}

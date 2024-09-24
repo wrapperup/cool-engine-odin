@@ -96,7 +96,12 @@ create_mesh_buffers :: proc(engine: ^VulkanEngine, indices: []u32, vertices: []V
 	return new_surface
 }
 
-write_buffer :: proc(buffer: ^AllocatedBuffer, in_data: ^GPUGlobalData) {
+write_buffer :: proc(buffer: ^AllocatedBuffer, in_data: ^$T) {
 	data := buffer.info.pMappedData
-	mem.copy(data, in_data, size_of(GPUGlobalData))
+	mem.copy(data, in_data, size_of(T))
+}
+
+write_buffer_array :: proc(buffer: ^AllocatedBuffer, in_data: []$T) {
+	data := buffer.info.pMappedData
+	mem.copy(data, raw_data(in_data), size_of(T) * len(in_data))
 }

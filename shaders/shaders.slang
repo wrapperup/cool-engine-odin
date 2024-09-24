@@ -1,5 +1,6 @@
 struct VertexInput {
   uint vertex_index : SV_VertexID;
+  uint instance_id : SV_InstanceID;
 };
 
 struct V2P {
@@ -46,11 +47,14 @@ struct GlobalData {
 struct GPUDrawPushConstants {
   GlobalData *global_data_buffer;
   Vertex *vertex_buffer;
-  float4x4 model_matrix;
+  float4x4 *model_matrices;
 };
 
 [vk_binding(0, 0)]
-Sampler2D<float> DepthTextureSampler;
+Sampler2D<float> ShadowDepthSampler;
+
+[vk_binding(1, 0)]
+Sampler2D TestTextureSampler;
 
 [vk_push_constant]
 ConstantBuffer<GPUDrawPushConstants> pc;
@@ -71,7 +75,9 @@ V2PShadow vertex_shadow_main(VertexInput input) {
   let view_projection_matrix = pc.global_data_buffer.sun_view_projection_matrix;
 
   V2PShadow output;
-  output.pos = mul(view_projection_matrix, mul(pc.model_matrix, float4(vertex.position, 1.0)));
+  output.pos =
+      mul(view_projection_matrix, mul(pc.model_matrices[input.instance_id],
+                                      float4(vertex.position, 1.0)));
 
   return output;
 }
@@ -86,17 +92,18 @@ float shadow_calc(float4 shadow_coord, float2 offset = 0.0) {
   // perform perspective divide
   float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
 
-  // float closest_depth = DepthTextureSampler.Sample(proj_coords.xy + offset);
+  // float closest_depth = ShadowDepthSampler.Sample(proj_coords.xy + offset);
   // float current_depth = proj_coords.z;
 
   // float shadow = current_depth - pc.global_data_buffer.bias > closest_depth ?
-  // 0.0 : 1.0; float4 shadow = DepthTextureSampler.GatherCmp(proj_coords.xy +
+  // 0.0 : 1.0; float4 shadow = ShadowDepthSampler.GatherCmp(proj_coords.xy +
   // offset, proj_coords.z - pc.global_data_buffer.bias); return (shadow.x +
   // shadow.y + shadow.z + shadow.w) / 4.f;
 
-  let shadow = DepthTextureSampler.SampleCmpLevelZero(proj_coords.xy + offset, proj_coords.z - pc.global_data_buffer.bias);
+  let shadow = ShadowDepthSampler.SampleCmpLevelZero(
+      proj_coords.xy + offset, proj_coords.z - pc.global_data_buffer.bias);
 
-  // let shadow = DepthTextureSampler.GatherCmp(
+  // let shadow = ShadowDepthSampler.GatherCmp(
   //     proj_coords.xy + offset,
   //     proj_coords.z - pc.global_data_buffer.bias,
   //     {1, 0},
@@ -128,7 +135,7 @@ uint3 pcg_3d(uint3 v) {
 
 float filter_pcf(float2 screen_pos, float4 shadow_coord) {
   int2 texDim;
-  DepthTextureSampler.GetDimensions(texDim.x, texDim.y);
+  ShadowDepthSampler.GetDimensions(texDim.x, texDim.y);
   float scale = 1.5;
   float dx = scale * 1.0 / float(texDim.x);
   float dy = scale * 1.0 / float(texDim.y);
@@ -183,23 +190,40 @@ V2P vertex_main(VertexInput input) {
   let view_projection_matrix = pc.global_data_buffer.view_projection_matrix;
 
   V2P output;
-  output.pos = mul(view_projection_matrix, mul(pc.model_matrix, float4(vertex.position, 1.0)));
-  output.normal = vertex.normal;
+  output.pos =
+      mul(view_projection_matrix, mul(pc.model_matrices[input.instance_id],
+                                      float4(vertex.position, 1.0)));
+  output.normal =
+      mul(pc.model_matrices[input.instance_id], float4(vertex.normal, 0.0)).xyz;
   output.uv = float2(vertex.uv_x, vertex.uv_y);
   output.frag_pos = vertex.position;
 
-  let light_contrib = dot(fake_light, vertex.normal);
+  let light_contrib = dot(fake_light, output.normal);
 
   // output.color = vertex.color.xyz;
-  output.color = lerp(float3(0.75, 0.24, 0.32), float3(1, 0.75, 0.70),
-                      saturate(light_contrib));
-  // output.color = 1.f - DepthTextureSampler.Sample(float2(0.5, 0.5)) * 100.0;
+  let color_select = input.instance_id % 3;
+  switch (color_select) {
+  case 0:
+    output.color = lerp(float3(1, 0.24, 0.32), float3(1, 0.75, 0.70),
+                        saturate(light_contrib));
+    break;
+  case 1:
+    output.color = lerp(float3(0.24, 0.75, 0.32), float3(0.75, 1, 0.70),
+                        saturate(light_contrib));
+    break;
+  case 2:
+    output.color = lerp(float3(0.32, 0.24, 0.75), float3(0.7, 0.75, 1),
+                        saturate(light_contrib));
+  }
+  // output.color = 1.f - ShadowDepthSampler.Sample(float2(0.5, 0.5)) * 100.0;
 
   let sun_view_projection_matrix =
       pc.global_data_buffer.sun_view_projection_matrix;
 
-  output.sun_space_pos = mul(
-      biasMat, mul(sun_view_projection_matrix, mul(pc.model_matrix, float4(vertex.position, 1.0))));
+  output.sun_space_pos =
+      mul(biasMat, mul(sun_view_projection_matrix,
+                       mul(pc.model_matrices[input.instance_id],
+                           float4(vertex.position, 1.0))));
 
   return output;
 }
@@ -211,6 +235,7 @@ PSOutput fragment_main(V2P input) {
   // let shadow = shadow_calc(input.sun_space_pos);
   let shadow = filter_pcf(input.pos.xy, input.sun_space_pos);
   let normal = normalize(input.normal);
+  input.color = 1.f;
 
   output.frag_color =
       float4(lerp(input.color * pc.global_data_buffer.sun_color,
@@ -225,10 +250,11 @@ PSOutput fragment_main(V2P input) {
 
   let light_dir = normalize(light_pos - input.frag_pos);
 
-  let specular_val =
-      specular(input.frag_pos, 0.5 * shadow, light_dir, 32.f, 1.0, view_pos, normal);
+  let specular_val = specular(input.frag_pos, 0.5 * shadow, light_dir, 32.f,
+                              1.0, view_pos, normal);
 
   output.frag_color += float4(specular_val, 1.0);
+  output.frag_color *= TestTextureSampler.Sample(input.uv);
 
   return output;
 }

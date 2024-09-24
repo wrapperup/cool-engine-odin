@@ -92,10 +92,16 @@ VulkanEngine :: struct {
 	sphere_mesh_buffers:          GPUMeshBuffers,
 	mesh_descriptors:             vk.DescriptorSet,
 	mesh_descriptor_layout:       vk.DescriptorSetLayout,
+	TEMP_mesh_image:              AllocatedImage,
+	TEMP_mesh_image_sampler:      vk.Sampler,
 
 	// Stats
-	frame_time:                   f32,
+	frame_time_total:             f32,
+	frame_time_game_state:        f32,
+	frame_time_physics:           f32,
+	frame_time_render:            f32,
 	delta_time:                   f64,
+	model_matrices:               [dynamic]hlsl.float4x4,
 }
 
 FrameData :: struct {
@@ -106,6 +112,8 @@ FrameData :: struct {
 	deletion_queue:                        DeletionQueue,
 	global_uniform_buffer:                 AllocatedBuffer,
 	global_uniform_address:                vk.DeviceAddress,
+	model_matrices_buffer:                 AllocatedBuffer,
+	model_matrices_address:                vk.DeviceAddress,
 }
 
 SwapChainSupportDetails :: struct {
@@ -836,6 +844,10 @@ create_shadow_map :: proc(engine: ^VulkanEngine, extent: vk.Extent3D) {
 	)
 }
 
+create_test_image :: proc(engine: ^VulkanEngine) {
+	engine.TEMP_mesh_image = load_image_from_file(engine)
+}
+
 init_sync_structures :: proc(engine: ^VulkanEngine) {
 	fence_create_info := init_fence_create_info({.SIGNALED})
 	semaphore_create_info := init_semaphore_create_info({})
@@ -861,7 +873,7 @@ init_descriptors :: proc(engine: ^VulkanEngine) {
 	{
 		engine.mesh_descriptor_layout = create_descriptor_set_layout(
 			engine,
-			[?]DescriptorBinding{{0, .COMBINED_IMAGE_SAMPLER}},
+			[?]DescriptorBinding{{0, .COMBINED_IMAGE_SAMPLER}, {1, .COMBINED_IMAGE_SAMPLER}},
 			{.VERTEX, .FRAGMENT},
 		)
 	}
@@ -874,43 +886,81 @@ init_descriptors :: proc(engine: ^VulkanEngine) {
 
 	push_deletion_queue(&engine.main_deletion_queue, engine.mesh_descriptor_layout)
 
-	sampler_create_info := vk.SamplerCreateInfo {
-		sType         = .SAMPLER_CREATE_INFO,
-		magFilter     = .LINEAR,
-		minFilter     = .LINEAR,
-		mipmapMode    = .LINEAR,
-		addressModeU  = .CLAMP_TO_EDGE,
-		addressModeV  = .CLAMP_TO_EDGE,
-		addressModeW  = .CLAMP_TO_EDGE,
-		mipLodBias    = 0.0,
-		maxAnisotropy = 1.0,
-		minLod        = 0.0,
-		maxLod        = 1.0,
-		borderColor   = .INT_OPAQUE_WHITE,
-		compareOp     = .LESS_OR_EQUAL,
-		compareEnable = true,
+	// Shadow Depth Texture Sampler
+	{
+		sampler_create_info := vk.SamplerCreateInfo {
+			sType         = .SAMPLER_CREATE_INFO,
+			magFilter     = .LINEAR,
+			minFilter     = .LINEAR,
+			mipmapMode    = .LINEAR,
+			addressModeU  = .CLAMP_TO_EDGE,
+			addressModeV  = .CLAMP_TO_EDGE,
+			addressModeW  = .CLAMP_TO_EDGE,
+			mipLodBias    = 0.0,
+			maxAnisotropy = 1.0,
+			minLod        = 0.0,
+			maxLod        = 1.0,
+			borderColor   = .INT_OPAQUE_WHITE,
+			compareOp     = .LESS_OR_EQUAL,
+			compareEnable = true,
+		}
+
+		vk_check(vk.CreateSampler(engine.device, &sampler_create_info, nil, &engine.shadow_depth_sampler))
+		push_deletion_queue(&engine.main_deletion_queue, engine.shadow_depth_sampler)
+
+		shadow_depth_image_info := vk.DescriptorImageInfo {
+			imageLayout = .DEPTH_READ_ONLY_OPTIMAL,
+			imageView   = engine.shadow_depth_image.image_view,
+			sampler     = engine.shadow_depth_sampler,
+		}
+
+		shadow_depth_image_write := vk.WriteDescriptorSet {
+			sType           = .WRITE_DESCRIPTOR_SET,
+			pNext           = nil,
+			dstBinding      = 0,
+			dstSet          = engine.mesh_descriptors,
+			descriptorCount = 1,
+			descriptorType  = .COMBINED_IMAGE_SAMPLER,
+			pImageInfo      = &shadow_depth_image_info,
+		}
+
+		vk.UpdateDescriptorSets(engine.device, 1, &shadow_depth_image_write, 0, nil)
 	}
 
-	vk.CreateSampler(engine.device, &sampler_create_info, nil, &engine.shadow_depth_sampler)
+	// Test Texture Sampler
+	{
+		sampler_create_info := vk.SamplerCreateInfo {
+			sType        = .SAMPLER_CREATE_INFO,
+			magFilter    = .LINEAR,
+			minFilter    = .LINEAR,
+			addressModeU = .CLAMP_TO_EDGE,
+			addressModeV = .CLAMP_TO_EDGE,
+			addressModeW = .CLAMP_TO_EDGE,
+		}
 
-	push_deletion_queue(&engine.main_deletion_queue, engine.shadow_depth_sampler)
+		vk_check(vk.CreateSampler(engine.device, &sampler_create_info, nil, &engine.TEMP_mesh_image_sampler))
+		push_deletion_queue(&engine.main_deletion_queue, engine.TEMP_mesh_image_sampler)
 
-	img_info := vk.DescriptorImageInfo{}
-	img_info.imageLayout = .DEPTH_READ_ONLY_OPTIMAL
-	img_info.imageView = engine.shadow_depth_image.image_view
-	img_info.sampler = engine.shadow_depth_sampler
+		test_image_info := vk.DescriptorImageInfo {
+			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+			imageView   = engine.TEMP_mesh_image.image_view,
+			sampler     = engine.TEMP_mesh_image_sampler,
+		}
 
-	draw_image_write := vk.WriteDescriptorSet{}
-	draw_image_write.sType = .WRITE_DESCRIPTOR_SET
-	draw_image_write.pNext = nil
+		test_image_write := vk.WriteDescriptorSet {
+			sType           = .WRITE_DESCRIPTOR_SET,
+			pNext           = nil,
+			dstBinding      = 1,
+			dstSet          = engine.mesh_descriptors,
+			descriptorCount = 1,
+			descriptorType  = .COMBINED_IMAGE_SAMPLER,
+			pImageInfo      = &test_image_info,
+		}
 
-	draw_image_write.dstBinding = 0
-	draw_image_write.dstSet = engine.mesh_descriptors
-	draw_image_write.descriptorCount = 1
-	draw_image_write.descriptorType = .COMBINED_IMAGE_SAMPLER
-	draw_image_write.pImageInfo = &img_info
-
-	vk.UpdateDescriptorSets(engine.device, 1, &draw_image_write, 0, nil)
+		fmt.println("hi")
+		vk.UpdateDescriptorSets(engine.device, 1, &test_image_write, 0, nil)
+		fmt.println("bye")
+	}
 }
 
 init_pipelines :: proc(engine: ^VulkanEngine) {
@@ -948,11 +998,11 @@ init_mesh_pipelines :: proc(engine: ^VulkanEngine) {
 	}
 	{
 		opts := cgltf.options{}
-		data, ok := cgltf.parse_file(opts, "assets/cube.glb")
+		data, ok := cgltf.parse_file(opts, "assets/sphere.glb")
 		if ok != .success {
 			panic("ASGASDGSDGSD")
 		}
-		if cgltf.load_buffers(opts, data, "assets/cube.glb") != .success {
+		if cgltf.load_buffers(opts, data, "assets/sphere.glb") != .success {
 			panic("gnar")
 		}
 		defer cgltf.free(data)
@@ -1024,6 +1074,7 @@ init_mesh_pipelines :: proc(engine: ^VulkanEngine) {
 
 init_buffers :: proc(engine: ^VulkanEngine) {
 	for &frame in &engine.frames {
+		// Global uniform buffer
 		frame.global_uniform_buffer = create_buffer(
 			engine,
 			size_of(GPUGlobalData),
@@ -1036,12 +1087,34 @@ init_buffers :: proc(engine: ^VulkanEngine) {
 		}
 		frame.global_uniform_address = vk.GetBufferDeviceAddress(engine.device, &device_address_info)
 
+		// Model matrices
+		frame.model_matrices_buffer = create_buffer(
+			engine,
+			size_of(hlsl.float4x4) * 16_384,
+			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
+			.CPU_TO_GPU,
+		)
+		device_address_info = vk.BufferDeviceAddressInfo {
+			sType  = .BUFFER_DEVICE_ADDRESS_INFO,
+			buffer = frame.model_matrices_buffer.buffer,
+		}
+		frame.model_matrices_address = vk.GetBufferDeviceAddress(engine.device, &device_address_info)
+
 		push_deletion_queue(
 			&engine.main_deletion_queue,
 			frame.global_uniform_buffer.buffer,
 			frame.global_uniform_buffer.allocation,
 		)
+
+		push_deletion_queue(
+			&engine.main_deletion_queue,
+			frame.model_matrices_buffer.buffer,
+			frame.model_matrices_buffer.allocation,
+		)
 	}
+
+	// TODO: TEMP: GO AWAY?
+	resize(&engine.model_matrices, 16_384)
 }
 
 init_vma :: proc(engine: ^VulkanEngine) {
@@ -1079,6 +1152,7 @@ init_vulkan :: proc(engine: ^VulkanEngine) -> bool {
 	// End bootstrapping
 
 	create_shadow_map(engine, {1024, 1024, 1})
+	create_test_image(engine)
 
 	init_descriptors(engine)
 	init_pipelines(engine)
@@ -1197,34 +1271,14 @@ draw_shadow_map :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, engine.mesh_shadow_pipeline)
 
-	push_constants: GPUDrawPushConstants
-	push_constants.vertex_buffer_address = engine.mesh_buffers.vertex_buffer_address
-	push_constants.global_data_buffer_address = current_frame(engine).global_uniform_address
+	{
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
+		vk.CmdBindIndexBuffer(cmd, engine.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
-	vk.CmdPushConstants(
-		cmd,
-		engine.mesh_pipeline_layout,
-		{.VERTEX, .FRAGMENT},
-		0,
-		size_of(GPUDrawPushConstants),
-		&push_constants,
-	)
-	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
-	vk.CmdBindIndexBuffer(cmd, engine.mesh_buffers.index_buffer.buffer, 0, .UINT32)
-
-	vk.CmdDrawIndexed(cmd, engine.mesh_buffers.index_count, 1, 0, 0, 0)
-
-	player_iter := make_entity_iter(Player)
-	for player, i in iter_entities(&player_iter) {
-		if i > 10 do break
 		push_constants: GPUDrawPushConstants
 		push_constants.vertex_buffer_address = engine.sphere_mesh_buffers.vertex_buffer_address
 		push_constants.global_data_buffer_address = current_frame(engine).global_uniform_address
-
-		translation := linalg.matrix4_translate(player.translation)
-		rotation := linalg.matrix4_from_quaternion(player.rotation)
-
-		push_constants.model_matrix = linalg.mul(translation, rotation)
+		push_constants.model_matrices_address = current_frame(engine).model_matrices_address
 
 		vk.CmdPushConstants(
 			cmd,
@@ -1234,10 +1288,8 @@ draw_shadow_map :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 			size_of(GPUDrawPushConstants),
 			&push_constants,
 		)
-		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
-		vk.CmdBindIndexBuffer(cmd, engine.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
-		vk.CmdDrawIndexed(cmd, engine.sphere_mesh_buffers.index_count, 1, 0, 0, 0)
+		vk.CmdDrawIndexed(cmd, engine.sphere_mesh_buffers.index_count, u32(len_entities(Ball)), 0, 0, 0)
 	}
 
 	vk.CmdEndRendering(cmd)
@@ -1273,34 +1325,14 @@ draw_geometry :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, engine.mesh_pipeline)
 
-	push_constants: GPUDrawPushConstants
-	push_constants.vertex_buffer_address = engine.mesh_buffers.vertex_buffer_address
-	push_constants.global_data_buffer_address = current_frame(engine).global_uniform_address
+	{
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
+		vk.CmdBindIndexBuffer(cmd, engine.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
-	vk.CmdPushConstants(
-		cmd,
-		engine.mesh_pipeline_layout,
-		{.VERTEX, .FRAGMENT},
-		0,
-		size_of(GPUDrawPushConstants),
-		&push_constants,
-	)
-	vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
-	vk.CmdBindIndexBuffer(cmd, engine.mesh_buffers.index_buffer.buffer, 0, .UINT32)
-
-	vk.CmdDrawIndexed(cmd, engine.mesh_buffers.index_count, 1, 0, 0, 0)
-
-	player_iter := make_entity_iter(Player)
-	for player, i in iter_entities(&player_iter) {
-		if i > 10 do break
 		push_constants: GPUDrawPushConstants
 		push_constants.vertex_buffer_address = engine.sphere_mesh_buffers.vertex_buffer_address
 		push_constants.global_data_buffer_address = current_frame(engine).global_uniform_address
-
-		translation := linalg.matrix4_translate(player.translation)
-		rotation := linalg.matrix4_from_quaternion(player.rotation)
-
-		push_constants.model_matrix = linalg.mul(translation, rotation)
+		push_constants.model_matrices_address = current_frame(engine).model_matrices_address
 
 		vk.CmdPushConstants(
 			cmd,
@@ -1310,10 +1342,8 @@ draw_geometry :: proc(engine: ^VulkanEngine, cmd: vk.CommandBuffer) {
 			size_of(GPUDrawPushConstants),
 			&push_constants,
 		)
-		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, engine.mesh_pipeline_layout, 0, 1, &engine.mesh_descriptors, 0, nil)
-		vk.CmdBindIndexBuffer(cmd, engine.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
-		vk.CmdDrawIndexed(cmd, engine.sphere_mesh_buffers.index_count, 1, 0, 0, 0)
+		vk.CmdDrawIndexed(cmd, engine.sphere_mesh_buffers.index_count, u32(len_entities(Ball)), 0, 0, 0)
 	}
 
 	vk.CmdEndRendering(cmd)
@@ -1370,7 +1400,7 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 			game_state.environment.sun_target,
 			{0.0, 1.0, 0.0},
 		)
-		sun_projection_matrix := matrix_ortho3d_z0_f32(-10, 10, -10, 10, 0.1, 100.0)
+		sun_projection_matrix := matrix_ortho3d_z0_f32(-50, 50, -50, 50, 0.1, 500.0)
 		sun_projection_matrix[1][1] *= -1.0
 
 		global_uniform_data.sun_view_projection_matrix = sun_projection_matrix * sun_view_matrix
@@ -1388,6 +1418,27 @@ update_buffers :: proc(engine: ^VulkanEngine) {
 	global_uniform_data.sun_pos = hlsl.float3(game_state.environment.sun_pos)
 
 	write_buffer(&current_frame(engine).global_uniform_buffer, &global_uniform_data)
+
+	// parallel_for_entities(proc(entity: ^Ball, index: int, data: rawptr) {
+	// 		model_matrices := transmute(^[1024]hlsl.float4x4)data
+	//
+	// 		translation := linalg.matrix4_translate(entity.translation)
+	// 		rotation := linalg.matrix4_from_quaternion(entity.rotation)
+	//
+	// 		model_matrices[index] = linalg.mul(translation, rotation)
+	// 	}, &model_matrices)
+
+	iter := make_entity_iter(Ball)
+	for ball, i in iter_entities(&iter) {
+		if i > 16_384 do break
+
+		translation := linalg.matrix4_translate(ball.translation)
+		rotation := linalg.matrix4_from_quaternion(ball.rotation)
+
+		engine.model_matrices[i] = linalg.mul(translation, rotation)
+	}
+
+	write_buffer_array(&current_frame(engine).model_matrices_buffer, engine.model_matrices[:])
 }
 
 draw :: proc(engine: ^VulkanEngine) {

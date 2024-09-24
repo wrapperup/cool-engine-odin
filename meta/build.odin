@@ -11,7 +11,8 @@ main :: proc() {
 	ok = parser.parse_package(pkg)
 	assert(ok)
 
-	bind_structs: map[string]ShaderStruct
+	// bind_structs: map[string]ShaderStruct
+	bind_structs: [dynamic]ShaderStruct
 
 	for key, val in pkg.files {
 		for decl in val.decls {

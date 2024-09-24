@@ -113,7 +113,7 @@ push_deletion_queue :: proc(
 	resource_type := resource_type_of_handle(T)
 
 	if resource_requires_allocation(resource_type) {
-		assert(allocation != nil)
+		assert(allocation != nil, "Resource of this type requires an allocation to be passed in.", loc)
 	}
 
 	resource_handle := ResourceHandle {

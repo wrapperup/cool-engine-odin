@@ -7,7 +7,12 @@ tasks:
   run:
     cmds:
       - task build-debug
-      - ./build/main.exe
+      - ./build/debug/main.exe
+
+  run-release:
+    cmds:
+      - task build-release
+      - ./build/release/main.exe
 
   debug:
     cmds:
@@ -24,6 +29,11 @@ tasks:
     deps: [build-shaders]
     cmds:
       - pwsh ./build-debug.ps1
+
+  build-release:
+    deps: [build-shaders]
+    cmds:
+      - pwsh ./build-release.ps1
 
   check:
     cmds:

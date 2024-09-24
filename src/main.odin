@@ -6,18 +6,23 @@ import "core:fmt"
 import "core:mem"
 import "core:reflect"
 
+import "core:c"
 import "core:math"
 import "core:math/linalg"
+import hlsl "core:math/linalg/hlsl"
+import "core:math/rand"
 import "core:strings"
 import "core:sync"
 import win "core:sys/windows"
 import "core:time"
-import im "deps:odin-imgui"
-import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 import "vendor:cgltf"
 import glfw "vendor:glfw"
 import vk "vendor:vulkan"
+
+import "deps:jolt"
+import im "deps:odin-imgui"
+import im_glfw "deps:odin-imgui/imgui_impl_glfw"
+import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 
 main :: proc() {
 	when ODIN_OS == .Windows {
@@ -49,6 +54,8 @@ main :: proc() {
 	init_parallel_for_thread_pool(12)
 	defer destroy_parallel_for_thread_pool()
 
+	physics_init()
+
 	run_engine()
 }
 
@@ -67,9 +74,11 @@ run_engine :: proc() {
 		start := time.now()
 
 		update(&engine)
+		start_render := time.now()
 		render(&engine)
+		engine.frame_time_render = f32(time.since(start_render)) / f32(time.Millisecond)
 
-		engine.frame_time = f32(time.since(start)) / f32(time.Millisecond)
+		engine.frame_time_total = f32(time.since(start)) / f32(time.Millisecond)
 		engine.delta_time = f64(time.since(start)) / f64(time.Second)
 
 		// Free temp allocations
@@ -81,22 +90,51 @@ run_engine :: proc() {
 
 update :: proc(engine: ^VulkanEngine) {
 	update_game_state(engine, engine.delta_time)
+	// physics_update()
 	update_imgui(engine)
 }
 
 init_game_state :: proc() {
 	camera := new_entity(Camera)
-	for i in 0 ..< 1_000_000 {
-		player := new_entity(Player)
-		player.coolness = u32(i)
+	player := new_entity(Player)
+	player.translation = {0.0, 100.0, 100.0}
+	for i in 0 ..< 1024 {
+		ball := new_entity(Ball)
+		ball.translation = {(rand.float32() - 0.5) * 0.01 * f32(i), 5.0 * f32(i), (rand.float32() - 0.5) * 0.01 * f32(i)}
+
+		ball.body = jolt.GetBodyInterface(physics_system)
+
+		sphere_shape_settings := jolt.SphereShapeSettings_Create(1.0)
+		sss: jolt.BodyCreationSettings
+		in_p := hlsl.float3{0, 2, 0}
+		in_r := hlsl.float4{0, 0, 0, 1}
+		jolt.BodyCreationSettings_Set(
+			&sss,
+			jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(sphere_shape_settings)),
+			&in_p,
+			&in_r,
+			.MOTION_TYPE_DYNAMIC,
+			BroadPhaseLayers_Moving,
+		)
+		ball.body_id = jolt.BodyInterface_CreateAndAddBody(ball.body, &sss, .ACTIVATION_ACTIVATE)
+		jolt.BodyInterface_SetPosition(
+			ball.body,
+			ball.body_id,
+			cast(^hlsl.float3)(&ball.translation),
+			.ACTIVATION_ACTIVATE,
+		)
 	}
+
+	jolt.PhysicsSystem_SetGravity(physics_system, &{0, -0.98 * 4, 0})
+
 	camera.translation = {-9, 9.5, 14}
 	camera.camera_rot = {-0.442, 0.448}
 	camera.camera_fov_deg = 45
 	camera.view_state = .SceneColor
 
 	game_state = GameState {
-		camera_id = TypedEntityId(Camera){id = camera.id},
+		camera_id = entity_id_of(camera),
+		player_id = entity_id_of(player),
 		environment = Environment {
 			sun_pos = {12, 15, 10},
 			sun_target = 0.0,
@@ -105,12 +143,15 @@ init_game_state :: proc() {
 			bias = 0.001,
 		},
 	}
+
+	jolt.PhysicsSystem_OptimizeBroadPhase(physics_system)
 }
 
 free_game_state :: proc() {
 }
 
 update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
+	start_game_state := time.now()
 	camera := get_entity(game_state.camera_id)
 
 	{
@@ -190,16 +231,28 @@ update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
 	parallel_for_entities(proc(entity: ^Player, index: int) {
 		entity.translation.y += f32(entity.coolness) * 0.001
 	})
-}
 
-epic: int = 0
+	parallel_for_entities(proc(entity: ^Ball, index: int) {
+		pos: hlsl.float3
+		rot: hlsl.float4
+		jolt.BodyInterface_GetPosition(entity.body, entity.body_id, &pos)
+		jolt.BodyInterface_GetRotation(entity.body, entity.body_id, &rot)
+
+		entity.translation = cast([3]f32)pos
+		entity.rotation = transmute(linalg.Quaternionf32)rot
+	})
+
+	engine.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
+
+	collision_steps := 1
+
+	start_physics := time.now()
+	jolt.PhysicsSystem_Update(physics_system, 1.0 / 60.0, collision_steps, 0, jta, js)
+	engine.frame_time_physics = f32(time.since(start_physics)) / f32(time.Millisecond)
+}
 
 update_players :: proc() {
 
-}
-
-Big_Hack_Wtf :: struct {
-	foo: u32,
 }
 
 update_imgui :: proc(engine: ^VulkanEngine) {
@@ -289,7 +342,7 @@ update_imgui :: proc(engine: ^VulkanEngine) {
 			storage_raw := cast(^RawSparseSet)subtype_ptr
 			size_t := type_info_of(key).size
 
-			if im.TreeNode(fmt.ctprintf("%s Entities", type_info_of(key).variant.(runtime.Type_Info_Named).name)) {
+			if im.TreeNode(fmt.ctprintf("%s Entities (num: %d)", type_info_of(key).variant.(runtime.Type_Info_Named).name, storage_raw.dense.len)) {
 				clipper: im.ListClipper
 				im.ListClipper_Begin(&clipper, i32(storage_raw.dense.len))
 
@@ -328,7 +381,10 @@ update_imgui :: proc(engine: ^VulkanEngine) {
 	im.End()
 
 	if (im.Begin("Stats")) {
-		im.Text("frametime %f ms", engine.frame_time)
+		im.Text("total frametime %f ms", engine.frame_time_total)
+		im.BulletText("game %f ms", engine.frame_time_game_state)
+		im.BulletText("physics %f ms", engine.frame_time_physics)
+		im.BulletText("render %f ms", engine.frame_time_render)
 	}
 	im.End()
 }
@@ -339,3 +395,221 @@ NvOptimusEnablement: u32 = 1
 
 @(export)
 AmdPowerXpressRequestHighPerformance: i32 = 1
+
+
+//Just some code you can copy paste and try to run to check if things are running properly this is not the full hello
+physics_init :: proc() {
+	in_broad_phase_layer_interface.GetNumBroadPhaseLayers = get_num_broad_pl
+	in_broad_phase_layer_interface.GetBroadPhaseLayer = get_broad_phase_layer
+
+	in_object_vs_broad_phase_layer_filter.ShouldCollide = should_collide
+	in_object_layer_pair_filter.ShouldCollide = should_collide_object_layer
+
+	jolt.RegisterDefaultAllocator()
+	jolt.RegisterTypes()
+	jta = jolt.TempAllocator_Create(1024 * 1024 * 10)
+	js = jolt.JobSystem_Create(jolt.cMaxPhysicsJobs, jolt.cMaxPhysicsBarriers, 4)
+
+	in_max_bodies: u32 = 1024
+	in_num_body_mutexes: u32 = 0
+	in_max_body_pairs: u32 = 4096 * 1
+	in_max_constraints: u32 = 4096 * 1
+
+	physics_system = jolt.PhysicsSystem_Create(
+		in_max_bodies,
+		in_num_body_mutexes,
+		in_max_body_pairs,
+		in_max_constraints,
+		in_broad_phase_layer_interface,
+		in_object_vs_broad_phase_layer_filter,
+		in_object_layer_pair_filter,
+	)
+
+	contact_listener: jolt.ContactListenerVTable
+	contact_listener.OnContactAdded = contact_added_test
+	jolt.SetContactListener(physics_system, &contact_listener)
+
+{
+	body_interface = jolt.GetBodyInterface(physics_system)
+
+	a := hlsl.float3{100, 1, 100}
+	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+	fmt.println("box shape settings create")
+	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+	fmt.println("floor shape create")
+
+	bcs: jolt.BodyCreationSettings
+	in_p := hlsl.float3{0, -1, 0}
+	in_r := hlsl.float4{0, 0, 0, 1}
+	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+
+	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+}
+
+{
+	body_interface = jolt.GetBodyInterface(physics_system)
+	a := hlsl.float3{20, 10, 1}
+	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+	fmt.println("box shape settings create")
+	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+	fmt.println("floor shape create")
+
+	bcs: jolt.BodyCreationSettings
+	in_p := hlsl.float3{0, 0, 20}
+	in_r := hlsl.float4{0, 0, 0, 1}
+	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+
+	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+}
+{
+	body_interface = jolt.GetBodyInterface(physics_system)
+	a := hlsl.float3{20, 10, 1}
+	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+	fmt.println("box shape settings create")
+	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+	fmt.println("floor shape create")
+
+	bcs: jolt.BodyCreationSettings
+	in_p := hlsl.float3{0, 0, -20}
+	in_r := hlsl.float4{0, 0, 0, 1}
+	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+
+	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+}
+{
+	body_interface = jolt.GetBodyInterface(physics_system)
+	a := hlsl.float3{1, 10, 20}
+	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+	fmt.println("box shape settings create")
+	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+	fmt.println("floor shape create")
+
+	bcs: jolt.BodyCreationSettings
+	in_p := hlsl.float3{20, 0, 0}
+	in_r := hlsl.float4{0, 0, 0, 1}
+	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+
+	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+}
+{
+	body_interface = jolt.GetBodyInterface(physics_system)
+	a := hlsl.float3{1, 10, 20}
+	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+	fmt.println("box shape settings create")
+	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+	fmt.println("floor shape create")
+
+	bcs: jolt.BodyCreationSettings
+	in_p := hlsl.float3{-20, 0, 0}
+	in_r := hlsl.float4{0, 0, 0, 1}
+	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+
+	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+}
+
+	// sphere_shape_settings := jolt.SphereShapeSettings_Create(0.5)
+	// sss: jolt.BodyCreationSettings
+	// in_p = hlsl.float3{0, 2, 0}
+	// in_r = hlsl.float4{0, 0, 0, 1}
+	// jolt.BodyCreationSettings_Set(
+	// 	&sss,
+	// 	jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(sphere_shape_settings)),
+	// 	&in_p,
+	// 	&in_r,
+	// 	.MOTION_TYPE_DYNAMIC,
+	// 	BroadPhaseLayers_Moving,
+	// )
+	// sphere_id = jolt.BodyInterface_CreateAndAddBody(body_interface, &sss, .ACTIVATION_ACTIVATE)
+	// fmt.println(sss)
+}
+
+physics_update :: proc() {
+	step := 0
+	for jolt.BodyInterface_IsActive(body_interface, sphere_id) {
+
+		pos: hlsl.float3
+		jolt.BodyInterface_GetCenterOfMassPosition(body_interface, sphere_id, &pos)
+		linvel: hlsl.float3
+		jolt.BodyInterface_GetLinearVelocity(body_interface, sphere_id, &linvel)
+
+		collision_steps := 1
+		dt: f32 = 1.0 / 60.0
+		jolt.PhysicsSystem_Update(physics_system, dt, collision_steps, 0, jta, js)
+	}
+}
+
+//interface and callback stuff
+get_num_broad_pl :: proc "c" () -> c.uint32_t {
+	context = runtime.default_context()
+	return (c.uint32_t)(BroadPhaseLayers.NumLayers)
+}
+
+get_broad_phase_layer :: proc "c" (in_layer: jolt.ObjectLayer) -> jolt.BroadPhaseLayer {
+	return (jolt.BroadPhaseLayer)(broad_phase_layer_map[in_layer])
+}
+
+contact_added_test :: proc "c" (
+	b: ^jolt.Body,
+	b2: ^jolt.Body,
+	in_manifold: ^jolt.ContactManifold,
+	io_settings: ^jolt.ContactSettings,
+) {
+	context = runtime.default_context()
+}
+
+should_collide :: proc "c" (in_layer: jolt.ObjectLayer, in_layer2: jolt.BroadPhaseLayer) -> bool {
+	context = runtime.default_context()
+	switch int(in_layer) {
+	case (int)(BroadPhaseLayers_NonMoving):
+		return int(in_layer2) == int(BroadPhaseLayers_Moving)
+	case int(BroadPhaseLayers_Moving):
+		return true
+	case:
+		//JPH_ASSERT(false);
+		return false
+	}
+	return false
+}
+
+should_collide_object_layer :: proc "c" (in_layer: jolt.ObjectLayer, in_layer2: jolt.ObjectLayer) -> bool {
+	context = runtime.default_context()
+
+	switch int(in_layer) {
+	case int(BroadPhaseLayers_NonMoving):
+		return int(in_layer2) == int(BroadPhaseLayers_Moving) // Non moving only collides with moving
+	case int(BroadPhaseLayers_Moving):
+		return true // Moving collides with everything
+	case:
+		//JPH_ASSERT(false);
+		return false
+	}
+	return false
+}
+
+physics_system: ^jolt.PhysicsSystem
+jta: ^jolt.TempAllocator
+js: ^jolt.JobSystem
+body_interface: ^jolt.BodyInterface
+
+sphere_id: jolt.BodyID
+
+BroadPhaseLayers :: enum c.uint8_t {
+	NonMoving = 0,
+	Moving    = 1,
+	NumLayers = 2,
+}
+
+BroadPhaseLayers_NonMoving: jolt.ObjectLayer : 0
+BroadPhaseLayers_Moving: jolt.ObjectLayer : 1
+BroadPhaseLayers_NumLayers: jolt.ObjectLayer : 2
+
+broad_phase_layer_map: map[jolt.ObjectLayer]BroadPhaseLayers
+
+in_broad_phase_layer_interface: jolt.BroadPhaseLayerInterfaceVTable
+in_object_vs_broad_phase_layer_filter: jolt.ObjectVsBroadPhaseLayerFilterVTable
+in_object_layer_pair_filter: jolt.ObjectLayerPairFilterVTable
