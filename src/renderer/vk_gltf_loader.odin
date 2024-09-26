@@ -1,4 +1,4 @@
-package main
+package renderer
 
 import "base:intrinsics"
 import "core:fmt"

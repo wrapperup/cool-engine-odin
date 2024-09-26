@@ -1,4 +1,4 @@
-package main
+package renderer
 
 import "core:mem"
 import vk "vendor:vulkan"
@@ -42,6 +42,14 @@ create_buffer :: proc(
 
 destroy_buffer :: proc(engine: ^VulkanEngine, allocated_buffer: ^AllocatedBuffer) {
 	vma.DestroyBuffer(engine.allocator, allocated_buffer.buffer, allocated_buffer.allocation)
+}
+
+get_buffer_device_address :: proc(engine: ^VulkanEngine, buffer: AllocatedBuffer) -> vk.DeviceAddress {
+	device_address_info := vk.BufferDeviceAddressInfo {
+		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
+		buffer = buffer.buffer,
+	}
+	return vk.GetBufferDeviceAddress(engine.device, &device_address_info)
 }
 
 create_mesh_buffers :: proc(engine: ^VulkanEngine, indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {

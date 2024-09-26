@@ -17,7 +17,8 @@ import win "core:sys/windows"
 import "core:time"
 import "vendor:cgltf"
 import glfw "vendor:glfw"
-import vk "vendor:vulkan"
+
+import re "./renderer"
 
 import "deps:jolt"
 import im "deps:odin-imgui"
@@ -27,7 +28,7 @@ import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 main :: proc() {
 	when ODIN_OS == .Windows {
 		// Use UTF-8 for console output (fixes emojis/unicode/utf-8 shenanigans)
-		win.SetConsoleOutputCP(win.CP_UTF8)
+		win.SetConsoleOutputCP(.UTF8)
 	}
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
@@ -60,11 +61,11 @@ main :: proc() {
 }
 
 run_engine :: proc() {
-	engine := VulkanEngine {
+	engine := re.VulkanEngine {
 		window_extent = {1700, 900},
 	}
 
-	if !init(&engine) {
+	if !re.init(&engine) {
 		fmt.println("App could not be initialized.")
 	}
 
@@ -74,8 +75,9 @@ run_engine :: proc() {
 		start := time.now()
 
 		update(&engine)
+
 		start_render := time.now()
-		render(&engine)
+		re.render(&engine)
 		engine.frame_time_render = f32(time.since(start_render)) / f32(time.Millisecond)
 
 		engine.frame_time_total = f32(time.since(start)) / f32(time.Millisecond)
@@ -88,7 +90,7 @@ run_engine :: proc() {
 	free_game_state()
 }
 
-update :: proc(engine: ^VulkanEngine) {
+update :: proc(engine: ^re.VulkanEngine) {
 	update_game_state(engine, engine.delta_time)
 	// physics_update()
 	update_imgui(engine)
@@ -150,7 +152,7 @@ init_game_state :: proc() {
 free_game_state :: proc() {
 }
 
-update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
+update_game_state :: proc(engine: ^re.VulkanEngine, dt: f64) {
 	start_game_state := time.now()
 	camera := get_entity(game_state.camera_id)
 
@@ -232,15 +234,26 @@ update_game_state :: proc(engine: ^VulkanEngine, dt: f64) {
 		entity.translation.y += f32(entity.coolness) * 0.001
 	})
 
-	parallel_for_entities(proc(entity: ^Ball, index: int) {
+	// parallel_for_entities(proc(entity: ^Ball, index: int) {
+	// 	pos: hlsl.float3
+	// 	rot: hlsl.float4
+	// 	jolt.BodyInterface_GetPosition(entity.body, entity.body_id, &pos)
+	// 	jolt.BodyInterface_GetRotation(entity.body, entity.body_id, &rot)
+	//
+	// 	entity.translation = cast([3]f32)pos
+	// 	entity.rotation = transmute(linalg.Quaternionf32)rot
+	// })
+
+	ball_iter := make_entity_iter(Ball)
+	for ball in iter_entities(&ball_iter) {
 		pos: hlsl.float3
 		rot: hlsl.float4
-		jolt.BodyInterface_GetPosition(entity.body, entity.body_id, &pos)
-		jolt.BodyInterface_GetRotation(entity.body, entity.body_id, &rot)
+		jolt.BodyInterface_GetPosition(ball.body, ball.body_id, &pos)
+		jolt.BodyInterface_GetRotation(ball.body, ball.body_id, &rot)
 
-		entity.translation = cast([3]f32)pos
-		entity.rotation = transmute(linalg.Quaternionf32)rot
-	})
+		ball.translation = cast([3]f32)pos
+		ball.rotation = transmute(linalg.Quaternionf32)rot
+	}
 
 	engine.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
 
@@ -255,7 +268,7 @@ update_players :: proc() {
 
 }
 
-update_imgui :: proc(engine: ^VulkanEngine) {
+update_imgui :: proc(engine: ^re.VulkanEngine) {
 	io := im.GetIO()
 	glfw.PollEvents()
 
@@ -310,7 +323,7 @@ update_imgui :: proc(engine: ^VulkanEngine) {
 			}
 
 			im.Text(display_string)
-			for i in 0 ..< len(info_struct.names) {
+			for i in 0 ..< info_struct.field_count {
 				name := info_struct.names[i]
 				ty := info_struct.types[i]
 				offset := info_struct.offsets[i]

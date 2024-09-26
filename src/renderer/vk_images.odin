@@ -1,9 +1,18 @@
-package main
+package renderer
 
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
 
-util_transition_image :: proc(
+transition_image_allocated_image :: proc(
+	cmd: vk.CommandBuffer,
+	allocated_image: AllocatedImage,
+	current_layout: vk.ImageLayout,
+	new_layout: vk.ImageLayout,
+) {
+	transition_image_vkimage(cmd, allocated_image.image, current_layout, new_layout)
+}
+
+transition_image_vkimage :: proc(
 	cmd: vk.CommandBuffer,
 	image: vk.Image,
 	current_layout: vk.ImageLayout,
@@ -36,7 +45,12 @@ util_transition_image :: proc(
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }
 
-util_copy_image_to_image :: proc(
+transition_image :: proc{
+	transition_image_allocated_image,
+	transition_image_vkimage,
+}
+
+copy_image_to_image :: proc(
 	cmd: vk.CommandBuffer,
 	source: vk.Image,
 	destination: vk.Image,

@@ -1,4 +1,4 @@
-package main
+package renderer
 
 import "core:c"
 import "core:fmt"
@@ -59,7 +59,7 @@ load_image_from_file :: proc(engine: ^VulkanEngine) -> AllocatedImage {
 	mem.copy(data, ktx_image_data, int(ktx_image_data_size))
 
 	if cmd, ok := immediate_submit(engine); ok {
-        util_transition_image(cmd, allocated_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+        transition_image(cmd, allocated_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 		copy_region := vk.BufferImageCopy {
 			bufferOffset = 0,
@@ -71,7 +71,7 @@ load_image_from_file :: proc(engine: ^VulkanEngine) -> AllocatedImage {
 
 		vk.CmdCopyBufferToImage(cmd, staging.buffer, allocated_image.image, .TRANSFER_DST_OPTIMAL, 1, &copy_region)
 
-        util_transition_image(cmd, allocated_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
+        transition_image(cmd, allocated_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
 	destroy_buffer(engine, &staging)

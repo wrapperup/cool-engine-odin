@@ -1,4 +1,4 @@
-package main
+package renderer
 
 import "core:fmt"
 import "core:os"
@@ -205,7 +205,7 @@ pb_delete :: proc(builder: PipelineBuilder) {
 
 // ====================================================================
 
-util_load_shader_module :: proc(file_name: string, device: vk.Device) -> (vk.ShaderModule, bool) {
+load_shader_module :: proc(file_name: string, device: vk.Device) -> (vk.ShaderModule, bool) {
 	buffer, ok := os.read_entire_file(file_name)
 
 	if !ok {
