@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import vk "vendor:vulkan"
 

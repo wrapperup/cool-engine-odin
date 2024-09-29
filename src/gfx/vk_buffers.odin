@@ -1,13 +1,13 @@
-package renderer
+package gfx
 
 import "core:mem"
 import vk "vendor:vulkan"
 import "core:fmt"
 import vma "deps:odin-vma"
 
-// This allocates on the GPU, make sure to call `destroy_buffer` when you are finished with the buffer.
+// This allocates on the GPU, make sure to call `destroy_buffer` or add to deletion queue when you are finished with the buffer.
 create_buffer :: proc(
-	engine: ^VulkanEngine,
+	engine: ^Renderer,
 	alloc_size: vk.DeviceSize,
 	usage: vk.BufferUsageFlags,
 	memory_usage: vma.MemoryUsage,
@@ -40,11 +40,11 @@ create_buffer :: proc(
 	return new_buffer
 }
 
-destroy_buffer :: proc(engine: ^VulkanEngine, allocated_buffer: ^AllocatedBuffer) {
+destroy_buffer :: proc(engine: ^Renderer, allocated_buffer: ^AllocatedBuffer) {
 	vma.DestroyBuffer(engine.allocator, allocated_buffer.buffer, allocated_buffer.allocation)
 }
 
-get_buffer_device_address :: proc(engine: ^VulkanEngine, buffer: AllocatedBuffer) -> vk.DeviceAddress {
+get_buffer_device_address :: proc(engine: ^Renderer, buffer: AllocatedBuffer) -> vk.DeviceAddress {
 	device_address_info := vk.BufferDeviceAddressInfo {
 		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
 		buffer = buffer.buffer,
@@ -52,7 +52,7 @@ get_buffer_device_address :: proc(engine: ^VulkanEngine, buffer: AllocatedBuffer
 	return vk.GetBufferDeviceAddress(engine.device, &device_address_info)
 }
 
-create_mesh_buffers :: proc(engine: ^VulkanEngine, indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {
+create_mesh_buffers :: proc(engine: ^Renderer, indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {
 	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * len(vertices))
 	index_buffer_size := vk.DeviceSize(size_of(u32) * len(indices))
 

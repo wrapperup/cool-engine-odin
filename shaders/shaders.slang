@@ -235,15 +235,11 @@ PSOutput fragment_main(V2P input) {
   // let shadow = shadow_calc(input.sun_space_pos);
   let shadow = filter_pcf(input.pos.xy, input.sun_space_pos);
   let normal = normalize(input.normal);
-  input.color = 1.f;
 
   output.frag_color =
       float4(lerp(input.color * pc.global_data_buffer.sun_color,
                   input.color * pc.global_data_buffer.sky_color, 1.0 - shadow),
              1.0);
-  // output.frag_color = shadow;
-  // output.frag_color = float4(input.color, 1.0);
-  // output.frag_color = input.sun_space_pos.z;
 
   let view_pos = pc.global_data_buffer.camera_pos;
   let light_pos = pc.global_data_buffer.sun_pos;
@@ -255,6 +251,7 @@ PSOutput fragment_main(V2P input) {
 
   output.frag_color += float4(specular_val, 1.0);
   output.frag_color *= TestTextureSampler.Sample(input.uv);
+
 
   return output;
 }

@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import "base:runtime"
 import "core:fmt"
@@ -42,7 +42,7 @@ ResourceType :: enum {
 	Sampler,
 }
 
-vk_destroy_resource :: proc(engine: ^VulkanEngine, resource: ResourceHandle) {
+vk_destroy_resource :: proc(engine: ^Renderer, resource: ResourceHandle) {
 	when false {
 		fmt.println("DEBUG: Destroy", resource.ty, "@", resource.caller_location, "-", resource.debug_info)
 	}
@@ -127,7 +127,7 @@ push_deletion_queue :: proc(
 	append(&queue.resource_del_queue, resource_handle)
 }
 
-flush_deletion_queue :: proc(engine: ^VulkanEngine, queue: ^DeletionQueue) {
+flush_deletion_queue :: proc(engine: ^Renderer, queue: ^DeletionQueue) {
 	#reverse for &resource in queue.resource_del_queue {
 		vk_destroy_resource(engine, resource)
 	}

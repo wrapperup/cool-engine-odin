@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import "base:intrinsics"
 import "core:fmt"
@@ -265,4 +265,27 @@ temp_parse_mesh_into_mesh_data :: proc(
 	ok = true
 
 	return indices, vertices, ok
+}
+
+load_mesh_from_file :: proc(engine: ^Renderer, path: cstring) -> (buffers: GPUMeshBuffers, ok: bool) {
+	opts := cgltf.options{}
+	data, result := cgltf.parse_file(opts, path)
+	if result != .success do return
+
+	result = cgltf.load_buffers(opts, data, path)
+	if result != .success do return
+
+	defer cgltf.free(data)
+
+	indices, vertices := temp_parse_mesh_into_mesh_data(data, 0) or_return
+
+	defer delete(indices)
+	defer delete(vertices)
+
+	buffers = create_mesh_buffers(engine, indices, vertices)
+	buffers.index_count = u32(len(indices))
+
+	ok = true
+
+	return
 }

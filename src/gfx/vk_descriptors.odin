@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import "core:fmt"
 import vk "vendor:vulkan"
@@ -9,11 +9,11 @@ DescriptorBinding :: struct {
 }
 
 create_descriptor_set_layout :: proc(
-	engine: ^VulkanEngine,
-	bindings: [$N]DescriptorBinding,
+	device: vk.Device,
 	stage_flags: vk.ShaderStageFlags = {},
-	descriptor_set_layout_flags: vk.DescriptorSetLayoutCreateFlags = {},
+	bindings: [$N]DescriptorBinding,
 	descriptor_count: u32 = 1,
+	descriptor_set_layout_flags: vk.DescriptorSetLayoutCreateFlags = {},
 ) -> vk.DescriptorSetLayout {
 	descriptor_set_bindings := [N]vk.DescriptorSetLayoutBinding{}
 
@@ -34,7 +34,7 @@ create_descriptor_set_layout :: proc(
 	}
 
 	set: vk.DescriptorSetLayout
-	vk_check(vk.CreateDescriptorSetLayout(engine.device, &info, nil, &set))
+	vk_check(vk.CreateDescriptorSetLayout(device, &info, nil, &set))
 
 	return set
 }
@@ -162,7 +162,11 @@ allocate_descriptor_set :: proc(
 		alloc_info.descriptorPool = pool
 
 		// Try again, if it fails then we're goofed anyway.
-		vk_check(vk.AllocateDescriptorSets(device, &alloc_info, &descriptor_set))
+		result = vk.AllocateDescriptorSets(device, &alloc_info, &descriptor_set)
+
+		fmt.println(result)
+
+		vk_check(result)
 	}
 
 	return descriptor_set
@@ -172,4 +176,79 @@ destroy_descriptor_allocator :: proc(allocator: ^DescriptorAllocator) {
 	delete(allocator.pool_ratios)
 	delete(allocator.ready_pools)
 	delete(allocator.full_pools)
+}
+
+DescriptorWrite :: union {
+	DescriptorWriteImage,
+	DescriptorWriteBuffer,
+}
+
+DescriptorWriteImage :: struct {
+	binding:      u32,
+	type:         vk.DescriptorType,
+	image_view:   vk.ImageView,
+	sampler:      vk.Sampler,
+	image_layout: vk.ImageLayout,
+}
+
+DescriptorWriteBuffer :: struct {
+	binding: u32,
+	type:    vk.DescriptorType,
+	buffer:  vk.Buffer,
+}
+
+write_descriptor_set :: proc(device: vk.Device, descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite) {
+	// Collect writes in the convenient format into vk's.
+	descriptor_writes: [dynamic]vk.WriteDescriptorSet
+	image_infos: [dynamic]vk.DescriptorImageInfo
+	buffer_infos: [dynamic]vk.DescriptorBufferInfo
+
+	for write in writes {
+		switch v in write {
+		case DescriptorWriteImage:
+			image_info := vk.DescriptorImageInfo {
+				imageLayout = v.image_layout,
+				imageView   = v.image_view,
+				sampler     = v.sampler,
+			}
+
+			append(&image_infos, image_info)
+
+			descriptor_write := vk.WriteDescriptorSet {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				pNext           = nil,
+				dstBinding      = v.binding,
+				dstSet          = descriptor_set,
+				descriptorCount = 1,
+				descriptorType  = v.type,
+				pImageInfo      = &image_infos[len(image_infos) - 1],
+			}
+
+			append(&descriptor_writes, descriptor_write)
+
+		case DescriptorWriteBuffer:
+			buffer_info := vk.DescriptorBufferInfo {
+				buffer = v.buffer,
+			}
+
+			append(&buffer_infos, buffer_info)
+
+			descriptor_write := vk.WriteDescriptorSet {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				pNext           = nil,
+				dstBinding      = v.binding,
+				dstSet          = descriptor_set,
+				descriptorCount = 1,
+				descriptorType  = v.type,
+				pBufferInfo     = &buffer_infos[len(buffer_infos) - 1],
+			}
+
+			append(&descriptor_writes, descriptor_write)
+		}
+	}
+
+	// Finally write out all of the writes
+	vk.UpdateDescriptorSets(device, u32(len(descriptor_writes)), raw_data(descriptor_writes), 0, nil)
+
+	// TODO: cleanup?
 }

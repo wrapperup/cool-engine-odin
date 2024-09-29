@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import vk "vendor:vulkan"
 
@@ -154,6 +154,32 @@ init_imageview_create_info :: proc(
 	}
 
 	return info
+}
+
+init_sampler_create_info :: proc(
+	filter: vk.Filter,
+	address_mode: vk.SamplerAddressMode,
+	compare_op: vk.CompareOp = .NEVER,
+	border_color: vk.BorderColor = .FLOAT_TRANSPARENT_BLACK,
+) -> vk.SamplerCreateInfo {
+	sampler_create_info := vk.SamplerCreateInfo {
+		sType         = .SAMPLER_CREATE_INFO,
+		magFilter     = filter,
+		minFilter     = filter,
+		mipmapMode    = .LINEAR,
+		addressModeU  = address_mode,
+		addressModeV  = address_mode,
+		addressModeW  = address_mode,
+		mipLodBias    = 0.0,
+		maxAnisotropy = 1.0,
+		minLod        = 0.0,
+		maxLod        = 1.0,
+		borderColor   = border_color,
+		compareOp     = compare_op,
+		compareEnable = compare_op != .NEVER,
+	}
+
+	return sampler_create_info
 }
 
 init_attachment_info :: proc(

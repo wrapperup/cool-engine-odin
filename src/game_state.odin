@@ -12,8 +12,6 @@ GameState :: struct {
 	player_id:   TypedEntityId(Player),
 }
 
-game_state: GameState
-
 Camera :: struct {
 	using entity:    ^Entity,
 	//

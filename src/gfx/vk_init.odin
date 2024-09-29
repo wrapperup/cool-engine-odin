@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import "base:runtime"
 
@@ -13,7 +13,7 @@ import vk "vendor:vulkan"
 
 import vma "deps:odin-vma"
 
-fetch_queues :: proc(engine: ^VulkanEngine, device: vk.PhysicalDevice) -> bool {
+fetch_queues :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool {
 	queue_family_count: u32
 	vk.GetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nil)
 
@@ -34,7 +34,7 @@ fetch_queues :: proc(engine: ^VulkanEngine, device: vk.PhysicalDevice) -> bool {
 }
 
 // This allocates format and present_mode slices.
-query_swapchain_support :: proc(engine: ^VulkanEngine, device: vk.PhysicalDevice) -> SwapChainSupportDetails {
+query_swapchain_support :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> SwapChainSupportDetails {
 	details: SwapChainSupportDetails
 
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, engine.surface, &details.capabilities)
@@ -83,7 +83,7 @@ choose_swap_present_mode :: proc(available_present_modes: []vk.PresentModeKHR) -
 	return .IMMEDIATE
 }
 
-choose_swap_extent :: proc(engine: ^VulkanEngine, capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
+choose_swap_extent :: proc(engine: ^Renderer, capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
 	if (capabilities.currentExtent.width != max(u32)) {
 		return capabilities.currentExtent
 	} else {
@@ -159,7 +159,7 @@ supports_required_features :: proc(required: $T, test: T) -> bool {
 	return supports_all_flags
 }
 
-is_device_suitable :: proc(engine: ^VulkanEngine, device: vk.PhysicalDevice) -> bool {
+is_device_suitable :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool {
 	properties: vk.PhysicalDeviceProperties
 	vk.GetPhysicalDeviceProperties(device, &properties)
 
@@ -228,25 +228,8 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 	return true
 }
 
-create_surface :: proc(engine: ^VulkanEngine) {
+create_surface :: proc(engine: ^Renderer) {
 	vk_check(glfw.CreateWindowSurface(engine.instance, engine.window, nil, &engine.surface))
-}
-
-init_window :: proc(engine: ^VulkanEngine) -> bool {
-	glfw.Init()
-
-	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
-
-	engine.window = glfw.CreateWindow(
-		i32(engine.window_extent.width),
-		i32(engine.window_extent.height),
-		"Vulkan",
-		nil,
-		nil,
-	)
-
-	return true
 }
 
 debug_callback :: proc "system" (
@@ -261,7 +244,7 @@ debug_callback :: proc "system" (
 	return false
 }
 
-setup_debug_messenger :: proc(engine: ^VulkanEngine) {
+setup_debug_messenger :: proc(engine: ^Renderer) {
 	if ENABLE_VALIDATION_LAYERS {
 		fmt.println("Creating Debug Messenger")
 		create_info := vk.DebugUtilsMessengerCreateInfoEXT {
@@ -320,7 +303,7 @@ get_required_extensions :: proc() -> [dynamic]cstring {
 	return extensions
 }
 
-create_instance :: proc(engine: ^VulkanEngine) -> bool {
+create_instance :: proc(engine: ^Renderer) -> bool {
 	// Loads vulkan api functions needed to create an instance
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
 
@@ -397,7 +380,7 @@ create_instance :: proc(engine: ^VulkanEngine) -> bool {
 	return true
 }
 
-pick_physical_device :: proc(engine: ^VulkanEngine) {
+pick_physical_device :: proc(engine: ^Renderer) {
 	device_count: u32 = 0
 
 	vk.EnumeratePhysicalDevices(engine.instance, &device_count, nil)
@@ -418,7 +401,7 @@ pick_physical_device :: proc(engine: ^VulkanEngine) {
 	}
 }
 
-create_logical_device :: proc(engine: ^VulkanEngine) {
+create_logical_device :: proc(engine: ^Renderer) {
 	queue_priority: f32 = 1.0
 
 	queue_create_info: vk.DeviceQueueCreateInfo
@@ -438,10 +421,12 @@ create_logical_device :: proc(engine: ^VulkanEngine) {
 
 	vk_check(vk.CreateDevice(engine.physical_device, &device_create_info, nil, &engine.device))
 
+	assert(engine.device != nil)
+
 	vk.GetDeviceQueue(engine.device, engine.graphics_queue_family, 0, &engine.graphics_queue)
 }
 
-init_commands :: proc(engine: ^VulkanEngine) {
+init_commands :: proc(engine: ^Renderer) {
 	command_pool_info := vk.CommandPoolCreateInfo{}
 	command_pool_info.sType = .COMMAND_POOL_CREATE_INFO
 	command_pool_info.pNext = nil
@@ -472,7 +457,7 @@ init_commands :: proc(engine: ^VulkanEngine) {
 	push_deletion_queue(&engine.main_deletion_queue, engine.imm_command_pool)
 }
 
-create_image_views :: proc(engine: ^VulkanEngine) {
+create_image_views :: proc(engine: ^Renderer) {
 	engine.swapchain_image_views = make([]vk.ImageView, len(engine.swapchain_images))
 
 	for i in 0 ..< len(engine.swapchain_images) {
@@ -495,7 +480,7 @@ create_image_views :: proc(engine: ^VulkanEngine) {
 	}
 }
 
-create_swapchain :: proc(engine: ^VulkanEngine) {
+create_swapchain :: proc(engine: ^Renderer) {
 	swapchain_support := query_swapchain_support(engine, engine.physical_device)
 	defer delete_swapchain_support_details(swapchain_support)
 
@@ -594,7 +579,7 @@ create_swapchain :: proc(engine: ^VulkanEngine) {
 	push_deletion_queue(&engine.main_deletion_queue, engine.depth_image.image, engine.depth_image.allocation)
 }
 
-init_sync_structures :: proc(engine: ^VulkanEngine) {
+init_sync_structures :: proc(engine: ^Renderer) {
 	fence_create_info := init_fence_create_info({.SIGNALED})
 	semaphore_create_info := init_semaphore_create_info({})
 

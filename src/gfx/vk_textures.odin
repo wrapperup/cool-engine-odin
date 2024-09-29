@@ -1,4 +1,4 @@
-package renderer
+package gfx
 
 import "core:c"
 import "core:fmt"
@@ -9,7 +9,7 @@ import vma "deps:odin-vma"
 
 import vk "vendor:vulkan"
 
-load_image_from_file :: proc(engine: ^VulkanEngine) -> AllocatedImage {
+load_image_from_file :: proc(engine: ^Renderer) -> AllocatedImage {
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile("assets/test.ktx", {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 

@@ -1,4 +1,4 @@
-package main
+package gfx
 
 import "core:math"
 import "core:math/linalg"

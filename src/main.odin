@@ -18,7 +18,7 @@ import "core:time"
 import "vendor:cgltf"
 import glfw "vendor:glfw"
 
-import re "./renderer"
+import gfx "./gfx"
 
 import "deps:jolt"
 import im "deps:odin-imgui"
@@ -57,52 +57,39 @@ main :: proc() {
 
 	physics_init()
 
-	run_engine()
+	init_game()
+
+	game_loop()
 }
 
-run_engine :: proc() {
-	engine := re.VulkanEngine {
-		window_extent = {1700, 900},
-	}
+init_window :: proc(width, height: c.int) -> glfw.WindowHandle {
+	glfw.Init()
 
-	if !re.init(&engine) {
-		fmt.println("App could not be initialized.")
-	}
+	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
+	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
 
-	init_game_state()
-
-	for !glfw.WindowShouldClose(engine.window) {
-		start := time.now()
-
-		update(&engine)
-
-		start_render := time.now()
-		re.render(&engine)
-		engine.frame_time_render = f32(time.since(start_render)) / f32(time.Millisecond)
-
-		engine.frame_time_total = f32(time.since(start)) / f32(time.Millisecond)
-		engine.delta_time = f64(time.since(start)) / f64(time.Second)
-
-		// Free temp allocations
-		free_all(context.temp_allocator)
-	}
-
-	free_game_state()
+	return glfw.CreateWindow(i32(width), i32(height), "Vulkan", nil, nil)
 }
 
-update :: proc(engine: ^re.VulkanEngine) {
-	update_game_state(engine, engine.delta_time)
-	// physics_update()
-	update_imgui(engine)
-}
+init_game :: proc() {
+	game.window = init_window(1700, 900)
 
-init_game_state :: proc() {
+	if !gfx.init(&game.renderer, game.window) {
+		fmt.println("Graphics could not be initialized.")
+	}
+
+	init_game_draw()
+
 	camera := new_entity(Camera)
 	player := new_entity(Player)
 	player.translation = {0.0, 100.0, 100.0}
 	for i in 0 ..< 1024 {
 		ball := new_entity(Ball)
-		ball.translation = {(rand.float32() - 0.5) * 0.01 * f32(i), 5.0 * f32(i), (rand.float32() - 0.5) * 0.01 * f32(i)}
+		ball.translation = {
+			(rand.float32() - 0.5) * 0.01 * f32(i),
+			5.0 * f32(i),
+			(rand.float32() - 0.5) * 0.01 * f32(i),
+		}
 
 		ball.body = jolt.GetBodyInterface(physics_system)
 
@@ -134,7 +121,7 @@ init_game_state :: proc() {
 	camera.camera_fov_deg = 45
 	camera.view_state = .SceneColor
 
-	game_state = GameState {
+	game.state = GameState {
 		camera_id = entity_id_of(camera),
 		player_id = entity_id_of(player),
 		environment = Environment {
@@ -149,22 +136,49 @@ init_game_state :: proc() {
 	jolt.PhysicsSystem_OptimizeBroadPhase(physics_system)
 }
 
-free_game_state :: proc() {
+game_loop :: proc() {
+	for !glfw.WindowShouldClose(game.window) {
+		start := time.now()
+
+		update()
+
+		start_render := time.now()
+
+		update_buffers()
+
+		cmd := gfx.begin_draw(&game.renderer)
+		draw(cmd)
+		gfx.end_draw(&game.renderer, cmd)
+
+		game.frame_time_render = f32(time.since(start_render)) / f32(time.Millisecond)
+
+		game.frame_time_total = f32(time.since(start)) / f32(time.Millisecond)
+		game.delta_time = f64(time.since(start)) / f64(time.Second)
+
+		// Free temp allocations
+		free_all(context.temp_allocator)
+	}
 }
 
-update_game_state :: proc(engine: ^re.VulkanEngine, dt: f64) {
+update :: proc() {
+	update_game_state(game.delta_time)
+	// physics_update()
+	update_imgui()
+}
+
+update_game_state :: proc(delta_time: f64) {
 	start_game_state := time.now()
-	camera := get_entity(game_state.camera_id)
+	camera := get_entity(game.state.camera_id)
 
 	{
-		yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(engine.window)
+		yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(game.window)
 
-		yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(engine.window_extent.width)) - 0.5) * 100
-		pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(engine.window_extent.height)) - 0.5) * -50
+		yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(game.renderer.window_extent.width)) - 0.5) * 100
+		pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(game.renderer.window_extent.height)) - 0.5) * -50
 
-		wants_rotate_camera := glfw.GetMouseButton(engine.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+		wants_rotate_camera := glfw.GetMouseButton(game.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
 		if wants_rotate_camera {
-			glfw.SetCursorPos(engine.window, f64(engine.window_extent.width) / 2, f64(engine.window_extent.height) / 2)
+			glfw.SetCursorPos(game.window, f64(game.renderer.window_extent.width) / 2, f64(game.renderer.window_extent.height) / 2)
 		}
 
 		if camera != nil {
@@ -174,10 +188,10 @@ update_game_state :: proc(engine: ^re.VulkanEngine, dt: f64) {
 
 			if camera.rotating_camera != wants_rotate_camera {
 				if wants_rotate_camera {
-					glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-					glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
+					glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+					glfw.SetInputMode(game.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
 				} else {
-					glfw.SetInputMode(engine.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+					glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 				}
 			}
 
@@ -193,40 +207,40 @@ update_game_state :: proc(engine: ^re.VulkanEngine, dt: f64) {
 		forward := linalg.vector_normalize(linalg.quaternion_mul_vector3(camera.rotation, [3]f32{0, 0, -1}))
 		right := linalg.vector_cross3(forward, [3]f32{0, 1, 0})
 
-		key_w := glfw.GetKey(engine.window, glfw.KEY_W) == glfw.PRESS
-		key_a := glfw.GetKey(engine.window, glfw.KEY_A) == glfw.PRESS
-		key_s := glfw.GetKey(engine.window, glfw.KEY_S) == glfw.PRESS
-		key_d := glfw.GetKey(engine.window, glfw.KEY_D) == glfw.PRESS
-		key_space := glfw.GetKey(engine.window, glfw.KEY_SPACE) == glfw.PRESS
-		key_space |= glfw.GetKey(engine.window, glfw.KEY_E) == glfw.PRESS
-		key_shift := glfw.GetKey(engine.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
-		key_shift |= glfw.GetKey(engine.window, glfw.KEY_Q) == glfw.PRESS
+		key_w := glfw.GetKey(game.window, glfw.KEY_W) == glfw.PRESS
+		key_a := glfw.GetKey(game.window, glfw.KEY_A) == glfw.PRESS
+		key_s := glfw.GetKey(game.window, glfw.KEY_S) == glfw.PRESS
+		key_d := glfw.GetKey(game.window, glfw.KEY_D) == glfw.PRESS
+		key_space := glfw.GetKey(game.window, glfw.KEY_SPACE) == glfw.PRESS
+		key_space |= glfw.GetKey(game.window, glfw.KEY_E) == glfw.PRESS
+		key_shift := glfw.GetKey(game.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
+		key_shift |= glfw.GetKey(game.window, glfw.KEY_Q) == glfw.PRESS
 
 		accelleration: f32 = 120
 
 		if key_w {
-			camera.velocity += forward * accelleration * f32(dt)
+			camera.velocity += forward * accelleration * f32(delta_time)
 		}
 		if key_a {
-			camera.velocity += right * -accelleration * f32(dt)
+			camera.velocity += right * -accelleration * f32(delta_time)
 		}
 		if key_s {
-			camera.velocity += forward * -accelleration * f32(dt)
+			camera.velocity += forward * -accelleration * f32(delta_time)
 		}
 		if key_d {
-			camera.velocity += right * accelleration * f32(dt)
+			camera.velocity += right * accelleration * f32(delta_time)
 		}
 		if key_space {
-			camera.velocity += {0, 1, 0} * accelleration * f32(dt)
+			camera.velocity += {0, 1, 0} * accelleration * f32(delta_time)
 		}
 		if key_shift {
-			camera.velocity += {0, -1, 0} * accelleration * f32(dt)
+			camera.velocity += {0, -1, 0} * accelleration * f32(delta_time)
 		}
 
-		camera.translation += camera.velocity * f32(dt)
+		camera.translation += camera.velocity * f32(delta_time)
 		if linalg.length(camera.velocity) > 0.0 {
 			friction: f32 = 0.0005
-			camera.velocity = linalg.lerp(camera.velocity, 0.0, 1 - math.pow_f32(friction, f32(dt)))
+			camera.velocity = linalg.lerp(camera.velocity, 0.0, 1 - math.pow_f32(friction, f32(delta_time)))
 		}
 	}
 
@@ -255,20 +269,20 @@ update_game_state :: proc(engine: ^re.VulkanEngine, dt: f64) {
 		ball.rotation = transmute(linalg.Quaternionf32)rot
 	}
 
-	engine.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
+	game.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
 
 	collision_steps := 1
 
 	start_physics := time.now()
 	jolt.PhysicsSystem_Update(physics_system, 1.0 / 60.0, collision_steps, 0, jta, js)
-	engine.frame_time_physics = f32(time.since(start_physics)) / f32(time.Millisecond)
+	game.frame_time_physics = f32(time.since(start_physics)) / f32(time.Millisecond)
 }
 
 update_players :: proc() {
 
 }
 
-update_imgui :: proc(engine: ^re.VulkanEngine) {
+update_imgui :: proc() {
 	io := im.GetIO()
 	glfw.PollEvents()
 
@@ -355,7 +369,13 @@ update_imgui :: proc(engine: ^re.VulkanEngine) {
 			storage_raw := cast(^RawSparseSet)subtype_ptr
 			size_t := type_info_of(key).size
 
-			if im.TreeNode(fmt.ctprintf("%s Entities (num: %d)", type_info_of(key).variant.(runtime.Type_Info_Named).name, storage_raw.dense.len)) {
+			if im.TreeNode(
+				fmt.ctprintf(
+					"%s Entities (num: %d)",
+					type_info_of(key).variant.(runtime.Type_Info_Named).name,
+					storage_raw.dense.len,
+				),
+			) {
 				clipper: im.ListClipper
 				im.ListClipper_Begin(&clipper, i32(storage_raw.dense.len))
 
@@ -371,7 +391,7 @@ update_imgui :: proc(engine: ^re.VulkanEngine) {
 	}
 	im.End()
 
-	camera := get_entity(game_state.camera_id)
+	camera := get_entity(game.state.camera_id)
 
 	if camera != nil {
 		if im.Begin("Camera") {
@@ -385,19 +405,19 @@ update_imgui :: proc(engine: ^re.VulkanEngine) {
 	}
 
 	if im.Begin("Environment") {
-		im.InputFloat3("pos", cast(^[3]f32)(&game_state.environment.sun_pos))
-		im.InputFloat3("target", cast(^[3]f32)(&game_state.environment.sun_target))
-		im.InputFloat3("sun_color", cast(^[3]f32)(&game_state.environment.sun_color))
-		im.InputFloat3("sky_color", cast(^[3]f32)(&game_state.environment.sky_color))
-		im.InputFloat("bias", cast(^f32)(&game_state.environment.bias))
+		im.InputFloat3("pos", cast(^[3]f32)(&game.state.environment.sun_pos))
+		im.InputFloat3("target", cast(^[3]f32)(&game.state.environment.sun_target))
+		im.InputFloat3("sun_color", cast(^[3]f32)(&game.state.environment.sun_color))
+		im.InputFloat3("sky_color", cast(^[3]f32)(&game.state.environment.sky_color))
+		im.InputFloat("bias", cast(^f32)(&game.state.environment.bias))
 	}
 	im.End()
 
 	if (im.Begin("Stats")) {
-		im.Text("total frametime %f ms", engine.frame_time_total)
-		im.BulletText("game %f ms", engine.frame_time_game_state)
-		im.BulletText("physics %f ms", engine.frame_time_physics)
-		im.BulletText("render %f ms", engine.frame_time_render)
+		im.Text("total frametime %f ms", game.frame_time_total)
+		im.BulletText("game %f ms", game.frame_time_game_state)
+		im.BulletText("physics %f ms", game.frame_time_physics)
+		im.BulletText("render %f ms", game.frame_time_render)
 	}
 	im.End()
 }
@@ -442,88 +462,88 @@ physics_init :: proc() {
 	contact_listener.OnContactAdded = contact_added_test
 	jolt.SetContactListener(physics_system, &contact_listener)
 
-{
-	body_interface = jolt.GetBodyInterface(physics_system)
+	{
+		body_interface = jolt.GetBodyInterface(physics_system)
 
-	a := hlsl.float3{100, 1, 100}
-	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
-	fmt.println("box shape settings create")
-	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
-	fmt.println("floor shape create")
+		a := hlsl.float3{100, 1, 100}
+		floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+		fmt.println("box shape settings create")
+		floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+		fmt.println("floor shape create")
 
-	bcs: jolt.BodyCreationSettings
-	in_p := hlsl.float3{0, -1, 0}
-	in_r := hlsl.float4{0, 0, 0, 1}
-	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
-	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+		bcs: jolt.BodyCreationSettings
+		in_p := hlsl.float3{0, -1, 0}
+		in_r := hlsl.float4{0, 0, 0, 1}
+		jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+		floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
 
-	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
-}
+		jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+	}
 
-{
-	body_interface = jolt.GetBodyInterface(physics_system)
-	a := hlsl.float3{20, 10, 1}
-	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
-	fmt.println("box shape settings create")
-	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
-	fmt.println("floor shape create")
+	{
+		body_interface = jolt.GetBodyInterface(physics_system)
+		a := hlsl.float3{20, 10, 1}
+		floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+		fmt.println("box shape settings create")
+		floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+		fmt.println("floor shape create")
 
-	bcs: jolt.BodyCreationSettings
-	in_p := hlsl.float3{0, 0, 20}
-	in_r := hlsl.float4{0, 0, 0, 1}
-	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
-	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+		bcs: jolt.BodyCreationSettings
+		in_p := hlsl.float3{0, 0, 20}
+		in_r := hlsl.float4{0, 0, 0, 1}
+		jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+		floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
 
-	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
-}
-{
-	body_interface = jolt.GetBodyInterface(physics_system)
-	a := hlsl.float3{20, 10, 1}
-	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
-	fmt.println("box shape settings create")
-	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
-	fmt.println("floor shape create")
+		jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+	}
+	{
+		body_interface = jolt.GetBodyInterface(physics_system)
+		a := hlsl.float3{20, 10, 1}
+		floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+		fmt.println("box shape settings create")
+		floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+		fmt.println("floor shape create")
 
-	bcs: jolt.BodyCreationSettings
-	in_p := hlsl.float3{0, 0, -20}
-	in_r := hlsl.float4{0, 0, 0, 1}
-	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
-	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+		bcs: jolt.BodyCreationSettings
+		in_p := hlsl.float3{0, 0, -20}
+		in_r := hlsl.float4{0, 0, 0, 1}
+		jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+		floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
 
-	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
-}
-{
-	body_interface = jolt.GetBodyInterface(physics_system)
-	a := hlsl.float3{1, 10, 20}
-	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
-	fmt.println("box shape settings create")
-	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
-	fmt.println("floor shape create")
+		jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+	}
+	{
+		body_interface = jolt.GetBodyInterface(physics_system)
+		a := hlsl.float3{1, 10, 20}
+		floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+		fmt.println("box shape settings create")
+		floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+		fmt.println("floor shape create")
 
-	bcs: jolt.BodyCreationSettings
-	in_p := hlsl.float3{20, 0, 0}
-	in_r := hlsl.float4{0, 0, 0, 1}
-	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
-	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+		bcs: jolt.BodyCreationSettings
+		in_p := hlsl.float3{20, 0, 0}
+		in_r := hlsl.float4{0, 0, 0, 1}
+		jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+		floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
 
-	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
-}
-{
-	body_interface = jolt.GetBodyInterface(physics_system)
-	a := hlsl.float3{1, 10, 20}
-	floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
-	fmt.println("box shape settings create")
-	floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
-	fmt.println("floor shape create")
+		jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+	}
+	{
+		body_interface = jolt.GetBodyInterface(physics_system)
+		a := hlsl.float3{1, 10, 20}
+		floor_shape_settings := jolt.BoxShapeSettings_Create(&a)
+		fmt.println("box shape settings create")
+		floor_shape := jolt.ShapeSettings_CreateShape((^jolt.ShapeSettings)(floor_shape_settings))
+		fmt.println("floor shape create")
 
-	bcs: jolt.BodyCreationSettings
-	in_p := hlsl.float3{-20, 0, 0}
-	in_r := hlsl.float4{0, 0, 0, 1}
-	jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
-	floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
+		bcs: jolt.BodyCreationSettings
+		in_p := hlsl.float3{-20, 0, 0}
+		in_r := hlsl.float4{0, 0, 0, 1}
+		jolt.BodyCreationSettings_Set(&bcs, floor_shape, &in_p, &in_r, .MOTION_TYPE_STATIC, BroadPhaseLayers_Moving)
+		floor := jolt.BodyInterface_CreateBody(body_interface, &bcs)
 
-	jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
-}
+		jolt.BodyInterface_AddBody(body_interface, jolt.Body_GetID(floor), .ACTIVATION_DONT_ACTIVATE)
+	}
 
 	// sphere_shape_settings := jolt.SphereShapeSettings_Create(0.5)
 	// sss: jolt.BodyCreationSettings
@@ -551,8 +571,8 @@ physics_update :: proc() {
 		jolt.BodyInterface_GetLinearVelocity(body_interface, sphere_id, &linvel)
 
 		collision_steps := 1
-		dt: f32 = 1.0 / 60.0
-		jolt.PhysicsSystem_Update(physics_system, dt, collision_steps, 0, jta, js)
+		fixed_delta_time: f32 = 1.0 / 60.0
+		jolt.PhysicsSystem_Update(physics_system, fixed_delta_time, collision_steps, 0, jta, js)
 	}
 }
 

@@ -1,7 +1,66 @@
-package renderer
+package gfx
 
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
+
+import "core:fmt"
+
+AllocatedImage :: struct {
+	image:      vk.Image,
+	image_view: vk.ImageView,
+	allocation: vma.Allocation,
+	extent:     vk.Extent3D,
+	format:     vk.Format,
+}
+
+// This allocates on the GPU, make sure to call `destroy_image` or add to the deletion queue when you are finished with the image.
+create_image :: proc(
+	engine: ^Renderer,
+	format: vk.Format,
+	extent: vk.Extent3D,
+	image_usage_flags: vk.ImageUsageFlags,
+	sample_count: vk.SampleCountFlag = ._1,
+	alloc_flags: vma.AllocationCreateFlags = {},
+) -> AllocatedImage {
+	img_alloc_info := vma.AllocationCreateInfo {
+		usage         = .GPU_ONLY,
+		requiredFlags = {.DEVICE_LOCAL},
+		flags         = alloc_flags,
+	}
+
+	img_info := init_image_create_info(format, image_usage_flags, extent, ._1)
+
+	new_image := AllocatedImage {
+		extent = extent,
+		format = format,
+	}
+
+	vk_check(
+		vma.CreateImage(engine.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil),
+	)
+
+	return new_image
+}
+
+create_image_view :: proc(device: vk.Device, image: ^AllocatedImage, aspect_flags: vk.ImageAspectFlags) {
+	dview_info := init_imageview_create_info(image.format, image.image, aspect_flags)
+	vk_check(vk.CreateImageView(device, &dview_info, nil, &image.image_view))
+}
+
+create_sampler :: proc(
+	device: vk.Device,
+	filter: vk.Filter,
+	address_mode: vk.SamplerAddressMode,
+	compare_op: vk.CompareOp = .NEVER,
+	border_color: vk.BorderColor = .FLOAT_TRANSPARENT_BLACK,
+) -> vk.Sampler {
+	sampler_create_info := init_sampler_create_info(filter, address_mode, compare_op, border_color)
+
+	sampler: vk.Sampler
+	vk_check(vk.CreateSampler(device, &sampler_create_info, nil, &sampler))
+
+	return sampler
+}
 
 transition_image_allocated_image :: proc(
 	cmd: vk.CommandBuffer,
@@ -45,7 +104,7 @@ transition_image_vkimage :: proc(
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }
 
-transition_image :: proc{
+transition_image :: proc {
 	transition_image_allocated_image,
 	transition_image_vkimage,
 }
