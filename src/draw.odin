@@ -39,8 +39,7 @@ GPUGlobalData :: struct {
 //// INITIALIZATION
 init_game_draw :: proc() {
 	init_test_image()
-	//init_shadow_map({1024, 1024, 1})
-	init_shadow_map_old({1024, 1024, 1})
+	init_shadow_map({1024, 1024, 1})
 	init_descriptors()
 	init_pipelines()
 	init_buffers()
@@ -58,45 +57,6 @@ init_shadow_map :: proc(extent: vk.Extent3D) {
 		{.DEPTH_STENCIL_ATTACHMENT, .SAMPLED},
 	)
 	gfx.create_image_view(game.renderer.device, &game.shadow_depth_image, {.DEPTH})
-
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.shadow_depth_image.image_view)
-	gfx.push_deletion_queue(
-		&game.renderer.main_deletion_queue,
-		game.shadow_depth_image.image,
-		game.shadow_depth_image.allocation,
-	)
-}
-
-init_shadow_map_old :: proc(extent: vk.Extent3D) {
-	img_alloc_info := vma.AllocationCreateInfo {
-		usage         = .GPU_ONLY,
-		requiredFlags = {.DEVICE_LOCAL},
-	}
-
-	game.shadow_depth_image.format = .D32_SFLOAT
-	game.shadow_depth_image.extent = extent
-	depth_image_usages := vk.ImageUsageFlags{.DEPTH_STENCIL_ATTACHMENT, .SAMPLED}
-
-	dimg_info := gfx.init_image_create_info(game.shadow_depth_image.format, depth_image_usages, extent, ._1)
-
-	//allocate and create the image
-	vma.CreateImage(
-		game.renderer.allocator,
-		&dimg_info,
-		&img_alloc_info,
-		&game.shadow_depth_image.image,
-		&game.shadow_depth_image.allocation,
-		nil,
-	)
-
-	//build a image-view for the draw image to use for rendering
-	dview_info := gfx.init_imageview_create_info(
-	    game.shadow_depth_image.format,
-		game.shadow_depth_image.image,
-		{.DEPTH},
-	)
-
-	gfx.vk_check(vk.CreateImageView(game.renderer.device, &dview_info, nil, &game.shadow_depth_image.image_view))
 
 	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.shadow_depth_image.image_view)
 	gfx.push_deletion_queue(
@@ -159,20 +119,6 @@ init_mesh_pipelines :: proc() {
 	triangle_shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv", game.renderer.device)
 	assert(f_ok, "Failed to load shaders.")
 
-	// TODO: This doesn't belong here...?
-	{
-		buffers, ok := gfx.load_mesh_from_file(&game.renderer, "assets/bunny.glb")
-		assert(ok)
-
-		game.mesh_buffers = buffers
-	}
-	{
-		buffers, ok := gfx.load_mesh_from_file(&game.renderer, "assets/sphere.glb")
-		assert(ok)
-
-		game.sphere_mesh_buffers = buffers
-	}
-
 	buffer_range := vk.PushConstantRange {
 		offset     = 0,
 		size       = size_of(GPUDrawPushConstants),
@@ -212,17 +158,6 @@ init_mesh_pipelines :: proc() {
 	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_pipeline_layout)
 	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_pipeline)
 	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_shadow_pipeline)
-
-	gfx.push_deletion_queue(
-		&game.renderer.main_deletion_queue,
-		game.mesh_buffers.index_buffer.buffer,
-		game.mesh_buffers.index_buffer.allocation,
-	)
-	gfx.push_deletion_queue(
-		&game.renderer.main_deletion_queue,
-		game.mesh_buffers.vertex_buffer.buffer,
-		game.mesh_buffers.vertex_buffer.allocation,
-	)
 }
 
 init_buffers :: proc() {
@@ -260,6 +195,28 @@ init_buffers :: proc() {
 		)
 	}
 
+	// Test meshes for game
+	{
+		buffers, ok := gfx.load_mesh_from_file(&game.renderer, "assets/bunny.glb")
+		assert(ok)
+		game.mesh_buffers = buffers
+
+		buffers, ok = gfx.load_mesh_from_file(&game.renderer, "assets/sphere.glb")
+		assert(ok)
+		game.sphere_mesh_buffers = buffers
+
+		gfx.push_deletion_queue(
+			&game.renderer.main_deletion_queue,
+			game.mesh_buffers.index_buffer.buffer,
+			game.mesh_buffers.index_buffer.allocation,
+		)
+		gfx.push_deletion_queue(
+			&game.renderer.main_deletion_queue,
+			game.mesh_buffers.vertex_buffer.buffer,
+			game.mesh_buffers.vertex_buffer.allocation,
+		)
+	}
+
 	// TODO: TEMP: GO AWAY?
 	resize(&game.model_matrices, 16_384)
 }
@@ -271,7 +228,7 @@ draw :: proc(cmd: vk.CommandBuffer) {
 	draw_shadow_map(cmd)
 	// End shadow pass
 
-    // Clear
+	// Clear
 	gfx.transition_image(cmd, game.renderer.draw_image, .UNDEFINED, .GENERAL)
 	draw_background(cmd)
 
