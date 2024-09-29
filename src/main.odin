@@ -144,10 +144,11 @@ game_loop :: proc() {
 
 		start_render := time.now()
 
-		update_buffers()
-
 		cmd := gfx.begin_draw(&game.renderer)
+
+		update_buffers()
 		draw(cmd)
+
 		gfx.end_draw(&game.renderer, cmd)
 
 		game.frame_time_render = f32(time.since(start_render)) / f32(time.Millisecond)
