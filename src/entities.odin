@@ -185,6 +185,8 @@ get_entity_subtype_typed :: proc(id: TypedEntityId($T)) -> ^T {
 	return get_entity_subtype(T, id.id)
 }
 
+// Get entity. Generational index ensures that the entity
+// you get is a valid entity, don't persist the pointer. Can return nil.
 get_entity :: proc {
 	get_entity_raw,
 	get_entity_subtype,
@@ -200,8 +202,7 @@ remove_entity_raw :: proc(id: EntityId) -> bool {
 		return false
 	}
 
-	// Increase generation and nullify the pointer, this 
-	// will invalidate all existing handles to this entity.
+	// Invalidate all references to this entity.
 	entity.id.live = false
 	entity.id.generation += 1
 
