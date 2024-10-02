@@ -10,6 +10,7 @@ import gfx "gfx"
 Game :: struct {
 	window:                 glfw.WindowHandle,
 	renderer:               gfx.Renderer,
+	frame_data:             [gfx.FRAME_OVERLAP]GameFrameData,
 	state:                  GameState,
 
 	// Stats

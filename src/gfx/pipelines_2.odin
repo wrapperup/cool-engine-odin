@@ -6,6 +6,10 @@ import "core:slice"
 
 import vk "vendor:vulkan"
 
+DEFAULT_VERTEX_ENTRY: cstring : "vertex_main"
+DEFAULT_FRAGMENT_ENTRY: cstring : "fragment_main"
+
+
 PipelineBuilder :: struct {
 	shader_stages:           [dynamic]vk.PipelineShaderStageCreateInfo,
 	input_assembly:          vk.PipelineInputAssemblyStateCreateInfo,
@@ -48,66 +52,11 @@ pb_clear :: proc(builder: ^PipelineBuilder) {
 	clear(&builder.shader_stages)
 }
 
-pb_build_pipeline :: proc(builder: ^PipelineBuilder, device: vk.Device) -> vk.Pipeline {
-	viewport_state := vk.PipelineViewportStateCreateInfo {
-		sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-	}
-	viewport_state.viewportCount = 1
-	viewport_state.scissorCount = 1
-
-	color_blending := vk.PipelineColorBlendStateCreateInfo {
-		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-	}
-	color_blending.logicOpEnable = false
-	color_blending.logicOp = .COPY
-	color_blending.attachmentCount = 1
-	color_blending.pAttachments = &builder.color_blend_attachment
-
-	vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-	}
-
-	pipelineInfo := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-	}
-	pipelineInfo.pNext = &builder.render_info
-
-	pipelineInfo.pStages = raw_data(builder.shader_stages)
-	pipelineInfo.stageCount = u32(len(builder.shader_stages))
-
-	pipelineInfo.pVertexInputState = &vertex_input_info
-	pipelineInfo.pInputAssemblyState = &builder.input_assembly
-	pipelineInfo.pViewportState = &viewport_state
-	pipelineInfo.pRasterizationState = &builder.rasterizer
-	pipelineInfo.pMultisampleState = &builder.multisampling
-	pipelineInfo.pColorBlendState = &color_blending
-	pipelineInfo.pDepthStencilState = &builder.depth_stencil
-	pipelineInfo.layout = builder.pipeline_layout
-
-	state := []vk.DynamicState{.VIEWPORT, .SCISSOR}
-
-	dynamicInfo := vk.PipelineDynamicStateCreateInfo {
-		sType = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-	}
-	dynamicInfo.pDynamicStates = raw_data(state)
-	dynamicInfo.dynamicStateCount = u32(len(state))
-
-	pipelineInfo.pDynamicState = &dynamicInfo
-
-	newPipeline: vk.Pipeline
-	if vk.CreateGraphicsPipelines(device, 0, 1, &pipelineInfo, nil, &newPipeline) != .SUCCESS {
-		fmt.eprintln("failed to create pipeline")
-		return 0
-	} else {
-		return newPipeline
-	}
-}
-
 pb_set_shaders :: proc(
 	builder: ^PipelineBuilder,
 	shader: vk.ShaderModule,
-	vertex_entry: cstring = "vertex_main",
-	fragment_entry: cstring = "fragment_main",
+	vertex_entry: cstring = DEFAULT_VERTEX_ENTRY,
+	fragment_entry: cstring = DEFAULT_FRAGMENT_ENTRY,
 ) {
 	clear(&builder.shader_stages)
 	append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.VERTEX}, shader, vertex_entry))
@@ -198,6 +147,58 @@ pb_enable_depthtest :: proc(builder: ^PipelineBuilder, depth_write_enable: b32, 
 	builder.depth_stencil.maxDepthBounds = 1.0
 }
 
+pb_build_pipeline :: proc(builder: ^PipelineBuilder, device: vk.Device) -> vk.Pipeline {
+	viewport_state := vk.PipelineViewportStateCreateInfo {
+		sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		viewportCount = 1,
+		scissorCount  = 1,
+	}
+
+	color_blending := vk.PipelineColorBlendStateCreateInfo {
+		sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		logicOpEnable   = false,
+		logicOp         = .COPY,
+		attachmentCount = 1,
+		pAttachments    = &builder.color_blend_attachment,
+	}
+
+	vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+	}
+
+	state := []vk.DynamicState{.VIEWPORT, .SCISSOR}
+
+	dynamicInfo := vk.PipelineDynamicStateCreateInfo {
+		sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		pDynamicStates    = raw_data(state),
+		dynamicStateCount = u32(len(state)),
+	}
+
+
+	pipelineInfo := vk.GraphicsPipelineCreateInfo {
+		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pNext               = &builder.render_info,
+		pStages             = raw_data(builder.shader_stages),
+		stageCount          = u32(len(builder.shader_stages)),
+		pVertexInputState   = &vertex_input_info,
+		pInputAssemblyState = &builder.input_assembly,
+		pViewportState      = &viewport_state,
+		pRasterizationState = &builder.rasterizer,
+		pMultisampleState   = &builder.multisampling,
+		pColorBlendState    = &color_blending,
+		pDepthStencilState  = &builder.depth_stencil,
+		layout              = builder.pipeline_layout,
+		pDynamicState       = &dynamicInfo,
+	}
+
+	newPipeline: vk.Pipeline
+	if vk.CreateGraphicsPipelines(device, 0, 1, &pipelineInfo, nil, &newPipeline) != .SUCCESS {
+		fmt.eprintln("Failed to create pipeline")
+		return 0
+	}
+
+	return newPipeline
+}
 
 pb_delete :: proc(builder: PipelineBuilder) {
 	delete(builder.shader_stages)
@@ -205,7 +206,98 @@ pb_delete :: proc(builder: PipelineBuilder) {
 
 // ====================================================================
 
-load_shader_module :: proc(file_name: string, device: vk.Device) -> (vk.ShaderModule, bool) {
+create_pipeline_layout_only :: proc(
+	device: vk.Device,
+	descriptor_set_layout: ^vk.DescriptorSetLayout,
+) -> (
+	pipeline_layout: vk.PipelineLayout,
+) {
+	pipeline_layout_info := init_pipeline_layout_create_info()
+	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
+
+	return
+}
+
+create_pipeline_layout_push_constant :: proc(
+	device: vk.Device,
+	descriptor_set_layout: ^vk.DescriptorSetLayout,
+	$T: typeid,
+) -> (
+	pipeline_layout: vk.PipelineLayout,
+) {
+	buffer_range := vk.PushConstantRange {
+		offset     = 0,
+		size       = size_of(T),
+		stageFlags = {.VERTEX, .FRAGMENT},
+	}
+
+	pipeline_layout_info := init_pipeline_layout_create_info()
+	pipeline_layout_info.pPushConstantRanges = &buffer_range
+	pipeline_layout_info.pushConstantRangeCount = 1
+	pipeline_layout_info.pSetLayouts = descriptor_set_layout
+	pipeline_layout_info.setLayoutCount = 1
+
+	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
+
+	return
+}
+
+create_pipeline_layout :: proc {
+	create_pipeline_layout_only,
+	create_pipeline_layout_push_constant,
+}
+
+PipelineCreationInfo :: struct {
+	pipeline_layout:       vk.PipelineLayout,
+	shader:                vk.ShaderModule,
+	vertex_entry:          cstring,
+	fragment_entry:        cstring,
+	input_topology:        vk.PrimitiveTopology,
+	polygon_mode:          vk.PolygonMode,
+	front_face:            vk.FrontFace,
+	cull_mode:             vk.CullModeFlags,
+	multisampling_samples: vk.SampleCountFlag,
+	depth:                 struct {
+		write_enabled: b32,
+		compare_op:    vk.CompareOp,
+		format:        vk.Format,
+	},
+	color_format:          vk.Format,
+}
+
+create_graphics_pipeline :: proc(device: vk.Device, create_info: PipelineCreationInfo) -> vk.Pipeline {
+	pipeline_builder := pb_init()
+	defer pb_delete(pipeline_builder)
+
+	pipeline_builder.pipeline_layout = create_info.pipeline_layout
+	pb_set_shaders(
+		&pipeline_builder,
+		create_info.shader,
+		create_info.vertex_entry != nil ? create_info.vertex_entry : DEFAULT_VERTEX_ENTRY,
+		create_info.fragment_entry != nil ? create_info.fragment_entry : DEFAULT_FRAGMENT_ENTRY,
+	)
+	pb_set_input_topology(&pipeline_builder, create_info.input_topology)
+	pb_set_polygon_mode(&pipeline_builder, create_info.polygon_mode)
+	pb_set_cull_mode(&pipeline_builder, create_info.cull_mode, create_info.front_face)
+	pb_set_multisampling(&pipeline_builder, create_info.multisampling_samples)
+
+	pb_disable_blending(&pipeline_builder)
+
+	pb_enable_depthtest(&pipeline_builder, create_info.depth.write_enabled, create_info.depth.compare_op)
+	pb_set_depth_format(&pipeline_builder, create_info.depth.format)
+
+	if create_info.color_format == .UNDEFINED {
+		pb_disable_color_attachment(&pipeline_builder)
+	} else {
+		pb_set_color_attachment_format(&pipeline_builder, create_info.color_format)
+	}
+
+	return pb_build_pipeline(&pipeline_builder, device)
+}
+
+// ====================================================================
+
+load_shader_module :: proc(device: vk.Device, file_name: string) -> (vk.ShaderModule, bool) {
 	buffer, ok := os.read_entire_file(file_name)
 
 	if !ok {

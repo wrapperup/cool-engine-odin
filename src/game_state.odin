@@ -25,12 +25,6 @@ Camera :: struct {
 	},
 }
 
-Player :: struct {
-	using entity: ^Entity,
-	body:         ^jolt.BodyInterface,
-	coolness:     u32,
-}
-
 Ball :: struct {
 	using entity: ^Entity,
 	body:         ^jolt.BodyInterface,

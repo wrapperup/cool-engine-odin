@@ -1,9 +1,9 @@
 package gfx
 
-import "core:mem"
-import vk "vendor:vulkan"
 import "core:fmt"
+import "core:mem"
 import vma "deps:odin-vma"
+import vk "vendor:vulkan"
 
 // This allocates on the GPU, make sure to call `destroy_buffer` or add to deletion queue when you are finished with the buffer.
 create_buffer :: proc(
@@ -44,12 +44,22 @@ destroy_buffer :: proc(engine: ^Renderer, allocated_buffer: ^AllocatedBuffer) {
 	vma.DestroyBuffer(engine.allocator, allocated_buffer.buffer, allocated_buffer.allocation)
 }
 
-get_buffer_device_address :: proc(engine: ^Renderer, buffer: AllocatedBuffer) -> vk.DeviceAddress {
+// Only purpose of this is to be captured during bindgen.
+GPUPointer :: struct($T: typeid) {
+	address: vk.DeviceAddress,
+}
+
+get_raw_buffer_device_address :: proc(engine: ^Renderer, buffer: AllocatedBuffer) -> vk.DeviceAddress {
 	device_address_info := vk.BufferDeviceAddressInfo {
 		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
 		buffer = buffer.buffer,
 	}
+
 	return vk.GetBufferDeviceAddress(engine.device, &device_address_info)
+}
+
+get_buffer_device_address :: proc(engine: ^Renderer, buffer: AllocatedBuffer, gpu_ptr: ^GPUPointer($T)) {
+	gpu_ptr.address = get_raw_buffer_device_address(engine, buffer)
 }
 
 create_mesh_buffers :: proc(engine: ^Renderer, indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {

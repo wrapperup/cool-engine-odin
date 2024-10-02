@@ -1,3 +1,5 @@
+import "./gen/structs.slang";
+
 struct VertexInput {
   uint vertex_index : SV_VertexID;
   uint instance_id : SV_InstanceID;
@@ -21,35 +23,6 @@ struct PSOutput {
   float4 frag_color : COLOR0;
 };
 
-struct Vertex {
-  float3 position;
-  float uv_x;
-  float3 normal;
-  float uv_y;
-  float4 color;
-};
-
-struct GlobalData {
-  float4x4 view_projection_matrix;
-  float4x4 view_projection_i_matrix;
-  float4x4 sun_view_projection_matrix;
-  float4x4 sun_view_projection_i_matrix;
-  float3 sun_color;
-  float bias;
-  float3 sky_color;
-  float pad_0;
-  float3 camera_pos;
-  float pad_1;
-  float3 sun_pos;
-  float pad_2;
-}
-
-struct GPUDrawPushConstants {
-  GlobalData *global_data_buffer;
-  Vertex *vertex_buffer;
-  float4x4 *model_matrices;
-};
-
 [vk_binding(0, 0)]
 Sampler2D<float> ShadowDepthSampler;
 
@@ -57,7 +30,7 @@ Sampler2D<float> ShadowDepthSampler;
 Sampler2D TestTextureSampler;
 
 [vk_push_constant]
-ConstantBuffer<GPUDrawPushConstants> pc;
+ConstantBuffer<DrawPushConstants> pc;
 
 static const float4x4 biasMat = {
   0.5, 0.0, 0.0, 0.5, //
@@ -255,4 +228,3 @@ PSOutput fragment_main(V2P input) {
 
   return output;
 }
-

@@ -70,7 +70,7 @@ EntityId :: bit_field u32 {
 // Strongly typed ID, brings some checks back to compile-time to ensure
 // the entity you queried is the correct type.
 TypedEntityId :: struct($T: typeid) {
-	id: EntityId,
+	using id: EntityId,
 }
 
 // The entity struct contains very common components
@@ -174,9 +174,9 @@ get_entity_subtype :: proc($T: typeid, id: EntityId) -> ^T where intrinsics.type
 		return nil
 	}
 
-	if type_t.id.generation != id.generation {
-		return nil
-	}
+	// if type_t.id.generation != id.generation {
+	// 	return nil
+	// }
 
 	return type_t
 }

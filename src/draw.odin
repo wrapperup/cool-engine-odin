@@ -1,6 +1,8 @@
 package main
 
+import "core:fmt"
 import "core:math/linalg"
+import "core:math/linalg/glsl"
 import "core:math/linalg/hlsl"
 
 import vk "vendor:vulkan"
@@ -10,10 +12,19 @@ import vma "deps:odin-vma"
 import gfx "gfx"
 
 @(ShaderShared)
+Vertex :: struct {
+	position: hlsl.float3,
+	uv_x:     f32,
+	normal:   hlsl.float3,
+	uv_y:     f32,
+	color:    hlsl.float4,
+}
+
+@(ShaderShared)
 GPUDrawPushConstants :: struct {
-	global_data_buffer_address: vk.DeviceAddress `GlobalData`,
-	vertex_buffer_address:      vk.DeviceAddress `Vertex`,
-	model_matrices_address:     vk.DeviceAddress `hlsl.float4x4`,
+	global_data_buffer: gfx.GPUPointer(GPUGlobalData),
+	vertex_buffer:      gfx.GPUPointer(Vertex),
+	model_matrices:     gfx.GPUPointer(hlsl.float4x4),
 }
 
 // 256 bytes is the maximum allowed in a push constant on a 3090Ti
@@ -34,6 +45,17 @@ GPUGlobalData :: struct {
 	pad_1:                        f32,
 	sun_pos:                      hlsl.float3,
 	pad_2:                        f32,
+}
+
+GameFrameData :: struct {
+	global_uniform_buffer:  gfx.AllocatedBuffer,
+	global_uniform_address: gfx.GPUPointer(GPUGlobalData),
+	model_matrices_buffer:  gfx.AllocatedBuffer,
+	model_matrices_address: gfx.GPUPointer(hlsl.float4x4),
+}
+
+current_frame_game :: proc() -> ^GameFrameData {
+	return &game.frame_data[gfx.current_frame_index(&game.renderer)]
 }
 
 //// INITIALIZATION
@@ -116,42 +138,43 @@ init_pipelines :: proc() {
 }
 
 init_mesh_pipelines :: proc() {
-	triangle_shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv", game.renderer.device)
+	triangle_shader, f_ok := gfx.load_shader_module(game.renderer.device, "shaders/out/shaders.spv")
 	assert(f_ok, "Failed to load shaders.")
 
-	buffer_range := vk.PushConstantRange {
-		offset     = 0,
-		size       = size_of(GPUDrawPushConstants),
-		stageFlags = {.VERTEX, .FRAGMENT},
-	}
+	game.mesh_pipeline_layout = gfx.create_pipeline_layout(
+		game.renderer.device,
+		&game.mesh_descriptor_layout,
+		GPUDrawPushConstants,
+	)
 
-	pipeline_layout_info := gfx.init_pipeline_layout_create_info()
-	pipeline_layout_info.pPushConstantRanges = &buffer_range
-	pipeline_layout_info.pushConstantRangeCount = 1
-	pipeline_layout_info.pSetLayouts = &game.mesh_descriptor_layout
-	pipeline_layout_info.setLayoutCount = 1
+	game.mesh_pipeline = gfx.create_graphics_pipeline(
+		game.renderer.device,
+		{
+			pipeline_layout = game.mesh_pipeline_layout,
+			shader = triangle_shader,
+			input_topology = .TRIANGLE_LIST,
+			polygon_mode = .FILL,
+			cull_mode = {.BACK},
+			front_face = .COUNTER_CLOCKWISE,
+			depth = {format = game.renderer.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+			color_format = game.renderer.draw_image.format,
+		},
+	)
 
-	gfx.vk_check(vk.CreatePipelineLayout(game.renderer.device, &pipeline_layout_info, nil, &game.mesh_pipeline_layout))
-
-	pipeline_builder := gfx.pb_init()
-	defer gfx.pb_delete(pipeline_builder)
-
-	pipeline_builder.pipeline_layout = game.mesh_pipeline_layout
-	gfx.pb_set_shaders(&pipeline_builder, triangle_shader)
-	gfx.pb_set_input_topology(&pipeline_builder, .TRIANGLE_LIST)
-	gfx.pb_set_polygon_mode(&pipeline_builder, .FILL)
-	gfx.pb_set_cull_mode(&pipeline_builder, {.BACK}, .COUNTER_CLOCKWISE)
-	gfx.pb_set_multisampling(&pipeline_builder, ._1)
-	gfx.pb_disable_blending(&pipeline_builder)
-	gfx.pb_enable_depthtest(&pipeline_builder, true, .LESS_OR_EQUAL)
-	gfx.pb_set_color_attachment_format(&pipeline_builder, game.renderer.draw_image.format)
-	gfx.pb_set_depth_format(&pipeline_builder, game.renderer.depth_image.format)
-
-	game.mesh_pipeline = gfx.pb_build_pipeline(&pipeline_builder, game.renderer.device)
-
-	gfx.pb_set_shaders(&pipeline_builder, triangle_shader, "vertex_shadow_main", "fragment_shadow_main")
-	gfx.pb_disable_color_attachment(&pipeline_builder)
-	game.mesh_shadow_pipeline = gfx.pb_build_pipeline(&pipeline_builder, game.renderer.device)
+	game.mesh_shadow_pipeline = gfx.create_graphics_pipeline(
+		game.renderer.device,
+		{
+			pipeline_layout = game.mesh_pipeline_layout,
+			shader = triangle_shader,
+			vertex_entry = "vertex_shadow_main",
+			fragment_entry = "fragment_shadow_main",
+			input_topology = .TRIANGLE_LIST,
+			polygon_mode = .FILL,
+			cull_mode = {.BACK},
+			front_face = .COUNTER_CLOCKWISE,
+			depth = {format = game.renderer.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+		},
+	)
 
 	vk.DestroyShaderModule(game.renderer.device, triangle_shader, nil)
 
@@ -161,7 +184,7 @@ init_mesh_pipelines :: proc() {
 }
 
 init_buffers :: proc() {
-	for &frame in &game.renderer.frames {
+	for &frame in &game.frame_data {
 		// Global uniform buffer
 		frame.global_uniform_buffer = gfx.create_buffer(
 			&game.renderer,
@@ -170,7 +193,7 @@ init_buffers :: proc() {
 			.CPU_TO_GPU,
 		)
 
-		frame.global_uniform_address = gfx.get_buffer_device_address(&game.renderer, frame.global_uniform_buffer)
+		gfx.get_buffer_device_address(&game.renderer, frame.global_uniform_buffer, &frame.global_uniform_address)
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(
@@ -180,7 +203,7 @@ init_buffers :: proc() {
 			.CPU_TO_GPU,
 		)
 
-		frame.model_matrices_address = gfx.get_buffer_device_address(&game.renderer, frame.model_matrices_buffer)
+		gfx.get_buffer_device_address(&game.renderer, frame.model_matrices_buffer, &frame.model_matrices_address)
 
 		gfx.push_deletion_queue(
 			&game.renderer.main_deletion_queue,
@@ -257,9 +280,9 @@ draw_shadow_map :: proc(cmd: vk.CommandBuffer) {
 		vk.CmdBindIndexBuffer(cmd, game.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
 		push_constants: GPUDrawPushConstants
-		push_constants.vertex_buffer_address = game.sphere_mesh_buffers.vertex_buffer_address
-		push_constants.global_data_buffer_address = gfx.current_frame(&game.renderer).global_uniform_address
-		push_constants.model_matrices_address = gfx.current_frame(&game.renderer).model_matrices_address
+		push_constants.vertex_buffer.address = game.sphere_mesh_buffers.vertex_buffer_address
+		push_constants.global_data_buffer = current_frame_game().global_uniform_address
+		push_constants.model_matrices = current_frame_game().model_matrices_address
 
 		vk.CmdPushConstants(
 			cmd,
@@ -303,9 +326,9 @@ draw_geometry :: proc(cmd: vk.CommandBuffer) {
 		vk.CmdBindIndexBuffer(cmd, game.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
 		push_constants: GPUDrawPushConstants
-		push_constants.vertex_buffer_address = game.sphere_mesh_buffers.vertex_buffer_address
-		push_constants.global_data_buffer_address = gfx.current_frame(&game.renderer).global_uniform_address
-		push_constants.model_matrices_address = gfx.current_frame(&game.renderer).model_matrices_address
+		push_constants.vertex_buffer.address = game.sphere_mesh_buffers.vertex_buffer_address
+		push_constants.global_data_buffer = current_frame_game().global_uniform_address
+		push_constants.model_matrices = current_frame_game().model_matrices_address
 
 		vk.CmdPushConstants(
 			cmd,
@@ -376,7 +399,7 @@ update_buffers :: proc() {
 	global_uniform_data.camera_pos = hlsl.float3(camera != nil ? camera.translation : [3]f32{0, 0, 0})
 	global_uniform_data.sun_pos = hlsl.float3(game.state.environment.sun_pos)
 
-	gfx.write_buffer(&gfx.current_frame(&game.renderer).global_uniform_buffer, &global_uniform_data)
+	gfx.write_buffer(&current_frame_game().global_uniform_buffer, &global_uniform_data)
 
 	parallel_for_entities(proc(entity: ^Ball, index: int, data: rawptr) {
 			model_matrices := transmute(^[dynamic]hlsl.float4x4)data
@@ -387,5 +410,5 @@ update_buffers :: proc() {
 			model_matrices[index] = linalg.mul(translation, rotation)
 		}, &game.model_matrices)
 
-	gfx.write_buffer_array(&gfx.current_frame(&game.renderer).model_matrices_buffer, game.model_matrices[:])
+	gfx.write_buffer_array(&current_frame_game().model_matrices_buffer, game.model_matrices[:])
 }

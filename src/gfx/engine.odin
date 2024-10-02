@@ -31,6 +31,8 @@ vk_check :: proc(result: vk.Result, loc := #caller_location) {
 	}
 }
 
+// r_ctx: Renderer
+
 Renderer :: struct {
 	debug_messenger:             vk.DebugUtilsMessengerEXT,
 	window:                      glfw.WindowHandle,
@@ -81,12 +83,6 @@ FrameData :: struct {
 	command_pool:                          vk.CommandPool,
 	main_command_buffer:                   vk.CommandBuffer,
 	deletion_queue:                        DeletionQueue,
-
-	// TODO: App specific Buffers, BDA
-	global_uniform_buffer:                 AllocatedBuffer,
-	global_uniform_address:                vk.DeviceAddress,
-	model_matrices_buffer:                 AllocatedBuffer,
-	model_matrices_address:                vk.DeviceAddress,
 }
 
 SwapChainSupportDetails :: struct {
@@ -128,8 +124,12 @@ immediate_submit :: proc(engine: ^Renderer) -> (cmd: vk.CommandBuffer, ready: bo
 	return begin_immediate_submit(engine), true
 }
 
+current_frame_index :: proc(engine: ^Renderer) -> int {
+	return engine.frame_number % FRAME_OVERLAP
+}
+
 current_frame :: proc(engine: ^Renderer) -> ^FrameData {
-	return &engine.frames[engine.frame_number % FRAME_OVERLAP]
+	return &engine.frames[current_frame_index(engine)]
 }
 
 delete_swapchain_support_details :: proc(details: SwapChainSupportDetails) {
@@ -249,13 +249,13 @@ set_viewport_and_scissor_3d :: proc(cmd: vk.CommandBuffer, extent: vk.Extent3D) 
 	}
 
 	vk.CmdSetViewport(cmd, 0, 1, &viewport)
-	//
-	// scissor := vk.Rect2D {
-	// 	offset = {x = 0, y = 0},
-	// 	extent = {extent.width, extent.height},
-	// }
-	//
-	// vk.CmdSetScissor(cmd, 0, 1, &scissor)
+
+	scissor := vk.Rect2D {
+		offset = {x = 0, y = 0},
+		extent = {extent.width, extent.height},
+	}
+
+	vk.CmdSetScissor(cmd, 0, 1, &scissor)
 }
 
 set_viewport_and_scissor :: proc {
@@ -285,13 +285,6 @@ begin_draw :: proc(engine: ^Renderer) -> vk.CommandBuffer {
 
 	// Delete resources for the current frame
 	flush_deletion_queue(engine, &current_frame(engine).deletion_queue)
-
-	when ODIN_DEBUG {
-		if is_shaders_updated() {
-			fmt.println("Updating shader module")
-			init_pipelines(engine)
-		}
-	}
 
 	vk_check(
 		vk.AcquireNextImageKHR(
