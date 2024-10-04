@@ -8,30 +8,19 @@ import "core:math/linalg"
 import "core:slice"
 import "core:testing"
 
-// SAFETY: Don't use this EVER, this is only required for 
-// reflection when we don't know what the the inner type T is..
 RawSparseSet :: struct {
-	sparse:  runtime.Raw_Map,
-	removed: runtime.Raw_Dynamic_Array,
-	dense:   runtime.Raw_Dynamic_Array,
+	sparse: runtime.Raw_Map,
+	dense:  runtime.Raw_Dynamic_Array,
 }
 
 SparseSet :: struct($T: typeid) {
-	sparse:  map[EntityId]int, // id -> index in dense
-	removed: [dynamic]int, // available slots
-	dense:   [dynamic]T,
+	sparse: map[EntityId]int, // id -> index in dense
+	dense:  [dynamic]T,
 }
 
 assign_at_sparse_set :: proc(set: ^SparseSet($T), id: EntityId, data: T) -> ^T {
-	index: int
-
-	if len(set.removed) > 0 {
-		index = pop(&set.removed)
-		set.dense[index] = data
-	} else {
-		index = len(set.dense)
-		append(&set.dense, data)
-	}
+	index := len(set.dense)
+	append(&set.dense, data)
 
 	set.sparse[id] = index
 	return &set.dense[index]
@@ -43,9 +32,21 @@ get_elem_sparse_set :: proc(set: ^SparseSet($T), id: EntityId) -> (data: ^T, ok:
 }
 
 remove_elem_sparse_set :: proc(set: ^SparseSet($T), id: EntityId) -> (ok: bool) {
-	index := set.sparse[id] or_return
-	delete_key(&set.sparse, index)
-	append(&set.removed, index)
+	assert(len(set.dense) > 0)
+
+	deleted_index := set.sparse[id] or_return
+	delete_key(&set.sparse, id)
+
+	// Swaps last with index
+	unordered_remove(&set.dense, deleted_index)
+	old_index := len(set.dense)
+
+	// Fix affected mapping that was moved
+	for &k, &v in set.sparse {
+		if old_index == v {
+			set.sparse[k] = deleted_index	
+		}
+	}
 
 	return true
 }
@@ -61,7 +62,7 @@ remove_elem_sparse_set :: proc(set: ^SparseSet($T), id: EntityId) -> (ok: bool) 
 
 // Entity Id is a packed u32 number that contains
 // the liveness, generation and index in entity array.
-EntityId :: bit_field u32 {
+EntityId :: distinct bit_field u32 {
 	live:       bool | 1,
 	generation: u8   | 7,
 	index:      u32  | 24,
@@ -234,28 +235,8 @@ entity_id_of :: proc(subtype_entity: ^$T) -> TypedEntityId(T) where intrinsics.t
 	return TypedEntityId(T){id = subtype_entity.entity.id}
 }
 
-EntityIterator :: struct($T: typeid) {
-	index:   int,
-	storage: ^SparseSet(T),
-}
-
-make_entity_iter :: proc($T: typeid) -> EntityIterator(T) {
-	return EntityIterator(T){index = 0, storage = get_entity_subtype_storage(T)}
-}
-
-// TODO: Make entity storage better so this can be faster (hell, might not even need an iterator)
-iter_entities :: proc(iter: ^EntityIterator($T)) -> (val: ^T, idx: int, cond: bool) {
-	for slice.contains(iter.storage.removed[:], iter.index) {
-		iter.index += 1
-	}
-
-	if cond = iter.index < len(iter.storage.dense); cond {
-		val = &iter.storage.dense[iter.index]
-		idx = iter.index
-		iter.index += 1
-	}
-
-	return
+get_entities :: proc($T: typeid) -> []T {
+	return get_entity_subtype_storage(T).dense[:]
 }
 
 len_entities :: proc($T: typeid) -> int {

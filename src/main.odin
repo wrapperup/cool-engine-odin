@@ -74,7 +74,7 @@ init_window :: proc(width, height: c.int) -> glfw.WindowHandle {
 init_game :: proc() {
 	game.window = init_window(1700, 900)
 
-	if !gfx.init(&game.renderer, game.window) {
+	if !gfx.init(game.window) {
 		fmt.println("Graphics could not be initialized.")
 	}
 
@@ -82,6 +82,9 @@ init_game :: proc() {
 
 	camera := new_entity(Camera)
 	player := new_entity(Player)
+
+	init_player(player)
+
 	player.translation = {0.0, 100.0, 100.0}
 	for i in 0 ..< 1024 {
 		ball := new_entity(Ball)
@@ -144,12 +147,7 @@ game_loop :: proc() {
 
 		start_render := time.now()
 
-		cmd := gfx.begin_draw(&game.renderer)
-
-		update_buffers()
-		draw(cmd)
-
-		gfx.end_draw(&game.renderer, cmd)
+		draw()
 
 		game.frame_time_render = f32(time.since(start_render)) / f32(time.Millisecond)
 
@@ -163,23 +161,58 @@ game_loop :: proc() {
 
 update :: proc() {
 	update_game_state(game.delta_time)
-	// physics_update()
+	update_physics()
 	update_imgui()
 }
 
 update_game_state :: proc(delta_time: f64) {
 	start_game_state := time.now()
+
+	update_main_camera(delta_time)
+	update_balls(delta_time)
+
+	game.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
+
+}
+
+update_physics :: proc() {
+	collision_steps := 1
+
+	start_physics := time.now()
+	jolt.PhysicsSystem_Update(physics_system, 1.0 / 60.0, collision_steps, 0, jta, js)
+	game.frame_time_physics = f32(time.since(start_physics)) / f32(time.Millisecond)
+}
+
+update_balls :: proc(delta_time: f64) {
+	for ball in get_entities(Ball) {
+		pos: hlsl.float3
+		rot: hlsl.float4
+		jolt.BodyInterface_GetPosition(ball.body, ball.body_id, &pos)
+		jolt.BodyInterface_GetRotation(ball.body, ball.body_id, &rot)
+
+		ball.translation = cast([3]f32)pos
+		ball.rotation = transmute(linalg.Quaternionf32)rot
+	}
+}
+
+update_main_camera :: proc(delta_time: f64) {
 	camera := get_entity(game.state.camera_id)
 
 	{
 		yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(game.window)
 
-		yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(game.renderer.window_extent.width)) - 0.5) * 100
-		pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(game.renderer.window_extent.height)) - 0.5) * -50
+		// TODO: fix references to r_ctx.
+		yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(gfx.r_ctx.window_extent.width)) - 0.5) * 100
+		pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(gfx.r_ctx.window_extent.height)) - 0.5) * -50
 
 		wants_rotate_camera := glfw.GetMouseButton(game.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
 		if wants_rotate_camera {
-			glfw.SetCursorPos(game.window, f64(game.renderer.window_extent.width) / 2, f64(game.renderer.window_extent.height) / 2)
+			// TODO: fix references to r_ctx.
+			glfw.SetCursorPos(
+				game.window,
+				f64(gfx.r_ctx.window_extent.width) / 2,
+				f64(gfx.r_ctx.window_extent.height) / 2,
+			)
 		}
 
 		if camera != nil {
@@ -244,43 +277,6 @@ update_game_state :: proc(delta_time: f64) {
 			camera.velocity = linalg.lerp(camera.velocity, 0.0, 1 - math.pow_f32(friction, f32(delta_time)))
 		}
 	}
-
-	parallel_for_entities(proc(entity: ^Player, index: int) {
-		entity.translation.y += f32(entity.coolness) * 0.001
-	})
-
-	// parallel_for_entities(proc(entity: ^Ball, index: int) {
-	// 	pos: hlsl.float3
-	// 	rot: hlsl.float4
-	// 	jolt.BodyInterface_GetPosition(entity.body, entity.body_id, &pos)
-	// 	jolt.BodyInterface_GetRotation(entity.body, entity.body_id, &rot)
-	//
-	// 	entity.translation = cast([3]f32)pos
-	// 	entity.rotation = transmute(linalg.Quaternionf32)rot
-	// })
-
-	ball_iter := make_entity_iter(Ball)
-	for ball in iter_entities(&ball_iter) {
-		pos: hlsl.float3
-		rot: hlsl.float4
-		jolt.BodyInterface_GetPosition(ball.body, ball.body_id, &pos)
-		jolt.BodyInterface_GetRotation(ball.body, ball.body_id, &rot)
-
-		ball.translation = cast([3]f32)pos
-		ball.rotation = transmute(linalg.Quaternionf32)rot
-	}
-
-	game.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
-
-	collision_steps := 1
-
-	start_physics := time.now()
-	jolt.PhysicsSystem_Update(physics_system, 1.0 / 60.0, collision_steps, 0, jta, js)
-	game.frame_time_physics = f32(time.since(start_physics)) / f32(time.Millisecond)
-}
-
-update_players :: proc() {
-
 }
 
 update_imgui :: proc() {
