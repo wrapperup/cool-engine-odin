@@ -9,7 +9,6 @@ DescriptorBinding :: struct {
 }
 
 create_descriptor_set_layout :: proc(
-	device: vk.Device,
 	stage_flags: vk.ShaderStageFlags = {},
 	bindings: [$N]DescriptorBinding,
 	descriptor_count: u32 = 1,
@@ -34,7 +33,7 @@ create_descriptor_set_layout :: proc(
 	}
 
 	set: vk.DescriptorSetLayout
-	vk_check(vk.CreateDescriptorSetLayout(device, &info, nil, &set))
+	vk_check(vk.CreateDescriptorSetLayout(r_ctx.device, &info, nil, &set))
 
 	return set
 }
@@ -197,7 +196,7 @@ DescriptorWriteBuffer :: struct {
 	buffer:  vk.Buffer,
 }
 
-write_descriptor_set :: proc(device: vk.Device, descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite) {
+write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite) {
 	// Collect writes in the convenient format into vk's.
 	descriptor_writes: [dynamic]vk.WriteDescriptorSet
 	image_infos: [dynamic]vk.DescriptorImageInfo
@@ -248,7 +247,7 @@ write_descriptor_set :: proc(device: vk.Device, descriptor_set: vk.DescriptorSet
 	}
 
 	// Finally write out all of the writes
-	vk.UpdateDescriptorSets(device, u32(len(descriptor_writes)), raw_data(descriptor_writes), 0, nil)
+	vk.UpdateDescriptorSets(r_ctx.device, u32(len(descriptor_writes)), raw_data(descriptor_writes), 0, nil)
 
 	// TODO: cleanup?
 }

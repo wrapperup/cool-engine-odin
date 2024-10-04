@@ -147,7 +147,7 @@ pb_enable_depthtest :: proc(builder: ^PipelineBuilder, depth_write_enable: b32, 
 	builder.depth_stencil.maxDepthBounds = 1.0
 }
 
-pb_build_pipeline :: proc(builder: ^PipelineBuilder, device: vk.Device) -> vk.Pipeline {
+pb_build_pipeline :: proc(builder: ^PipelineBuilder) -> vk.Pipeline {
 	viewport_state := vk.PipelineViewportStateCreateInfo {
 		sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		viewportCount = 1,
@@ -192,7 +192,7 @@ pb_build_pipeline :: proc(builder: ^PipelineBuilder, device: vk.Device) -> vk.Pi
 	}
 
 	newPipeline: vk.Pipeline
-	if vk.CreateGraphicsPipelines(device, 0, 1, &pipelineInfo, nil, &newPipeline) != .SUCCESS {
+	if vk.CreateGraphicsPipelines(r_ctx.device, 0, 1, &pipelineInfo, nil, &newPipeline) != .SUCCESS {
 		fmt.eprintln("Failed to create pipeline")
 		return 0
 	}
@@ -265,7 +265,7 @@ PipelineCreationInfo :: struct {
 	color_format:          vk.Format,
 }
 
-create_graphics_pipeline :: proc(device: vk.Device, create_info: PipelineCreationInfo) -> vk.Pipeline {
+create_graphics_pipeline :: proc(create_info: PipelineCreationInfo) -> vk.Pipeline {
 	pipeline_builder := pb_init()
 	defer pb_delete(pipeline_builder)
 
@@ -292,12 +292,12 @@ create_graphics_pipeline :: proc(device: vk.Device, create_info: PipelineCreatio
 		pb_set_color_attachment_format(&pipeline_builder, create_info.color_format)
 	}
 
-	return pb_build_pipeline(&pipeline_builder, device)
+	return pb_build_pipeline(&pipeline_builder)
 }
 
 // ====================================================================
 
-load_shader_module :: proc(device: vk.Device, file_name: string) -> (vk.ShaderModule, bool) {
+load_shader_module :: proc(file_name: string) -> (vk.ShaderModule, bool) {
 	buffer, ok := os.read_entire_file(file_name)
 
 	if !ok {
@@ -313,9 +313,13 @@ load_shader_module :: proc(device: vk.Device, file_name: string) -> (vk.ShaderMo
 	}
 
 	module: vk.ShaderModule
-	if vk.CreateShaderModule(device, &info, nil, &module) != .SUCCESS {
+	if vk.CreateShaderModule(r_ctx.device, &info, nil, &module) != .SUCCESS {
 		return 0, false
 	}
 
 	return module, true
+}
+
+destroy_shader_module :: proc(module: vk.ShaderModule) {
+	vk.DestroyShaderModule(r_ctx.device, module, nil)
 }

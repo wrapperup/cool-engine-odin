@@ -187,7 +187,7 @@ init_attachment_info :: proc(
 	clear: ^vk.ClearValue,
 	layout: vk.ImageLayout,
 ) -> vk.RenderingAttachmentInfo {
-	color_attachment := vk.RenderingAttachmentInfo {
+	attachment := vk.RenderingAttachmentInfo {
 		sType       = .RENDERING_ATTACHMENT_INFO,
 		imageView   = view,
 		imageLayout = layout,
@@ -196,21 +196,7 @@ init_attachment_info :: proc(
 		clearValue  = clear != nil ? clear^ : {},
 	}
 
-	return color_attachment
-}
-
-init_depth_attachment_info :: proc(view: vk.ImageView, layout: vk.ImageLayout) -> vk.RenderingAttachmentInfo {
-	depth_attachment := vk.RenderingAttachmentInfo {
-		sType = .RENDERING_ATTACHMENT_INFO,
-	}
-
-	depth_attachment.imageView = view
-	depth_attachment.imageLayout = layout
-	depth_attachment.loadOp = .CLEAR
-	depth_attachment.storeOp = .STORE
-	depth_attachment.clearValue.depthStencil.depth = 1.0
-
-	return depth_attachment
+	return attachment
 }
 
 init_rendering_info :: proc(

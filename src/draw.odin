@@ -55,7 +55,7 @@ GameFrameData :: struct {
 }
 
 current_frame_game :: proc() -> ^GameFrameData {
-	return &game.frame_data[gfx.current_frame_index(&game.renderer)]
+	return &game.frame_data[gfx.current_frame_index()]
 }
 
 //// INITIALIZATION
@@ -68,51 +68,49 @@ init_game_draw :: proc() {
 }
 
 init_test_image :: proc() {
-	game.TEMP_mesh_image = gfx.load_image_from_file(&game.renderer)
+	game.TEMP_mesh_image = gfx.load_image_from_file()
 }
 
 init_shadow_map :: proc(extent: vk.Extent3D) {
-	game.shadow_depth_image = gfx.create_image(
-		&game.renderer,
-		.D32_SFLOAT,
-		extent,
-		{.DEPTH_STENCIL_ATTACHMENT, .SAMPLED},
-	)
-	gfx.create_image_view(game.renderer.device, &game.shadow_depth_image, {.DEPTH})
+	game.shadow_depth_image = gfx.create_image(.D32_SFLOAT, extent, {.DEPTH_STENCIL_ATTACHMENT, .SAMPLED})
+	gfx.create_image_view(&game.shadow_depth_image, {.DEPTH})
 
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.shadow_depth_image.image_view)
+	// TODO: r_ctx
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.shadow_depth_image.image_view)
 	gfx.push_deletion_queue(
-		&game.renderer.main_deletion_queue,
+		&gfx.r_ctx.main_deletion_queue,
 		game.shadow_depth_image.image,
 		game.shadow_depth_image.allocation,
 	)
 }
 
 init_descriptors :: proc() {
+	init_mesh_descriptors()
+}
+
+init_mesh_descriptors :: proc() {
 	game.mesh_descriptor_layout = gfx.create_descriptor_set_layout(
-		game.renderer.device,
 		{.VERTEX, .FRAGMENT},
 		[?]gfx.DescriptorBinding{{0, .COMBINED_IMAGE_SAMPLER}, {1, .COMBINED_IMAGE_SAMPLER}},
 	)
 
 	game.mesh_descriptor_set = gfx.allocate_descriptor_set(
-		&game.renderer.global_descriptor_allocator,
-		game.renderer.device,
+		&gfx.r_ctx.global_descriptor_allocator,
+		gfx.r_ctx.device,
 		game.mesh_descriptor_layout,
 	)
 
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_descriptor_layout)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.mesh_descriptor_layout)
 
 	// Shadow Depth Texture Sampler
-	shadow_depth_sampler := gfx.create_sampler(game.renderer.device, .LINEAR, .CLAMP_TO_EDGE, .LESS_OR_EQUAL)
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, shadow_depth_sampler)
+	shadow_depth_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE, .LESS_OR_EQUAL)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, shadow_depth_sampler)
 
 	// Test Texture Sampler
-	TEMP_mesh_image_sampler := gfx.create_sampler(game.renderer.device, .LINEAR, .CLAMP_TO_EDGE)
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, TEMP_mesh_image_sampler)
+	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, TEMP_mesh_image_sampler)
 
 	gfx.write_descriptor_set(
-		game.renderer.device,
 		game.mesh_descriptor_set,
 		[]gfx.DescriptorWrite {
 			gfx.DescriptorWriteImage {
@@ -138,17 +136,16 @@ init_pipelines :: proc() {
 }
 
 init_mesh_pipelines :: proc() {
-	triangle_shader, f_ok := gfx.load_shader_module(game.renderer.device, "shaders/out/shaders.spv")
+	triangle_shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv")
 	assert(f_ok, "Failed to load shaders.")
 
 	game.mesh_pipeline_layout = gfx.create_pipeline_layout(
-		game.renderer.device,
+		gfx.r_ctx.device,
 		&game.mesh_descriptor_layout,
 		GPUDrawPushConstants,
 	)
 
 	game.mesh_pipeline = gfx.create_graphics_pipeline(
-		game.renderer.device,
 		{
 			pipeline_layout = game.mesh_pipeline_layout,
 			shader = triangle_shader,
@@ -156,13 +153,12 @@ init_mesh_pipelines :: proc() {
 			polygon_mode = .FILL,
 			cull_mode = {.BACK},
 			front_face = .COUNTER_CLOCKWISE,
-			depth = {format = game.renderer.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-			color_format = game.renderer.draw_image.format,
+			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+			color_format = gfx.get_draw_image().format,
 		},
 	)
 
 	game.mesh_shadow_pipeline = gfx.create_graphics_pipeline(
-		game.renderer.device,
 		{
 			pipeline_layout = game.mesh_pipeline_layout,
 			shader = triangle_shader,
@@ -172,47 +168,45 @@ init_mesh_pipelines :: proc() {
 			polygon_mode = .FILL,
 			cull_mode = {.BACK},
 			front_face = .COUNTER_CLOCKWISE,
-			depth = {format = game.renderer.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
 		},
 	)
 
-	vk.DestroyShaderModule(game.renderer.device, triangle_shader, nil)
+	gfx.destroy_shader_module(triangle_shader)
 
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_pipeline_layout)
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_pipeline)
-	gfx.push_deletion_queue(&game.renderer.main_deletion_queue, game.mesh_shadow_pipeline)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.mesh_pipeline_layout)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.mesh_pipeline)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.mesh_shadow_pipeline)
 }
 
 init_buffers :: proc() {
 	for &frame in &game.frame_data {
 		// Global uniform buffer
 		frame.global_uniform_buffer = gfx.create_buffer(
-			&game.renderer,
 			size_of(GPUGlobalData),
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
 
-		gfx.get_buffer_device_address(&game.renderer, frame.global_uniform_buffer, &frame.global_uniform_address)
+		gfx.get_buffer_device_address(frame.global_uniform_buffer, &frame.global_uniform_address)
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(
-			&game.renderer,
 			size_of(hlsl.float4x4) * 16_384,
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
 
-		gfx.get_buffer_device_address(&game.renderer, frame.model_matrices_buffer, &frame.model_matrices_address)
+		gfx.get_buffer_device_address(frame.model_matrices_buffer, &frame.model_matrices_address)
 
 		gfx.push_deletion_queue(
-			&game.renderer.main_deletion_queue,
+			&gfx.r_ctx.main_deletion_queue,
 			frame.global_uniform_buffer.buffer,
 			frame.global_uniform_buffer.allocation,
 		)
 
 		gfx.push_deletion_queue(
-			&game.renderer.main_deletion_queue,
+			&gfx.r_ctx.main_deletion_queue,
 			frame.model_matrices_buffer.buffer,
 			frame.model_matrices_buffer.allocation,
 		)
@@ -220,21 +214,21 @@ init_buffers :: proc() {
 
 	// Test meshes for game
 	{
-		buffers, ok := gfx.load_mesh_from_file(&game.renderer, "assets/bunny.glb")
+		buffers, ok := gfx.load_mesh_from_file("assets/bunny.glb")
 		assert(ok)
 		game.mesh_buffers = buffers
 
-		buffers, ok = gfx.load_mesh_from_file(&game.renderer, "assets/sphere.glb")
+		buffers, ok = gfx.load_mesh_from_file("assets/sphere.glb")
 		assert(ok)
 		game.sphere_mesh_buffers = buffers
 
 		gfx.push_deletion_queue(
-			&game.renderer.main_deletion_queue,
+			&gfx.r_ctx.main_deletion_queue,
 			game.mesh_buffers.index_buffer.buffer,
 			game.mesh_buffers.index_buffer.allocation,
 		)
 		gfx.push_deletion_queue(
-			&game.renderer.main_deletion_queue,
+			&gfx.r_ctx.main_deletion_queue,
 			game.mesh_buffers.vertex_buffer.buffer,
 			game.mesh_buffers.vertex_buffer.allocation,
 		)
@@ -245,26 +239,36 @@ init_buffers :: proc() {
 }
 
 //// RENDERING
-draw :: proc(cmd: vk.CommandBuffer) {
+draw :: proc() {
+	cmd := gfx.begin_draw()
+
+	update_buffers()
+
 	// Begin shadow pass
-	gfx.transition_image(cmd, game.shadow_depth_image, .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL)
+	gfx.transition_image(cmd, &game.shadow_depth_image, .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL)
 	draw_shadow_map(cmd)
 	// End shadow pass
 
 	// Clear
-	gfx.transition_image(cmd, game.renderer.draw_image, .UNDEFINED, .GENERAL)
+	gfx.transition_image(cmd, gfx.get_draw_image(), .UNDEFINED, .GENERAL)
 	draw_background(cmd)
 
 	// Begin geometry pass
-	gfx.transition_image(cmd, game.renderer.draw_image, .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)
-	gfx.transition_image(cmd, game.renderer.depth_image, .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL)
-	gfx.transition_image(cmd, game.shadow_depth_image, .DEPTH_ATTACHMENT_OPTIMAL, .DEPTH_READ_ONLY_OPTIMAL)
+	gfx.transition_image(cmd, gfx.get_draw_image(), .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)
+	gfx.transition_image(cmd, gfx.get_depth_image(), .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL)
+	gfx.transition_image(cmd, &game.shadow_depth_image, .DEPTH_ATTACHMENT_OPTIMAL, .DEPTH_READ_ONLY_OPTIMAL)
 	draw_geometry(cmd)
 	// End geometry pass
+
+	gfx.end_draw(cmd)
 }
 
 draw_shadow_map :: proc(cmd: vk.CommandBuffer) {
-	depth_attachment := gfx.init_depth_attachment_info(game.shadow_depth_image.image_view, .DEPTH_ATTACHMENT_OPTIMAL)
+	depth_attachment := gfx.init_attachment_info(
+		game.shadow_depth_image.image_view,
+		&{depthStencil = {depth = 1.0}},
+		.DEPTH_ATTACHMENT_OPTIMAL,
+	)
 
 	width := game.shadow_depth_image.extent.width
 	height := game.shadow_depth_image.extent.height
@@ -306,19 +310,23 @@ draw_background :: proc(cmd: vk.CommandBuffer) {
 
 	clear_range := gfx.init_image_subresource_range({.COLOR})
 
-	vk.CmdClearColorImage(cmd, game.renderer.draw_image.image, .GENERAL, &clear_color, 1, &clear_range)
+	vk.CmdClearColorImage(cmd, gfx.get_draw_image().image, .GENERAL, &clear_color, 1, &clear_range)
 }
 
 draw_geometry :: proc(cmd: vk.CommandBuffer) {
 	// begin a render pass  connected to our draw image
-	color_attachment := gfx.init_attachment_info(game.renderer.draw_image.image_view, nil, .GENERAL)
-	depth_attachment := gfx.init_depth_attachment_info(game.renderer.depth_image.image_view, .DEPTH_ATTACHMENT_OPTIMAL)
+	color_attachment := gfx.init_attachment_info(gfx.get_draw_image().image_view, nil, .GENERAL)
+	depth_attachment := gfx.init_attachment_info(
+		gfx.get_depth_image().image_view,
+		&{depthStencil = {depth = 1.0}},
+		.DEPTH_ATTACHMENT_OPTIMAL,
+	)
 
 	// Start render pass.
-	render_info := gfx.init_rendering_info(game.renderer.draw_extent, &color_attachment, &depth_attachment)
+	render_info := gfx.init_rendering_info(gfx.get_draw_extent(), &color_attachment, &depth_attachment)
 	vk.CmdBeginRendering(cmd, &render_info)
 
-	gfx.set_viewport_and_scissor(cmd, game.renderer.draw_extent)
+	gfx.set_viewport_and_scissor(cmd, gfx.get_draw_extent())
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, game.mesh_pipeline)
 	{
@@ -352,7 +360,7 @@ update_buffers :: proc() {
 
 	// Camera matrices
 	{
-		aspect_ratio := f32(game.renderer.window_extent.width) / f32(game.renderer.window_extent.height)
+		aspect_ratio := f32(gfx.r_ctx.window_extent.width) / f32(gfx.r_ctx.window_extent.height)
 
 		translation := linalg.matrix4_translate(camera != nil ? camera.translation : {})
 		rotation := linalg.matrix4_from_quaternion(camera != nil ? camera.rotation : {})

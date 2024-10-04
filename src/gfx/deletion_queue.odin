@@ -42,7 +42,7 @@ ResourceType :: enum {
 	Sampler,
 }
 
-vk_destroy_resource :: proc(engine: ^Renderer, resource: ResourceHandle) {
+vk_destroy_resource :: proc(resource: ResourceHandle) {
 	when false {
 		fmt.println("DEBUG: Destroy", resource.ty, "@", resource.caller_location, "-", resource.debug_info)
 	}
@@ -53,25 +53,25 @@ vk_destroy_resource :: proc(engine: ^Renderer, resource: ResourceHandle) {
 
 	switch resource.ty {
 	case .VmaBuffer:
-		vma.DestroyBuffer(engine.allocator, transmute(vk.Buffer)resource.handle, resource.allocation)
+		vma.DestroyBuffer(r_ctx.allocator, transmute(vk.Buffer)resource.handle, resource.allocation)
 	case .VmaImage:
-		vma.DestroyImage(engine.allocator, transmute(vk.Image)resource.handle, resource.allocation)
+		vma.DestroyImage(r_ctx.allocator, transmute(vk.Image)resource.handle, resource.allocation)
 	case .CommandPool:
-		vk.DestroyCommandPool(engine.device, transmute(vk.CommandPool)resource.handle, nil)
+		vk.DestroyCommandPool(r_ctx.device, transmute(vk.CommandPool)resource.handle, nil)
 	case .DescriptorPool:
-		vk.DestroyDescriptorPool(engine.device, transmute(vk.DescriptorPool)resource.handle, nil)
+		vk.DestroyDescriptorPool(r_ctx.device, transmute(vk.DescriptorPool)resource.handle, nil)
 	case .DescriptorSetLayout:
-		vk.DestroyDescriptorSetLayout(engine.device, transmute(vk.DescriptorSetLayout)resource.handle, nil)
+		vk.DestroyDescriptorSetLayout(r_ctx.device, transmute(vk.DescriptorSetLayout)resource.handle, nil)
 	case .Fence:
-		vk.DestroyFence(engine.device, transmute(vk.Fence)resource.handle, nil)
+		vk.DestroyFence(r_ctx.device, transmute(vk.Fence)resource.handle, nil)
 	case .ImageView:
-		vk.DestroyImageView(engine.device, transmute(vk.ImageView)resource.handle, nil)
+		vk.DestroyImageView(r_ctx.device, transmute(vk.ImageView)resource.handle, nil)
 	case .Pipeline:
-		vk.DestroyPipeline(engine.device, transmute(vk.Pipeline)resource.handle, nil)
+		vk.DestroyPipeline(r_ctx.device, transmute(vk.Pipeline)resource.handle, nil)
 	case .PipelineLayout:
-		vk.DestroyPipelineLayout(engine.device, transmute(vk.PipelineLayout)resource.handle, nil)
+		vk.DestroyPipelineLayout(r_ctx.device, transmute(vk.PipelineLayout)resource.handle, nil)
 	case .Sampler:
-		vk.DestroySampler(engine.device, transmute(vk.Sampler)resource.handle, nil)
+		vk.DestroySampler(r_ctx.device, transmute(vk.Sampler)resource.handle, nil)
 	}
 }
 
@@ -127,9 +127,9 @@ push_deletion_queue :: proc(
 	append(&queue.resource_del_queue, resource_handle)
 }
 
-flush_deletion_queue :: proc(engine: ^Renderer, queue: ^DeletionQueue) {
+flush_deletion_queue :: proc(queue: ^DeletionQueue) {
 	#reverse for &resource in queue.resource_del_queue {
-		vk_destroy_resource(engine, resource)
+		vk_destroy_resource(resource)
 	}
 
 	clear(&queue.resource_del_queue)

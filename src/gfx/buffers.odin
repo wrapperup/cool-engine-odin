@@ -7,7 +7,6 @@ import vk "vendor:vulkan"
 
 // This allocates on the GPU, make sure to call `destroy_buffer` or add to deletion queue when you are finished with the buffer.
 create_buffer :: proc(
-	engine: ^Renderer,
 	alloc_size: vk.DeviceSize,
 	usage: vk.BufferUsageFlags,
 	memory_usage: vma.MemoryUsage,
@@ -28,7 +27,7 @@ create_buffer :: proc(
 
 	vk_check(
 		vma.CreateBuffer(
-			engine.allocator,
+			r_ctx.allocator,
 			&buffer_info,
 			&vma_alloc_info,
 			&new_buffer.buffer,
@@ -40,8 +39,8 @@ create_buffer :: proc(
 	return new_buffer
 }
 
-destroy_buffer :: proc(engine: ^Renderer, allocated_buffer: ^AllocatedBuffer) {
-	vma.DestroyBuffer(engine.allocator, allocated_buffer.buffer, allocated_buffer.allocation)
+destroy_buffer :: proc(allocated_buffer: ^AllocatedBuffer) {
+	vma.DestroyBuffer(r_ctx.allocator, allocated_buffer.buffer, allocated_buffer.allocation)
 }
 
 // Only purpose of this is to be captured during bindgen.
@@ -49,27 +48,26 @@ GPUPointer :: struct($T: typeid) {
 	address: vk.DeviceAddress,
 }
 
-get_raw_buffer_device_address :: proc(engine: ^Renderer, buffer: AllocatedBuffer) -> vk.DeviceAddress {
+get_raw_buffer_device_address :: proc(buffer: AllocatedBuffer) -> vk.DeviceAddress {
 	device_address_info := vk.BufferDeviceAddressInfo {
 		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
 		buffer = buffer.buffer,
 	}
 
-	return vk.GetBufferDeviceAddress(engine.device, &device_address_info)
+	return vk.GetBufferDeviceAddress(r_ctx.device, &device_address_info)
 }
 
-get_buffer_device_address :: proc(engine: ^Renderer, buffer: AllocatedBuffer, gpu_ptr: ^GPUPointer($T)) {
-	gpu_ptr.address = get_raw_buffer_device_address(engine, buffer)
+get_buffer_device_address :: proc(buffer: AllocatedBuffer, gpu_ptr: ^GPUPointer($T)) {
+	gpu_ptr.address = get_raw_buffer_device_address(buffer)
 }
 
-create_mesh_buffers :: proc(engine: ^Renderer, indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {
+create_mesh_buffers :: proc(indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {
 	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * len(vertices))
 	index_buffer_size := vk.DeviceSize(size_of(u32) * len(indices))
 
 	new_surface: GPUMeshBuffers
 
 	new_surface.vertex_buffer = create_buffer(
-		engine,
 		vertex_buffer_size,
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
@@ -79,11 +77,11 @@ create_mesh_buffers :: proc(engine: ^Renderer, indices: []u32, vertices: []Verte
 		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
 		buffer = new_surface.vertex_buffer.buffer,
 	}
-	new_surface.vertex_buffer_address = vk.GetBufferDeviceAddress(engine.device, &device_address_info)
+	new_surface.vertex_buffer_address = vk.GetBufferDeviceAddress(r_ctx.device, &device_address_info)
 
-	new_surface.index_buffer = create_buffer(engine, index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
+	new_surface.index_buffer = create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
 
-	staging := create_buffer(engine, vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY)
 
 	data := staging.info.pMappedData
 
@@ -91,7 +89,7 @@ create_mesh_buffers :: proc(engine: ^Renderer, indices: []u32, vertices: []Verte
 	mem.copy(data, raw_data(vertices), int(vertex_buffer_size))
 	mem.copy(mem.ptr_offset((^u8)(data), vertex_buffer_size), raw_data(indices), int(index_buffer_size))
 
-	if cmd, ok := immediate_submit(engine); ok {
+	if cmd, ok := immediate_submit(); ok {
 		vertex_copy := vk.BufferCopy {
 			dstOffset = 0,
 			srcOffset = 0,
@@ -109,7 +107,7 @@ create_mesh_buffers :: proc(engine: ^Renderer, indices: []u32, vertices: []Verte
 		vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.index_buffer.buffer, 1, &index_copy)
 	}
 
-	destroy_buffer(engine, &staging)
+	destroy_buffer(&staging)
 
 	return new_surface
 }

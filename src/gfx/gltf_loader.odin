@@ -267,7 +267,7 @@ temp_parse_mesh_into_mesh_data :: proc(
 	return indices, vertices, ok
 }
 
-load_mesh_from_file :: proc(engine: ^Renderer, path: cstring) -> (buffers: GPUMeshBuffers, ok: bool) {
+load_mesh_from_file :: proc(path: cstring) -> (buffers: GPUMeshBuffers, ok: bool) {
 	opts := cgltf.options{}
 	data, result := cgltf.parse_file(opts, path)
 	if result != .success do return
@@ -282,7 +282,7 @@ load_mesh_from_file :: proc(engine: ^Renderer, path: cstring) -> (buffers: GPUMe
 	defer delete(indices)
 	defer delete(vertices)
 
-	buffers = create_mesh_buffers(engine, indices, vertices)
+	buffers = create_mesh_buffers(indices, vertices)
 	buffers.index_count = u32(len(indices))
 
 	ok = true

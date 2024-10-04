@@ -9,7 +9,7 @@ import vma "deps:odin-vma"
 
 import vk "vendor:vulkan"
 
-load_image_from_file :: proc(engine: ^Renderer) -> AllocatedImage {
+load_image_from_file :: proc() -> AllocatedImage {
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile("assets/test.ktx", {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 
@@ -36,7 +36,7 @@ load_image_from_file :: proc(engine: ^Renderer) -> AllocatedImage {
 	//allocate and create the image
 	vk_check(
 		vma.CreateImage(
-			engine.allocator,
+			r_ctx.allocator,
 			&img_create_info,
 			&img_alloc_info,
 			&allocated_image.image,
@@ -47,18 +47,18 @@ load_image_from_file :: proc(engine: ^Renderer) -> AllocatedImage {
 
 	image_view_info := init_imageview_create_info(allocated_image.format, allocated_image.image, {.COLOR})
 
-	vk_check(vk.CreateImageView(engine.device, &image_view_info, nil, &allocated_image.image_view))
+	vk_check(vk.CreateImageView(r_ctx.device, &image_view_info, nil, &allocated_image.image_view))
 
-	push_deletion_queue(&engine.main_deletion_queue, allocated_image.image_view)
-	push_deletion_queue(&engine.main_deletion_queue, allocated_image.image, allocated_image.allocation)
+	push_deletion_queue(&r_ctx.main_deletion_queue, allocated_image.image_view)
+	push_deletion_queue(&r_ctx.main_deletion_queue, allocated_image.image, allocated_image.allocation)
 
 	// Next, upload image data to vk Image
-	staging := create_buffer(engine, vk.DeviceSize(ktx_image_data_size), {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(vk.DeviceSize(ktx_image_data_size), {.TRANSFER_SRC}, .CPU_ONLY)
 	data := staging.info.pMappedData
 
 	mem.copy(data, ktx_image_data, int(ktx_image_data_size))
 
-	if cmd, ok := immediate_submit(engine); ok {
+	if cmd, ok := immediate_submit(); ok {
         transition_image(cmd, allocated_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 		copy_region := vk.BufferImageCopy {
@@ -74,7 +74,7 @@ load_image_from_file :: proc(engine: ^Renderer) -> AllocatedImage {
         transition_image(cmd, allocated_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
-	destroy_buffer(engine, &staging)
+	destroy_buffer(&staging)
 
 	return allocated_image
 }

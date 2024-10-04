@@ -13,7 +13,7 @@ import vk "vendor:vulkan"
 
 import vma "deps:odin-vma"
 
-fetch_queues :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool {
+fetch_queues :: proc(device: vk.PhysicalDevice) -> bool {
 	queue_family_count: u32
 	vk.GetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nil)
 
@@ -25,7 +25,7 @@ fetch_queues :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool {
 
 	for queue_family, i in &queue_families {
 		if .GRAPHICS in queue_family.queueFlags {
-			engine.graphics_queue_family = u32(i)
+			r_ctx.graphics_queue_family = u32(i)
 			has_graphics = true
 		}
 	}
@@ -34,29 +34,29 @@ fetch_queues :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool {
 }
 
 // This allocates format and present_mode slices.
-query_swapchain_support :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> SwapChainSupportDetails {
+query_swapchain_support :: proc(device: vk.PhysicalDevice) -> SwapChainSupportDetails {
 	details: SwapChainSupportDetails
 
-	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, engine.surface, &details.capabilities)
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, r_ctx.surface, &details.capabilities)
 
 	{
 		format_count: u32
-		vk.GetPhysicalDeviceSurfaceFormatsKHR(device, engine.surface, &format_count, nil)
+		vk.GetPhysicalDeviceSurfaceFormatsKHR(device, r_ctx.surface, &format_count, nil)
 
 		formats := make([]vk.SurfaceFormatKHR, format_count)
-		vk.GetPhysicalDeviceSurfaceFormatsKHR(device, engine.surface, &format_count, raw_data(formats))
+		vk.GetPhysicalDeviceSurfaceFormatsKHR(device, r_ctx.surface, &format_count, raw_data(formats))
 
 		details.formats = formats
 	}
 
 	{
 		present_mode_count: u32
-		vk.GetPhysicalDeviceSurfacePresentModesKHR(device, engine.surface, &present_mode_count, nil)
+		vk.GetPhysicalDeviceSurfacePresentModesKHR(device, r_ctx.surface, &present_mode_count, nil)
 
 		present_modes := make([]vk.PresentModeKHR, present_mode_count)
 		vk.GetPhysicalDeviceSurfacePresentModesKHR(
 			device,
-			engine.surface,
+			r_ctx.surface,
 			&present_mode_count,
 			raw_data(present_modes),
 		)
@@ -83,11 +83,11 @@ choose_swap_present_mode :: proc(available_present_modes: []vk.PresentModeKHR) -
 	return .IMMEDIATE
 }
 
-choose_swap_extent :: proc(engine: ^Renderer, capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
+choose_swap_extent :: proc(capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
 	if (capabilities.currentExtent.width != max(u32)) {
 		return capabilities.currentExtent
 	} else {
-		width, height := glfw.GetFramebufferSize(engine.window)
+		width, height := glfw.GetFramebufferSize(r_ctx.window)
 
 		actual_extent := vk.Extent2D{u32(width), u32(height)}
 
@@ -159,7 +159,7 @@ supports_required_features :: proc(required: $T, test: T) -> bool {
 	return supports_all_flags
 }
 
-is_device_suitable :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool {
+is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 	properties: vk.PhysicalDeviceProperties
 	vk.GetPhysicalDeviceProperties(device, &properties)
 
@@ -195,7 +195,7 @@ is_device_suitable :: proc(engine: ^Renderer, device: vk.PhysicalDevice) -> bool
 
 	swapchain_adequate := false
 	if extensions_supported {
-		swapchain_support := query_swapchain_support(engine, device)
+		swapchain_support := query_swapchain_support(device)
 		defer delete_swapchain_support_details(swapchain_support)
 
 		swapchain_adequate = len(swapchain_support.formats) > 0 && len(swapchain_support.present_modes) > 0
@@ -228,8 +228,8 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 	return true
 }
 
-create_surface :: proc(engine: ^Renderer) {
-	vk_check(glfw.CreateWindowSurface(engine.instance, engine.window, nil, &engine.surface))
+create_surface :: proc() {
+	vk_check(glfw.CreateWindowSurface(r_ctx.instance, r_ctx.window, nil, &r_ctx.surface))
 }
 
 debug_callback :: proc "system" (
@@ -244,7 +244,7 @@ debug_callback :: proc "system" (
 	return false
 }
 
-setup_debug_messenger :: proc(engine: ^Renderer) {
+setup_debug_messenger :: proc() {
 	if ENABLE_VALIDATION_LAYERS {
 		fmt.println("Creating Debug Messenger")
 		create_info := vk.DebugUtilsMessengerCreateInfoEXT {
@@ -255,7 +255,7 @@ setup_debug_messenger :: proc(engine: ^Renderer) {
 			pUserData       = nil,
 		}
 
-		vk_check(vk.CreateDebugUtilsMessengerEXT(engine.instance, &create_info, nil, &engine.debug_messenger))
+		vk_check(vk.CreateDebugUtilsMessengerEXT(r_ctx.instance, &create_info, nil, &r_ctx.debug_messenger))
 	}
 }
 
@@ -303,7 +303,7 @@ get_required_extensions :: proc() -> [dynamic]cstring {
 	return extensions
 }
 
-create_instance :: proc(engine: ^Renderer) -> bool {
+create_instance :: proc() -> bool {
 	// Loads vulkan api functions needed to create an instance
 	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
 
@@ -352,10 +352,10 @@ create_instance :: proc(engine: ^Renderer) -> bool {
 		create_info.pNext = nil
 	}
 
-	vk_check(vk.CreateInstance(&create_info, nil, &engine.instance))
+	vk_check(vk.CreateInstance(&create_info, nil, &r_ctx.instance))
 
 	// Load instance-specific procedures
-	vk.load_proc_addresses_instance(engine.instance)
+	vk.load_proc_addresses_instance(r_ctx.instance)
 
 	n_ext: u32
 	vk.EnumerateInstanceExtensionProperties(nil, &n_ext, nil)
@@ -380,33 +380,33 @@ create_instance :: proc(engine: ^Renderer) -> bool {
 	return true
 }
 
-pick_physical_device :: proc(engine: ^Renderer) {
+pick_physical_device :: proc() {
 	device_count: u32 = 0
 
-	vk.EnumeratePhysicalDevices(engine.instance, &device_count, nil)
+	vk.EnumeratePhysicalDevices(r_ctx.instance, &device_count, nil)
 
 	devices := make([]vk.PhysicalDevice, device_count)
 	defer delete(devices)
-	vk.EnumeratePhysicalDevices(engine.instance, &device_count, raw_data(devices))
+	vk.EnumeratePhysicalDevices(r_ctx.instance, &device_count, raw_data(devices))
 
 	for device in devices {
-		if is_device_suitable(engine, device) {
-			engine.physical_device = device
+		if is_device_suitable(device) {
+			r_ctx.physical_device = device
 			break
 		}
 	}
 
-	if engine.physical_device == nil {
+	if r_ctx.physical_device == nil {
 		panic("No GPU found that supports all required features.")
 	}
 }
 
-create_logical_device :: proc(engine: ^Renderer) {
+create_logical_device :: proc() {
 	queue_priority: f32 = 1.0
 
 	queue_create_info: vk.DeviceQueueCreateInfo
 	queue_create_info.sType = .DEVICE_QUEUE_CREATE_INFO
-	queue_create_info.queueFamilyIndex = engine.graphics_queue_family
+	queue_create_info.queueFamilyIndex = r_ctx.graphics_queue_family
 	queue_create_info.queueCount = 1
 	queue_create_info.pQueuePriorities = &queue_priority
 
@@ -419,53 +419,53 @@ create_logical_device :: proc(engine: ^Renderer) {
 		enabledExtensionCount   = u32(len(DEVICE_EXTENSIONS)),
 	}
 
-	vk_check(vk.CreateDevice(engine.physical_device, &device_create_info, nil, &engine.device))
+	vk_check(vk.CreateDevice(r_ctx.physical_device, &device_create_info, nil, &r_ctx.device))
 
-	assert(engine.device != nil)
+	assert(r_ctx.device != nil)
 
-	vk.GetDeviceQueue(engine.device, engine.graphics_queue_family, 0, &engine.graphics_queue)
+	vk.GetDeviceQueue(r_ctx.device, r_ctx.graphics_queue_family, 0, &r_ctx.graphics_queue)
 }
 
-init_commands :: proc(engine: ^Renderer) {
+init_commands :: proc() {
 	command_pool_info := vk.CommandPoolCreateInfo{}
 	command_pool_info.sType = .COMMAND_POOL_CREATE_INFO
 	command_pool_info.pNext = nil
 	command_pool_info.flags = {.RESET_COMMAND_BUFFER}
-	command_pool_info.queueFamilyIndex = engine.graphics_queue_family
+	command_pool_info.queueFamilyIndex = r_ctx.graphics_queue_family
 
 	for i in 0 ..< FRAME_OVERLAP {
-		vk_check(vk.CreateCommandPool(engine.device, &command_pool_info, nil, &engine.frames[i].command_pool))
+		vk_check(vk.CreateCommandPool(r_ctx.device, &command_pool_info, nil, &r_ctx.frames[i].command_pool))
 
 		// allocate the default command buffer that we will use for rendering
 		cmd_alloc_info := vk.CommandBufferAllocateInfo{}
 		cmd_alloc_info.sType = .COMMAND_BUFFER_ALLOCATE_INFO
 		cmd_alloc_info.pNext = nil
-		cmd_alloc_info.commandPool = engine.frames[i].command_pool
+		cmd_alloc_info.commandPool = r_ctx.frames[i].command_pool
 		cmd_alloc_info.commandBufferCount = 1
 		cmd_alloc_info.level = .PRIMARY
 
-		vk_check(vk.AllocateCommandBuffers(engine.device, &cmd_alloc_info, &engine.frames[i].main_command_buffer))
+		vk_check(vk.AllocateCommandBuffers(r_ctx.device, &cmd_alloc_info, &r_ctx.frames[i].main_command_buffer))
 	}
 
-	vk_check(vk.CreateCommandPool(engine.device, &command_pool_info, nil, &engine.imm_command_pool))
+	vk_check(vk.CreateCommandPool(r_ctx.device, &command_pool_info, nil, &r_ctx.imm_command_pool))
 
 	// allocate the command buffer for immediate submits
-	cmd_alloc_info := init_command_buffer_allocate_info(engine.imm_command_pool, 1)
+	cmd_alloc_info := init_command_buffer_allocate_info(r_ctx.imm_command_pool, 1)
 
-	vk_check(vk.AllocateCommandBuffers(engine.device, &cmd_alloc_info, &engine.imm_command_buffer))
+	vk_check(vk.AllocateCommandBuffers(r_ctx.device, &cmd_alloc_info, &r_ctx.imm_command_buffer))
 
-	push_deletion_queue(&engine.main_deletion_queue, engine.imm_command_pool)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.imm_command_pool)
 }
 
-create_image_views :: proc(engine: ^Renderer) {
-	engine.swapchain_image_views = make([]vk.ImageView, len(engine.swapchain_images))
+create_image_views :: proc() {
+	r_ctx.swapchain_image_views = make([]vk.ImageView, len(r_ctx.swapchain_images))
 
-	for i in 0 ..< len(engine.swapchain_images) {
+	for i in 0 ..< len(r_ctx.swapchain_images) {
 		create_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
-			image = engine.swapchain_images[i],
+			image = r_ctx.swapchain_images[i],
 			viewType = .D2,
-			format = engine.swapchain_image_format,
+			format = r_ctx.swapchain_image_format,
 			components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
 			subresourceRange = {
 				aspectMask = {.COLOR},
@@ -476,17 +476,17 @@ create_image_views :: proc(engine: ^Renderer) {
 			},
 		}
 
-		vk_check(vk.CreateImageView(engine.device, &create_info, nil, &engine.swapchain_image_views[i]))
+		vk_check(vk.CreateImageView(r_ctx.device, &create_info, nil, &r_ctx.swapchain_image_views[i]))
 	}
 }
 
-create_swapchain :: proc(engine: ^Renderer) {
-	swapchain_support := query_swapchain_support(engine, engine.physical_device)
+create_swapchain :: proc() {
+	swapchain_support := query_swapchain_support(r_ctx.physical_device)
 	defer delete_swapchain_support_details(swapchain_support)
 
 	surface_format, _ := choose_swap_surface_format(swapchain_support.formats)
 	present_mode := choose_swap_present_mode(swapchain_support.present_modes)
-	extent := choose_swap_extent(engine, &swapchain_support.capabilities)
+	extent := choose_swap_extent(&swapchain_support.capabilities)
 
 	image_count := swapchain_support.capabilities.minImageCount + 1
 
@@ -496,7 +496,7 @@ create_swapchain :: proc(engine: ^Renderer) {
 
 	create_info: vk.SwapchainCreateInfoKHR
 	create_info.sType = .SWAPCHAIN_CREATE_INFO_KHR
-	create_info.surface = engine.surface
+	create_info.surface = r_ctx.surface
 	create_info.minImageCount = image_count
 	create_info.imageFormat = surface_format.format
 	create_info.imageColorSpace = surface_format.colorSpace
@@ -515,23 +515,23 @@ create_swapchain :: proc(engine: ^Renderer) {
 	create_info.clipped = true
 	create_info.oldSwapchain = {}
 
-	vk_check(vk.CreateSwapchainKHR(engine.device, &create_info, nil, &engine.swapchain))
+	vk_check(vk.CreateSwapchainKHR(r_ctx.device, &create_info, nil, &r_ctx.swapchain))
 
-	vk.GetSwapchainImagesKHR(engine.device, engine.swapchain, &image_count, nil)
-	engine.swapchain_images = make([]vk.Image, image_count)
-	vk.GetSwapchainImagesKHR(engine.device, engine.swapchain, &image_count, raw_data(engine.swapchain_images))
+	vk.GetSwapchainImagesKHR(r_ctx.device, r_ctx.swapchain, &image_count, nil)
+	r_ctx.swapchain_images = make([]vk.Image, image_count)
+	vk.GetSwapchainImagesKHR(r_ctx.device, r_ctx.swapchain, &image_count, raw_data(r_ctx.swapchain_images))
 
-	engine.swapchain_image_format = surface_format.format
-	engine.swapchain_extent = extent
+	r_ctx.swapchain_image_format = surface_format.format
+	r_ctx.swapchain_extent = extent
 
-	draw_image_extent := vk.Extent3D{engine.window_extent.width, engine.window_extent.height, 1}
+	draw_image_extent := vk.Extent3D{r_ctx.window_extent.width, r_ctx.window_extent.height, 1}
 
-	engine.draw_image.format = .R16G16B16A16_SFLOAT
-	engine.draw_image.extent = draw_image_extent
+	r_ctx.draw_image.format = .R16G16B16A16_SFLOAT
+	r_ctx.draw_image.extent = draw_image_extent
 
 	draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
 
-	rimg_info := init_image_create_info(engine.draw_image.format, draw_image_usages, draw_image_extent, ._1)
+	rimg_info := init_image_create_info(r_ctx.draw_image.format, draw_image_usages, draw_image_extent, ._1)
 
 	rimg_alloc_info := vma.AllocationCreateInfo {
 		usage         = .GPU_ONLY,
@@ -539,57 +539,57 @@ create_swapchain :: proc(engine: ^Renderer) {
 	}
 
 	vma.CreateImage(
-		engine.allocator,
+		r_ctx.allocator,
 		&rimg_info,
 		&rimg_alloc_info,
-		&engine.draw_image.image,
-		&engine.draw_image.allocation,
+		&r_ctx.draw_image.image,
+		&r_ctx.draw_image.allocation,
 		nil,
 	)
 
-	rview_info := init_imageview_create_info(engine.draw_image.format, engine.draw_image.image, {.COLOR})
+	rview_info := init_imageview_create_info(r_ctx.draw_image.format, r_ctx.draw_image.image, {.COLOR})
 
-	vk_check(vk.CreateImageView(engine.device, &rview_info, nil, &engine.draw_image.image_view))
+	vk_check(vk.CreateImageView(r_ctx.device, &rview_info, nil, &r_ctx.draw_image.image_view))
 
-	push_deletion_queue(&engine.main_deletion_queue, engine.draw_image.image_view)
-	push_deletion_queue(&engine.main_deletion_queue, engine.draw_image.image, engine.draw_image.allocation)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.draw_image.image_view)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
 
-	engine.depth_image.format = .D32_SFLOAT
-	engine.depth_image.extent = draw_image_extent
+	r_ctx.depth_image.format = .D32_SFLOAT
+	r_ctx.depth_image.extent = draw_image_extent
 	depth_image_usages := vk.ImageUsageFlags{.DEPTH_STENCIL_ATTACHMENT}
 
-	dimg_info := init_image_create_info(engine.depth_image.format, depth_image_usages, draw_image_extent, ._1)
+	dimg_info := init_image_create_info(r_ctx.depth_image.format, depth_image_usages, draw_image_extent, ._1)
 
 	//allocate and create the image
 	vma.CreateImage(
-		engine.allocator,
+		r_ctx.allocator,
 		&dimg_info,
 		&rimg_alloc_info,
-		&engine.depth_image.image,
-		&engine.depth_image.allocation,
+		&r_ctx.depth_image.image,
+		&r_ctx.depth_image.allocation,
 		nil,
 	)
 
 	//build a image-view for the draw image to use for rendering
-	dview_info := init_imageview_create_info(engine.depth_image.format, engine.depth_image.image, {.DEPTH})
+	dview_info := init_imageview_create_info(r_ctx.depth_image.format, r_ctx.depth_image.image, {.DEPTH})
 
-	vk_check(vk.CreateImageView(engine.device, &dview_info, nil, &engine.depth_image.image_view))
+	vk_check(vk.CreateImageView(r_ctx.device, &dview_info, nil, &r_ctx.depth_image.image_view))
 
-	push_deletion_queue(&engine.main_deletion_queue, engine.depth_image.image_view)
-	push_deletion_queue(&engine.main_deletion_queue, engine.depth_image.image, engine.depth_image.allocation)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.depth_image.image_view)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.depth_image.image, r_ctx.depth_image.allocation)
 }
 
-init_sync_structures :: proc(engine: ^Renderer) {
+init_sync_structures :: proc() {
 	fence_create_info := init_fence_create_info({.SIGNALED})
 	semaphore_create_info := init_semaphore_create_info({})
 
-	for &frame in &engine.frames {
-		vk_check(vk.CreateFence(engine.device, &fence_create_info, nil, &frame.render_fence))
+	for &frame in &r_ctx.frames {
+		vk_check(vk.CreateFence(r_ctx.device, &fence_create_info, nil, &frame.render_fence))
 
-		vk_check(vk.CreateSemaphore(engine.device, &semaphore_create_info, nil, &frame.swapchain_semaphore))
-		vk_check(vk.CreateSemaphore(engine.device, &semaphore_create_info, nil, &frame.render_semaphore))
+		vk_check(vk.CreateSemaphore(r_ctx.device, &semaphore_create_info, nil, &frame.swapchain_semaphore))
+		vk_check(vk.CreateSemaphore(r_ctx.device, &semaphore_create_info, nil, &frame.render_semaphore))
 	}
 
-	vk.CreateFence(engine.device, &fence_create_info, nil, &engine.imm_fence)
-	push_deletion_queue(&engine.main_deletion_queue, engine.imm_fence)
+	vk.CreateFence(r_ctx.device, &fence_create_info, nil, &r_ctx.imm_fence)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.imm_fence)
 }

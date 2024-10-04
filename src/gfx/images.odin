@@ -15,7 +15,6 @@ AllocatedImage :: struct {
 
 // This allocates on the GPU, make sure to call `destroy_image` or add to the deletion queue when you are finished with the image.
 create_image :: proc(
-	engine: ^Renderer,
 	format: vk.Format,
 	extent: vk.Extent3D,
 	image_usage_flags: vk.ImageUsageFlags,
@@ -36,19 +35,18 @@ create_image :: proc(
 	}
 
 	vk_check(
-		vma.CreateImage(engine.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil),
+		vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil),
 	)
 
 	return new_image
 }
 
-create_image_view :: proc(device: vk.Device, image: ^AllocatedImage, aspect_flags: vk.ImageAspectFlags) {
+create_image_view :: proc(image: ^AllocatedImage, aspect_flags: vk.ImageAspectFlags) {
 	dview_info := init_imageview_create_info(image.format, image.image, aspect_flags)
-	vk_check(vk.CreateImageView(device, &dview_info, nil, &image.image_view))
+	vk_check(vk.CreateImageView(r_ctx.device, &dview_info, nil, &image.image_view))
 }
 
 create_sampler :: proc(
-	device: vk.Device,
 	filter: vk.Filter,
 	address_mode: vk.SamplerAddressMode,
 	compare_op: vk.CompareOp = .NEVER,
@@ -57,14 +55,14 @@ create_sampler :: proc(
 	sampler_create_info := init_sampler_create_info(filter, address_mode, compare_op, border_color)
 
 	sampler: vk.Sampler
-	vk_check(vk.CreateSampler(device, &sampler_create_info, nil, &sampler))
+	vk_check(vk.CreateSampler(r_ctx.device, &sampler_create_info, nil, &sampler))
 
 	return sampler
 }
 
 transition_image_allocated_image :: proc(
 	cmd: vk.CommandBuffer,
-	allocated_image: AllocatedImage,
+	allocated_image: ^AllocatedImage,
 	current_layout: vk.ImageLayout,
 	new_layout: vk.ImageLayout,
 ) {
@@ -104,6 +102,8 @@ transition_image_vkimage :: proc(
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }
 
+// Implements a simplistic pipeline barrier for image resources.
+// It's recommended instead to use a render graph.
 transition_image :: proc {
 	transition_image_allocated_image,
 	transition_image_vkimage,
@@ -140,16 +140,16 @@ copy_image_to_image :: proc(
 	blit_region.dstSubresource.mipLevel = 0
 
 	blit_info := vk.BlitImageInfo2 {
-		sType = .BLIT_IMAGE_INFO_2,
-		pNext = nil,
+		sType          = .BLIT_IMAGE_INFO_2,
+		pNext          = nil,
+		dstImage       = destination,
+		dstImageLayout = .TRANSFER_DST_OPTIMAL,
+		srcImage       = source,
+		srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+		filter         = .LINEAR,
+		regionCount    = 1,
+		pRegions       = &blit_region,
 	}
-	blit_info.dstImage = destination
-	blit_info.dstImageLayout = .TRANSFER_DST_OPTIMAL
-	blit_info.srcImage = source
-	blit_info.srcImageLayout = .TRANSFER_SRC_OPTIMAL
-	blit_info.filter = .LINEAR
-	blit_info.regionCount = 1
-	blit_info.pRegions = &blit_region
 
 	vk.CmdBlitImage2(cmd, &blit_info)
 }

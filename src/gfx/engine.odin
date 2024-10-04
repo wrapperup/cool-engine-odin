@@ -31,7 +31,7 @@ vk_check :: proc(result: vk.Result, loc := #caller_location) {
 	}
 }
 
-// r_ctx: Renderer
+r_ctx: Renderer
 
 Renderer :: struct {
 	debug_messenger:             vk.DebugUtilsMessengerEXT,
@@ -91,11 +91,11 @@ SwapChainSupportDetails :: struct {
 	present_modes: []vk.PresentModeKHR,
 }
 
-begin_immediate_submit :: proc(engine: ^Renderer) -> vk.CommandBuffer {
-	vk_check(vk.ResetFences(engine.device, 1, &engine.imm_fence))
-	vk_check(vk.ResetCommandBuffer(engine.imm_command_buffer, {}))
+begin_immediate_submit :: proc() -> vk.CommandBuffer {
+	vk_check(vk.ResetFences(r_ctx.device, 1, &r_ctx.imm_fence))
+	vk_check(vk.ResetCommandBuffer(r_ctx.imm_command_buffer, {}))
 
-	cmd := engine.imm_command_buffer
+	cmd := r_ctx.imm_command_buffer
 
 	cmd_begin_info := init_command_buffer_begin_info({.ONE_TIME_SUBMIT})
 
@@ -104,8 +104,8 @@ begin_immediate_submit :: proc(engine: ^Renderer) -> vk.CommandBuffer {
 	return cmd
 }
 
-end_immediate_submit :: proc(engine: ^Renderer) {
-	cmd := engine.imm_command_buffer
+end_immediate_submit :: proc() {
+	cmd := r_ctx.imm_command_buffer
 
 	vk_check(vk.EndCommandBuffer(cmd))
 
@@ -114,22 +114,34 @@ end_immediate_submit :: proc(engine: ^Renderer) {
 
 	// submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
-	vk_check(vk.QueueSubmit2(engine.graphics_queue, 1, &submit, engine.imm_fence))
+	vk_check(vk.QueueSubmit2(r_ctx.graphics_queue, 1, &submit, r_ctx.imm_fence))
 
-	vk_check(vk.WaitForFences(engine.device, 1, &engine.imm_fence, true, 9_999_999_999))
+	vk_check(vk.WaitForFences(r_ctx.device, 1, &r_ctx.imm_fence, true, 9_999_999_999))
 }
 
 @(deferred_in = end_immediate_submit)
-immediate_submit :: proc(engine: ^Renderer) -> (cmd: vk.CommandBuffer, ready: bool) {
-	return begin_immediate_submit(engine), true
+immediate_submit :: proc() -> (cmd: vk.CommandBuffer, ready: bool) {
+	return begin_immediate_submit(), true
 }
 
-current_frame_index :: proc(engine: ^Renderer) -> int {
-	return engine.frame_number % FRAME_OVERLAP
+current_frame_index :: proc() -> int {
+	return r_ctx.frame_number % FRAME_OVERLAP
 }
 
-current_frame :: proc(engine: ^Renderer) -> ^FrameData {
-	return &engine.frames[current_frame_index(engine)]
+current_frame :: proc() -> ^FrameData {
+	return &r_ctx.frames[current_frame_index()]
+}
+
+get_draw_image :: proc() -> ^AllocatedImage {
+	return &r_ctx.draw_image
+}
+
+get_depth_image :: proc() -> ^AllocatedImage {
+	return &r_ctx.depth_image
+}
+
+get_draw_extent :: proc() -> vk.Extent2D {
+	return r_ctx.draw_extent
 }
 
 delete_swapchain_support_details :: proc(details: SwapChainSupportDetails) {
@@ -137,100 +149,100 @@ delete_swapchain_support_details :: proc(details: SwapChainSupportDetails) {
 	delete(details.present_modes)
 }
 
-init_global_descriptor_allocator :: proc(engine: ^Renderer) {
+init_global_descriptor_allocator :: proc() {
 	//create a descriptor pool that will hold 10 sets with 1 image each
 	sizes: []PoolSizeRatio = {{.COMBINED_IMAGE_SAMPLER, 1}}
-	init_descriptor_allocator(&engine.global_descriptor_allocator, engine.device, 10, sizes, {.UPDATE_AFTER_BIND})
+	init_descriptor_allocator(&r_ctx.global_descriptor_allocator, r_ctx.device, 10, sizes, {.UPDATE_AFTER_BIND})
 }
 
-init_vulkan :: proc(engine: ^Renderer) -> bool {
+init_vulkan :: proc() -> bool {
 	// Begin bootstrapping
-	create_instance(engine) or_return
-	setup_debug_messenger(engine)
-	create_surface(engine)
+	create_instance() or_return
+	setup_debug_messenger()
+	create_surface()
 
-	pick_physical_device(engine)
-	fetch_queues(engine, engine.physical_device)
-	create_logical_device(engine)
+	pick_physical_device()
+	fetch_queues(r_ctx.physical_device)
+	create_logical_device()
 
-	init_vma(engine)
+	init_vma()
 
-	create_swapchain(engine)
-	create_image_views(engine)
+	create_swapchain()
+	create_image_views()
 
-	init_commands(engine)
-	init_sync_structures(engine)
+	init_commands()
+	init_sync_structures()
 	// End bootstrapping
 
-	init_imgui(engine)
+	init_imgui()
 
-	init_global_descriptor_allocator(engine)
+	init_global_descriptor_allocator()
 
 	return true
 }
 
-init_vma :: proc(engine: ^Renderer) {
+init_vma :: proc() {
 	vulkan_functions := vma.create_vulkan_functions()
 
 	allocator_info := vma.AllocatorCreateInfo {
 		vulkanApiVersion = vk.API_VERSION_1_3,
-		physicalDevice   = engine.physical_device,
-		device           = engine.device,
-		instance         = engine.instance,
+		physicalDevice   = r_ctx.physical_device,
+		device           = r_ctx.device,
+		instance         = r_ctx.instance,
 		flags            = {.BUFFER_DEVICE_ADDRESS},
 		pVulkanFunctions = &vulkan_functions,
 	}
 
-	vma.CreateAllocator(&allocator_info, &engine.allocator)
+	vma.CreateAllocator(&allocator_info, &r_ctx.allocator)
 }
 
-cleanup_window :: proc(engine: ^Renderer) {
-	glfw.DestroyWindow(engine.window)
+cleanup_window :: proc() {
+	glfw.DestroyWindow(r_ctx.window)
 	glfw.Terminate()
 }
 
-cleanup_vulkan :: proc(engine: ^Renderer) {
-	vk.DeviceWaitIdle(engine.device)
+cleanup_vulkan :: proc() {
+	vk.DeviceWaitIdle(r_ctx.device)
 
 	im_vk.Shutdown()
-	vk.DestroyDescriptorPool(engine.device, engine.imgui_pool, nil)
+	vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
 
 	// Cleanup queued resources
-	flush_deletion_queue(engine, &engine.main_deletion_queue)
-	delete_deletion_queue(engine.main_deletion_queue)
+	flush_deletion_queue(&r_ctx.main_deletion_queue)
+	delete_deletion_queue(r_ctx.main_deletion_queue)
 
-	for &frame in engine.frames {
-		vk.DestroyCommandPool(engine.device, frame.command_pool, nil)
+	for &frame in r_ctx.frames {
+		vk.DestroyCommandPool(r_ctx.device, frame.command_pool, nil)
 
-		vk.DestroyFence(engine.device, frame.render_fence, nil)
-		vk.DestroySemaphore(engine.device, frame.render_semaphore, nil)
-		vk.DestroySemaphore(engine.device, frame.swapchain_semaphore, nil)
+		vk.DestroyFence(r_ctx.device, frame.render_fence, nil)
+		vk.DestroySemaphore(r_ctx.device, frame.render_semaphore, nil)
+		vk.DestroySemaphore(r_ctx.device, frame.swapchain_semaphore, nil)
 
-		flush_deletion_queue(engine, &frame.deletion_queue)
+		flush_deletion_queue(&frame.deletion_queue)
 		delete_deletion_queue(frame.deletion_queue)
 	}
 
-	vk.DestroySwapchainKHR(engine.device, engine.swapchain, nil)
+	vk.DestroySwapchainKHR(r_ctx.device, r_ctx.swapchain, nil)
 
 	// We don't need to delete the images, it was created by the driver
 	// However, we did create the views, so we will destroy those now.
-	for &image_view in &engine.swapchain_image_views {
-		vk.DestroyImageView(engine.device, image_view, nil)
+	for &image_view in &r_ctx.swapchain_image_views {
+		vk.DestroyImageView(r_ctx.device, image_view, nil)
 	}
 
-	delete(engine.swapchain_image_views)
-	delete(engine.swapchain_images)
+	delete(r_ctx.swapchain_image_views)
+	delete(r_ctx.swapchain_images)
 
-	destroy_pools(&engine.global_descriptor_allocator, engine.device)
-	destroy_descriptor_allocator(&engine.global_descriptor_allocator)
+	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
+	destroy_descriptor_allocator(&r_ctx.global_descriptor_allocator)
 
-	vk.DestroySurfaceKHR(engine.instance, engine.surface, nil)
+	vk.DestroySurfaceKHR(r_ctx.instance, r_ctx.surface, nil)
 
-	vma.DestroyAllocator(engine.allocator)
+	vma.DestroyAllocator(r_ctx.allocator)
 
-	vk.DestroyDevice(engine.device, nil)
-	vk.DestroyDebugUtilsMessengerEXT(engine.instance, engine.debug_messenger, nil)
-	vk.DestroyInstance(engine.instance, nil)
+	vk.DestroyDevice(r_ctx.device, nil)
+	vk.DestroyDebugUtilsMessengerEXT(r_ctx.instance, r_ctx.debug_messenger, nil)
+	vk.DestroyInstance(r_ctx.instance, nil)
 }
 
 set_viewport_and_scissor_2d :: proc(cmd: vk.CommandBuffer, extent: vk.Extent2D) {
@@ -278,36 +290,36 @@ is_shaders_updated :: proc() -> bool {
 }
 
 // Called by the user before they start drawing to the screen.
-begin_draw :: proc(engine: ^Renderer) -> vk.CommandBuffer {
-	render_imgui(engine)
+begin_draw :: proc() -> vk.CommandBuffer {
+	render_imgui()
 
-	vk_check(vk.WaitForFences(engine.device, 1, &current_frame(engine).render_fence, true, 1_000_000_000))
+	vk_check(vk.WaitForFences(r_ctx.device, 1, &current_frame().render_fence, true, 1_000_000_000))
 
 	// Delete resources for the current frame
-	flush_deletion_queue(engine, &current_frame(engine).deletion_queue)
+	flush_deletion_queue(&current_frame().deletion_queue)
 
 	vk_check(
 		vk.AcquireNextImageKHR(
-			engine.device,
-			engine.swapchain,
+			r_ctx.device,
+			r_ctx.swapchain,
 			1_000_000_000,
-			current_frame(engine).swapchain_semaphore,
+			current_frame().swapchain_semaphore,
 			vk.Fence(0), // null
-			&engine.swapchain_image_index,
+			&r_ctx.swapchain_image_index,
 		),
 	)
 
-	engine.draw_extent.width = engine.draw_image.extent.width
-	engine.draw_extent.height = engine.draw_image.extent.height
+	r_ctx.draw_extent.width = r_ctx.draw_image.extent.width
+	r_ctx.draw_extent.height = r_ctx.draw_image.extent.height
 
-	vk_check(vk.ResetFences(engine.device, 1, &current_frame(engine).render_fence))
+	vk_check(vk.ResetFences(r_ctx.device, 1, &current_frame().render_fence))
 
 	// now that we are sure that the commands finished executing, we can safely
 	// reset the command buffer to begin recording again.
-	vk_check(vk.ResetCommandBuffer(current_frame(engine).main_command_buffer, {.RELEASE_RESOURCES}))
+	vk_check(vk.ResetCommandBuffer(current_frame().main_command_buffer, {.RELEASE_RESOURCES}))
 
 	// naming it cmd for shorter writing
-	cmd := current_frame(engine).main_command_buffer
+	cmd := current_frame().main_command_buffer
 
 	// begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
 	cmd_begin_info := init_command_buffer_begin_info({.ONE_TIME_SUBMIT})
@@ -318,35 +330,35 @@ begin_draw :: proc(engine: ^Renderer) -> vk.CommandBuffer {
 }
 
 // Called by the user when they end drawing to the screen.
-end_draw :: proc(engine: ^Renderer, cmd: vk.CommandBuffer) {
+end_draw :: proc(cmd: vk.CommandBuffer) {
 	// Prepare swapchain image
-	transition_image(cmd, engine.draw_image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL)
-	transition_image(cmd, engine.swapchain_images[engine.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+	transition_image(cmd, r_ctx.draw_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL)
+	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 	// execute a copy from the draw image into the swapchain
 	copy_image_to_image(
 		cmd,
-		engine.draw_image.image,
-		engine.swapchain_images[engine.swapchain_image_index],
-		engine.draw_extent,
-		engine.swapchain_extent,
+		r_ctx.draw_image.image,
+		r_ctx.swapchain_images[r_ctx.swapchain_image_index],
+		r_ctx.draw_extent,
+		r_ctx.swapchain_extent,
 	)
 
 	// set swapchain image layout to Attachment Optimal so we can draw it
 	transition_image(
 		cmd,
-		engine.swapchain_images[engine.swapchain_image_index],
+		r_ctx.swapchain_images[r_ctx.swapchain_image_index],
 		.TRANSFER_DST_OPTIMAL,
 		.COLOR_ATTACHMENT_OPTIMAL,
 	)
 
 	//draw imgui into the swapchain image
-	draw_imgui(engine, cmd, engine.swapchain_image_views[engine.swapchain_image_index])
+	draw_imgui(cmd, r_ctx.swapchain_image_views[r_ctx.swapchain_image_index])
 
 	// set swapchain image layout to Present so we can show it on the screen
 	transition_image(
 		cmd,
-		engine.swapchain_images[engine.swapchain_image_index],
+		r_ctx.swapchain_images[r_ctx.swapchain_image_index],
 		.COLOR_ATTACHMENT_OPTIMAL,
 		.PRESENT_SRC_KHR,
 	)
@@ -356,39 +368,39 @@ end_draw :: proc(engine: ^Renderer, cmd: vk.CommandBuffer) {
 
 	cmd_info := init_command_buffer_submit_info(cmd)
 
-	wait_info := init_semaphore_submit_info({.COLOR_ATTACHMENT_OUTPUT}, current_frame(engine).swapchain_semaphore)
-	signal_info := init_semaphore_submit_info({.ALL_GRAPHICS}, current_frame(engine).render_semaphore)
+	wait_info := init_semaphore_submit_info({.COLOR_ATTACHMENT_OUTPUT}, current_frame().swapchain_semaphore)
+	signal_info := init_semaphore_submit_info({.ALL_GRAPHICS}, current_frame().render_semaphore)
 
 	submit := init_submit_info(&cmd_info, &signal_info, &wait_info)
 
-	vk_check(vk.QueueSubmit2(engine.graphics_queue, 1, &submit, current_frame(engine).render_fence))
+	vk_check(vk.QueueSubmit2(r_ctx.graphics_queue, 1, &submit, current_frame().render_fence))
 
 	present_info := vk.PresentInfoKHR {
 		sType              = .PRESENT_INFO_KHR,
-		pSwapchains        = &engine.swapchain,
+		pSwapchains        = &r_ctx.swapchain,
 		swapchainCount     = 1,
-		pWaitSemaphores    = &current_frame(engine).render_semaphore,
+		pWaitSemaphores    = &current_frame().render_semaphore,
 		waitSemaphoreCount = 1,
-		pImageIndices      = &engine.swapchain_image_index,
+		pImageIndices      = &r_ctx.swapchain_image_index,
 	}
 
-	vk_check(vk.QueuePresentKHR(engine.graphics_queue, &present_info))
+	vk_check(vk.QueuePresentKHR(r_ctx.graphics_queue, &present_info))
 
-	engine.frame_number += 1
+	r_ctx.frame_number += 1
 }
 
-init :: proc(engine: ^Renderer, window: glfw.WindowHandle) -> bool {
-	engine.window = window
+init :: proc(window: glfw.WindowHandle) -> bool {
+	r_ctx.window = window
 	width, height := glfw.GetWindowSize(window)
 
-	engine.window_extent = {u32(width), u32(height)}
+	r_ctx.window_extent = {u32(width), u32(height)}
 
-	init_vulkan(engine) or_return
+	init_vulkan() or_return
 
 	return true
 }
 
-shutdown :: proc(engine: ^Renderer) {
-	cleanup_vulkan(engine)
-	cleanup_window(engine)
+shutdown :: proc() {
+	cleanup_vulkan()
+	cleanup_window()
 }
