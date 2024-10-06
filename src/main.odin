@@ -160,19 +160,21 @@ game_loop :: proc() {
 }
 
 update :: proc() {
-	update_game_state(game.delta_time)
 	update_physics()
+	update_game_state(game.delta_time)
 	update_imgui()
 }
 
 update_game_state :: proc(delta_time: f64) {
 	start_game_state := time.now()
+	player := get_entity(game.state.player_id)
+	camera := get_entity(game.state.camera_id)
 
-	update_main_camera(delta_time)
 	update_balls(delta_time)
+	update_player(player, delta_time)
+	update_main_camera(camera, delta_time)
 
 	game.frame_time_game_state = f32(time.since(start_game_state)) / f32(time.Millisecond)
-
 }
 
 update_physics :: proc() {
@@ -195,7 +197,7 @@ update_balls :: proc(delta_time: f64) {
 	}
 }
 
-update_main_camera :: proc(delta_time: f64) {
+update_main_camera :: proc(camera: ^Camera, delta_time: f64) {
 	camera := get_entity(game.state.camera_id)
 
 	{

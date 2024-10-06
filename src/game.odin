@@ -19,11 +19,15 @@ Game :: struct {
 	frame_time_render:      f32,
 	delta_time:             f64,
 
+	// Bindless textures, etc
+	bindless_descriptor_layout: vk.DescriptorSetLayout,
+	bindless_descriptor_set:    vk.DescriptorSet,
+
 	// Mesh pipelines
 	mesh_pipeline_layout:   vk.PipelineLayout,
 	mesh_pipeline:          vk.Pipeline,
-	mesh_descriptor_set:    vk.DescriptorSet,
-	mesh_descriptor_layout: vk.DescriptorSetLayout,
+	// mesh_descriptor_set:    vk.DescriptorSet,
+	// mesh_descriptor_layout: vk.DescriptorSetLayout,
 	model_matrices:         [dynamic]hlsl.float4x4,
 	mesh_buffers:           gfx.GPUMeshBuffers,
 	sphere_mesh_buffers:    gfx.GPUMeshBuffers,

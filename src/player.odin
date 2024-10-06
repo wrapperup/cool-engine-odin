@@ -40,6 +40,7 @@ init_player :: proc(player: ^Player) {
 	player.character = jolt.CharacterVirtual_Create(settings, &{0, 0, 0}, &{0, 0, 0, 0}, physics_system)
 }
 
-update_player :: proc() {
-	player := get_entity(game.state.player_id)
+update_player :: proc(player: ^Player, delta_time: f64) {
+	//jolt.CharacterPost
+
 }
