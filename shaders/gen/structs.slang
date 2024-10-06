@@ -1,11 +1,3 @@
-struct Vertex {
-  float3 position;
-  float uv_x;
-  float3 normal;
-  float uv_y;
-  float4 color;
-};
-
 struct DrawPushConstants {
   GlobalData *global_data_buffer;
   Vertex *vertex_buffer;
@@ -25,4 +17,22 @@ struct GlobalData {
   float pad_1;
   float3 sun_pos;
   float pad_2;
+};
+
+struct Vertex {
+  float3 position;
+  float uv_x;
+  float3 normal;
+  float uv_y;
+  float4 color;
+};
+
+struct SkelVertex {
+  float3 position;
+  float uv_x;
+  float3 normal;
+  float uv_y;
+  float4 color;
+  uint8_t joints[4];
+  uint4 weights;
 };

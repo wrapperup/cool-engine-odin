@@ -1,4 +1,43 @@
-import "./gen/structs.slang";
+#include "./bindless.slang"
+
+struct DrawPushConstants {
+  GlobalData *global_data_buffer;
+  Vertex *vertex_buffer;
+  float4x4 *model_matrices;
+};
+
+struct GlobalData {
+  float4x4 view_projection_matrix;
+  float4x4 view_projection_i_matrix;
+  float4x4 sun_view_projection_matrix;
+  float4x4 sun_view_projection_i_matrix;
+  float3 sun_color;
+  float bias;
+  float3 sky_color;
+  float pad_0;
+  float3 camera_pos;
+  float pad_1;
+  float3 sun_pos;
+  float pad_2;
+};
+
+struct Vertex {
+  float3 position;
+  float uv_x;
+  float3 normal;
+  float uv_y;
+  float4 color;
+};
+
+struct SkelVertex {
+  float3 position;
+  float uv_x;
+  float3 normal;
+  float uv_y;
+  float4 color;
+  uint8_t joints[4];
+  uint4 weights;
+};
 
 struct VertexInput {
   uint vertex_index : SV_VertexID;
@@ -12,6 +51,7 @@ struct V2P {
   float3 normal;
   float3 frag_pos;
   float4 sun_space_pos;
+  uint tex_id;
 };
 
 struct V2PShadow {
@@ -22,12 +62,6 @@ struct PSOutput {
   [vk_location(0)]
   float4 frag_color : COLOR0;
 };
-
-[vk_binding(0, 0)]
-Sampler2D<float> ShadowDepthSampler;
-
-[vk_binding(1, 0)]
-Sampler2D TestTextureSampler;
 
 [vk_push_constant]
 ConstantBuffer<DrawPushConstants> pc;
@@ -73,8 +107,9 @@ float shadow_calc(float4 shadow_coord, float2 offset = 0.0) {
   // offset, proj_coords.z - pc.global_data_buffer.bias); return (shadow.x +
   // shadow.y + shadow.z + shadow.w) / 4.f;
 
-  let shadow = ShadowDepthSampler.SampleCmpLevelZero(
-      proj_coords.xy + offset, proj_coords.z - pc.global_data_buffer.bias);
+  let shadow = DepthTextures[SHADOW_ID].SampleCmpLevelZero(
+      DepthSamplers[SHADOW_SAMPLER_ID], proj_coords.xy + offset,
+      proj_coords.z - pc.global_data_buffer.bias);
 
   // let shadow = ShadowDepthSampler.GatherCmp(
   //     proj_coords.xy + offset,
@@ -108,7 +143,12 @@ uint3 pcg_3d(uint3 v) {
 
 float filter_pcf(float2 screen_pos, float4 shadow_coord) {
   int2 texDim;
-  ShadowDepthSampler.GetDimensions(texDim.x, texDim.y);
+  int levels;
+  DepthTextures[SHADOW_ID].GetDimensions(0, texDim.x, texDim.y, levels);
+
+  texDim.x = 1024;
+  texDim.y = 1024;
+
   float scale = 1.5;
   float dx = scale * 1.0 / float(texDim.x);
   float dy = scale * 1.0 / float(texDim.y);
@@ -177,14 +217,17 @@ V2P vertex_main(VertexInput input) {
   let color_select = input.instance_id % 3;
   switch (color_select) {
   case 0:
+    output.tex_id = B_ID;
     output.color = lerp(float3(1, 0.24, 0.32), float3(1, 0.75, 0.70),
                         saturate(light_contrib));
     break;
   case 1:
+    output.tex_id = A_ID;
     output.color = lerp(float3(0.24, 0.75, 0.32), float3(0.75, 1, 0.70),
                         saturate(light_contrib));
     break;
   case 2:
+    output.tex_id = C_ID;
     output.color = lerp(float3(0.32, 0.24, 0.75), float3(0.7, 0.75, 1),
                         saturate(light_contrib));
   }
@@ -219,12 +262,12 @@ PSOutput fragment_main(V2P input) {
 
   let light_dir = normalize(light_pos - input.frag_pos);
 
-  let specular_val = specular(input.frag_pos, 0.5 * shadow, light_dir, 32.f,
+  let specular_val = specular(input.frag_pos, 0.25 * shadow, light_dir, 64.f,
                               1.0, view_pos, normal);
 
   output.frag_color += float4(specular_val, 1.0);
-  output.frag_color *= TestTextureSampler.Sample(input.uv);
-
+  output.frag_color *=
+      Textures[input.tex_id].Sample(Samplers[DEFAULT_SAMPLER_ID], input.uv);
 
   return output;
 }
