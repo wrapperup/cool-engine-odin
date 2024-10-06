@@ -128,17 +128,6 @@ new_entity_subtype_id :: proc($T: typeid) -> (^T, TypedEntityId(T)) where intrin
 // Returns a pointer to a new entity. If the entity array was 
 // extended, returns true, else if an entity was revived, false.
 new_entity_raw :: proc() -> ^Entity {
-	// for &v, i in &ENTITIES {
-	// 	// Find empty hole in entity list
-	// 	if v.id.live == false {
-	// 		// Update the entity gen pointer with the new entity
-	// 		v.id.live = true
-	// 		v.id.index = u32(i)
-	//
-	// 		return &ENTITIES[i]
-	// 	}
-	// }
-
 	created_entity := Entity {
 		id = {live = true, generation = 0, index = NUM_ENTITIES},
 	}
