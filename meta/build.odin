@@ -16,57 +16,63 @@ supported_type_map := map[string]string {
 	"f64" = "double",
 	"i32" = "int",
 	"u32" = "uint",
+	"u8"  = "uint8_t",
 }
 
-collect_package_ex :: proc(path: string) -> (pkg: ^ast.Package, success: bool) {
+FileCollectionContext :: struct {
+	parser: ^parser.Parser,
+	files:  ^[dynamic]^ast.File,
+}
+
+collect_files :: proc(path: string) -> (files: [dynamic]^ast.File, success: bool) {
+	p := parser.default_parser()
+
 	NO_POS :: tokenizer.Pos{}
 
 	pkg_path, pkg_path_ok := filepath.abs(path)
-	if !pkg_path_ok {
-		return
+	assert(pkg_path_ok)
+
+	ctx := FileCollectionContext {
+		parser = &p,
+		files  = &files,
 	}
 
-	path_pattern := fmt.tprintf("%s/**.odin", pkg_path)
-	matches, err := filepath.glob(path_pattern)
-	defer delete(matches)
+	filepath.walk(pkg_path, proc(info: os.File_Info, in_err: os.Error, user_data: rawptr) -> (err: os.Error, skip_dir: bool) {
+			if (info.is_dir) do return
 
-	if err != nil {
-		return
-	}
+			assert(user_data != nil)
 
-	pkg = ast.new(ast.Package, NO_POS, NO_POS)
-	pkg.fullpath = pkg_path
+			ctx := cast(^FileCollectionContext)user_data
 
-	for match in matches {
-		src: []byte
-		fullpath, ok := filepath.abs(match)
-		if !ok {
+			fullpath := info.fullpath
+			src, ok := os.read_entire_file(fullpath)
+			if !ok {
+				delete(fullpath)
+				fmt.eprintln("Couldn't read file:", fullpath)
+				assert(false)
+			}
+
+			if strings.trim_space(string(src)) == "" {
+				delete(fullpath)
+				delete(src)
+				return
+			}
+
+			file := ast.new(ast.File, NO_POS, NO_POS)
+			file.src = string(src)
+			file.fullpath = fullpath
+
+			assert(parser.parse_file(ctx.parser, file))
+			append(ctx.files, file)
+
 			return
-		}
-
-		src, ok = os.read_entire_file(fullpath)
-		if !ok {
-			delete(fullpath)
-			return
-		}
-		if strings.trim_space(string(src)) == "" {
-			delete(fullpath)
-			delete(src)
-			continue
-		}
-
-		file := ast.new(ast.File, NO_POS, NO_POS)
-		file.pkg = pkg
-		file.src = string(src)
-		file.fullpath = fullpath
-		pkg.files[fullpath] = file
-	}
+		}, &ctx)
 
 	success = true
 	return
 }
 
-get_type_string :: proc(node: ^ast.Any_Node) -> (type_name: string, is_pointer: bool) {
+get_type_string :: proc(node: ^ast.Any_Node) -> (type_name: string, is_pointer: bool, is_array: bool, num_elems: u32, ok: bool) {
 	#partial switch ty in node {
 	case ^ast.Selector_Expr:
 		type_name = ty.field.derived_expr.(^ast.Ident).name
@@ -74,26 +80,28 @@ get_type_string :: proc(node: ^ast.Any_Node) -> (type_name: string, is_pointer: 
 		type_name = ty.name
 	case ^ast.Call_Expr:
 		is_pointer = true
-		type_name, _ = get_type_string(&ty.args[0].derived)
+		type_name, _, _, _, ok = get_type_string(&ty.args[0].derived)
+	case:
+		return
 	}
 
 	type_name = strings.trim_prefix(type_name, "GPU")
+
+	ok = true
 
 	return
 }
 
 main :: proc() {
-	pkg, ok := collect_package_ex("./src")
+	files, ok := collect_files("./src")
 	assert(ok)
 
-	ok = parser.parse_package(pkg)
-	assert(ok)
 
 	// bind_structs: map[string]ShaderStruct
 	bind_structs: [dynamic]ShaderStruct
 
-	for key, val in pkg.files {
-		for decl in val.decls {
+	for file in files {
+		for decl in file.decls {
 			value, ok := decl.derived_stmt.(^ast.Value_Decl)
 			if !ok do continue
 
@@ -141,7 +149,9 @@ main :: proc() {
 			for field in bind_struct.expr.fields.list {
 				write_type: string
 
-				field_type, is_pointer := get_type_string(&field.type.derived)
+				field_type, is_pointer, is_array, num_elems, ty_ok := get_type_string(&field.type.derived)
+				assert(ty_ok, "Type in struct field not supported.")
+
 				field_name := field.names[0].derived_expr.(^ast.Ident).name
 
 				// Map type to an HLSL/Slang type
