@@ -11,19 +11,13 @@ import vma "deps:odin-vma"
 
 import gfx "gfx"
 
-@(ShaderShared)
-Vertex :: struct {
-	position: hlsl.float3,
-	uv_x:     f32,
-	normal:   hlsl.float3,
-	uv_y:     f32,
-	color:    hlsl.float4,
-}
+MAX_BINDLESS_IMAGES :: 100
+MAX_BINDLESS_SAMPLERS :: 32
 
 @(ShaderShared)
 GPUDrawPushConstants :: struct {
 	global_data_buffer: gfx.GPUPointer(GPUGlobalData),
-	vertex_buffer:      gfx.GPUPointer(Vertex),
+	vertex_buffer:      gfx.GPUPointer(gfx.Vertex),
 	model_matrices:     gfx.GPUPointer(hlsl.float4x4),
 }
 
@@ -68,7 +62,11 @@ init_game_draw :: proc() {
 }
 
 init_test_image :: proc() {
-	game.TEMP_mesh_image = gfx.load_image_from_file()
+	gfx.load_image_from_file("assets/test1.ktx")
+	gfx.load_image_from_file("assets/test2.ktx")
+	gfx.load_image_from_file("assets/test3.ktx")
+	gfx.load_image_from_file("assets/test4.ktx")
+	gfx.load_image_from_file("assets/test5.ktx")
 }
 
 init_shadow_map :: proc(extent: vk.Extent3D) {
@@ -77,55 +75,101 @@ init_shadow_map :: proc(extent: vk.Extent3D) {
 
 	// TODO: r_ctx
 	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.shadow_depth_image.image_view)
-	gfx.push_deletion_queue(
-		&gfx.r_ctx.main_deletion_queue,
-		game.shadow_depth_image.image,
-		game.shadow_depth_image.allocation,
-	)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.shadow_depth_image.image, game.shadow_depth_image.allocation)
 }
 
 init_descriptors :: proc() {
-	init_mesh_descriptors()
+	init_bindless_descriptors()
 }
 
-init_mesh_descriptors :: proc() {
-	game.mesh_descriptor_layout = gfx.create_descriptor_set_layout(
-		{.VERTEX, .FRAGMENT},
-		[?]gfx.DescriptorBinding{{0, .COMBINED_IMAGE_SAMPLER}, {1, .COMBINED_IMAGE_SAMPLER}},
+init_bindless_descriptors :: proc() {
+	game.bindless_descriptor_layout = gfx.create_descriptor_set_layout(
+		[?]gfx.DescriptorBinding {
+			{binding = 0, type = .SAMPLED_IMAGE, count = MAX_BINDLESS_IMAGES},
+			{binding = 1, type = .SAMPLER, count = MAX_BINDLESS_SAMPLERS},
+		},
+		{.UPDATE_AFTER_BIND_POOL},
 	)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.bindless_descriptor_layout)
 
-	game.mesh_descriptor_set = gfx.allocate_descriptor_set(
+	game.bindless_descriptor_set = gfx.allocate_descriptor_set(
 		&gfx.r_ctx.global_descriptor_allocator,
 		gfx.r_ctx.device,
-		game.mesh_descriptor_layout,
+		game.bindless_descriptor_layout,
 	)
 
-	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, game.mesh_descriptor_layout)
+	a := gfx.load_image_from_file("assets/test1.ktx")
+	b := gfx.load_image_from_file("assets/test2.ktx")
+	c := gfx.load_image_from_file("assets/test3.ktx")
+	d := gfx.load_image_from_file("assets/test4.ktx")
+	e := gfx.load_image_from_file("assets/test5.ktx")
+
+	// Default Texture Sampler
+	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE)
+	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, TEMP_mesh_image_sampler)
 
 	// Shadow Depth Texture Sampler
 	shadow_depth_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE, .LESS_OR_EQUAL)
 	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, shadow_depth_sampler)
 
-	// Test Texture Sampler
-	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE)
-	gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, TEMP_mesh_image_sampler)
-
 	gfx.write_descriptor_set(
-		game.mesh_descriptor_set,
+		game.bindless_descriptor_set,
 		[]gfx.DescriptorWrite {
 			gfx.DescriptorWriteImage {
-				0,
-				.COMBINED_IMAGE_SAMPLER,
-				game.shadow_depth_image.image_view,
-				shadow_depth_sampler,
-				.DEPTH_READ_ONLY_OPTIMAL,
+				binding = 0,
+				type = .SAMPLED_IMAGE,
+				image_view = game.shadow_depth_image.image_view,
+				image_layout = .DEPTH_READ_ONLY_OPTIMAL,
+				array_index = 0,
 			},
 			gfx.DescriptorWriteImage {
-				1,
-				.COMBINED_IMAGE_SAMPLER,
-				game.TEMP_mesh_image.image_view,
-				TEMP_mesh_image_sampler,
-				.SHADER_READ_ONLY_OPTIMAL,
+				binding = 0,
+				type = .SAMPLED_IMAGE,
+				image_view = a.image_view,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = 1,
+			},
+			gfx.DescriptorWriteImage {
+				binding = 0,
+				type = .SAMPLED_IMAGE,
+				image_view = b.image_view,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = 2,
+			},
+			gfx.DescriptorWriteImage {
+				binding = 0,
+				type = .SAMPLED_IMAGE,
+				image_view = c.image_view,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = 3,
+			},
+			gfx.DescriptorWriteImage {
+				binding = 0,
+				type = .SAMPLED_IMAGE,
+				image_view = d.image_view,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = 4,
+			},
+			gfx.DescriptorWriteImage {
+				binding = 0,
+				type = .SAMPLED_IMAGE,
+				image_view = e.image_view,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = 5,
+			},
+			gfx.DescriptorWriteImage {
+				binding = 1,
+				type = .SAMPLER,
+				sampler = TEMP_mesh_image_sampler,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = 0,
+			},
+			gfx.DescriptorWriteImage {
+				binding = 1,
+				type = .SAMPLER,
+				sampler = shadow_depth_sampler,
+				image_layout = .DEPTH_READ_ONLY_OPTIMAL,
+				array_index = 1,
 			},
 		},
 	)
@@ -139,11 +183,7 @@ init_mesh_pipelines :: proc() {
 	triangle_shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv")
 	assert(f_ok, "Failed to load shaders.")
 
-	game.mesh_pipeline_layout = gfx.create_pipeline_layout(
-		gfx.r_ctx.device,
-		&game.mesh_descriptor_layout,
-		GPUDrawPushConstants,
-	)
+	game.mesh_pipeline_layout = gfx.create_pipeline_layout(gfx.r_ctx.device, &game.bindless_descriptor_layout, GPUDrawPushConstants)
 
 	game.mesh_pipeline = gfx.create_graphics_pipeline(
 		{
@@ -154,7 +194,7 @@ init_mesh_pipelines :: proc() {
 			cull_mode = {.BACK},
 			front_face = .COUNTER_CLOCKWISE,
 			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-			color_format = gfx.get_draw_image().format,
+			color_format = gfx.renderer().draw_image.format,
 		},
 	)
 
@@ -182,13 +222,8 @@ init_mesh_pipelines :: proc() {
 init_buffers :: proc() {
 	for &frame in &game.frame_data {
 		// Global uniform buffer
-		frame.global_uniform_buffer = gfx.create_buffer(
-			size_of(GPUGlobalData),
-			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
-			.CPU_TO_GPU,
-		)
-
-		gfx.get_buffer_device_address(frame.global_uniform_buffer, &frame.global_uniform_address)
+		frame.global_uniform_buffer = gfx.create_buffer(size_of(GPUGlobalData), {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
+		frame.global_uniform_address.a = gfx.get_buffer_device_address(frame.global_uniform_buffer)
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(
@@ -196,25 +231,15 @@ init_buffers :: proc() {
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
+		frame.model_matrices_address.a = gfx.get_buffer_device_address(frame.model_matrices_buffer)
 
-		gfx.get_buffer_device_address(frame.model_matrices_buffer, &frame.model_matrices_address)
-
-		gfx.push_deletion_queue(
-			&gfx.r_ctx.main_deletion_queue,
-			frame.global_uniform_buffer.buffer,
-			frame.global_uniform_buffer.allocation,
-		)
-
-		gfx.push_deletion_queue(
-			&gfx.r_ctx.main_deletion_queue,
-			frame.model_matrices_buffer.buffer,
-			frame.model_matrices_buffer.allocation,
-		)
+		gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, frame.global_uniform_buffer.buffer, frame.global_uniform_buffer.allocation)
+		gfx.push_deletion_queue(&gfx.r_ctx.main_deletion_queue, frame.model_matrices_buffer.buffer, frame.model_matrices_buffer.allocation)
 	}
 
 	// Test meshes for game
 	{
-		buffers, ok := gfx.load_mesh_from_file("assets/bunny.glb")
+		buffers, ok := gfx.load_mesh_from_file("assets/skeltest.glb")
 		assert(ok)
 		game.mesh_buffers = buffers
 
@@ -250,12 +275,12 @@ draw :: proc() {
 	// End shadow pass
 
 	// Clear
-	gfx.transition_image(cmd, gfx.get_draw_image(), .UNDEFINED, .GENERAL)
+	gfx.transition_image(cmd, &gfx.renderer().draw_image, .UNDEFINED, .GENERAL)
 	draw_background(cmd)
 
 	// Begin geometry pass
-	gfx.transition_image(cmd, gfx.get_draw_image(), .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)
-	gfx.transition_image(cmd, gfx.get_depth_image(), .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL)
+	gfx.transition_image(cmd, &gfx.renderer().draw_image, .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)
+	gfx.transition_image(cmd, &gfx.renderer().depth_image, .UNDEFINED, .DEPTH_ATTACHMENT_OPTIMAL)
 	gfx.transition_image(cmd, &game.shadow_depth_image, .DEPTH_ATTACHMENT_OPTIMAL, .DEPTH_READ_ONLY_OPTIMAL)
 	draw_geometry(cmd)
 	// End geometry pass
@@ -280,22 +305,15 @@ draw_shadow_map :: proc(cmd: vk.CommandBuffer) {
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, game.mesh_shadow_pipeline)
 	{
-		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, game.mesh_pipeline_layout, 0, 1, &game.mesh_descriptor_set, 0, nil)
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, game.mesh_pipeline_layout, 0, 1, &game.bindless_descriptor_set, 0, nil)
 		vk.CmdBindIndexBuffer(cmd, game.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
 		push_constants: GPUDrawPushConstants
-		push_constants.vertex_buffer.address = game.sphere_mesh_buffers.vertex_buffer_address
+		push_constants.vertex_buffer.a = game.sphere_mesh_buffers.vertex_buffer_address
 		push_constants.global_data_buffer = current_frame_game().global_uniform_address
 		push_constants.model_matrices = current_frame_game().model_matrices_address
 
-		vk.CmdPushConstants(
-			cmd,
-			game.mesh_pipeline_layout,
-			{.VERTEX, .FRAGMENT},
-			0,
-			size_of(GPUDrawPushConstants),
-			&push_constants,
-		)
+		vk.CmdPushConstants(cmd, game.mesh_pipeline_layout, {.VERTEX, .FRAGMENT}, 0, size_of(GPUDrawPushConstants), &push_constants)
 
 		vk.CmdDrawIndexed(cmd, game.sphere_mesh_buffers.index_count, u32(len_entities(Ball)), 0, 0, 0)
 	}
@@ -310,42 +328,35 @@ draw_background :: proc(cmd: vk.CommandBuffer) {
 
 	clear_range := gfx.init_image_subresource_range({.COLOR})
 
-	vk.CmdClearColorImage(cmd, gfx.get_draw_image().image, .GENERAL, &clear_color, 1, &clear_range)
+	vk.CmdClearColorImage(cmd, gfx.renderer().draw_image.image, .GENERAL, &clear_color, 1, &clear_range)
 }
 
 draw_geometry :: proc(cmd: vk.CommandBuffer) {
 	// begin a render pass  connected to our draw image
-	color_attachment := gfx.init_attachment_info(gfx.get_draw_image().image_view, nil, .GENERAL)
+	color_attachment := gfx.init_attachment_info(gfx.renderer().draw_image.image_view, nil, .GENERAL)
 	depth_attachment := gfx.init_attachment_info(
-		gfx.get_depth_image().image_view,
+		gfx.renderer().depth_image.image_view,
 		&{depthStencil = {depth = 1.0}},
 		.DEPTH_ATTACHMENT_OPTIMAL,
 	)
 
 	// Start render pass.
-	render_info := gfx.init_rendering_info(gfx.get_draw_extent(), &color_attachment, &depth_attachment)
+	render_info := gfx.init_rendering_info(gfx.renderer().draw_extent, &color_attachment, &depth_attachment)
 	vk.CmdBeginRendering(cmd, &render_info)
 
-	gfx.set_viewport_and_scissor(cmd, gfx.get_draw_extent())
+	gfx.set_viewport_and_scissor(cmd, gfx.renderer().draw_extent)
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, game.mesh_pipeline)
 	{
-		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, game.mesh_pipeline_layout, 0, 1, &game.mesh_descriptor_set, 0, nil)
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, game.mesh_pipeline_layout, 0, 1, &game.bindless_descriptor_set, 0, nil)
 		vk.CmdBindIndexBuffer(cmd, game.sphere_mesh_buffers.index_buffer.buffer, 0, .UINT32)
 
 		push_constants: GPUDrawPushConstants
-		push_constants.vertex_buffer.address = game.sphere_mesh_buffers.vertex_buffer_address
+		push_constants.vertex_buffer.a = game.sphere_mesh_buffers.vertex_buffer_address
 		push_constants.global_data_buffer = current_frame_game().global_uniform_address
 		push_constants.model_matrices = current_frame_game().model_matrices_address
 
-		vk.CmdPushConstants(
-			cmd,
-			game.mesh_pipeline_layout,
-			{.VERTEX, .FRAGMENT},
-			0,
-			size_of(GPUDrawPushConstants),
-			&push_constants,
-		)
+		vk.CmdPushConstants(cmd, game.mesh_pipeline_layout, {.VERTEX, .FRAGMENT}, 0, size_of(GPUDrawPushConstants), &push_constants)
 
 		vk.CmdDrawIndexed(cmd, game.sphere_mesh_buffers.index_count, u32(len_entities(Ball)), 0, 0, 0)
 	}
@@ -378,26 +389,18 @@ update_buffers :: proc() {
 
 		global_uniform_data.view_projection_matrix = projection_matrix * view_matrix
 
-		global_uniform_data.view_projection_i_matrix = linalg.matrix4_inverse(
-			global_uniform_data.view_projection_matrix,
-		)
+		global_uniform_data.view_projection_i_matrix = linalg.matrix4_inverse(global_uniform_data.view_projection_matrix)
 	}
 
 	// Global sun matrices
 	{
-		sun_view_matrix := linalg.matrix4_look_at_f32(
-			game.state.environment.sun_pos,
-			game.state.environment.sun_target,
-			{0.0, 1.0, 0.0},
-		)
+		sun_view_matrix := linalg.matrix4_look_at_f32(game.state.environment.sun_pos, game.state.environment.sun_target, {0.0, 1.0, 0.0})
 		sun_projection_matrix := gfx.matrix_ortho3d_z0_f32(-50, 50, -50, 50, 0.1, 500.0)
 		sun_projection_matrix[1][1] *= -1.0
 
 		global_uniform_data.sun_view_projection_matrix = sun_projection_matrix * sun_view_matrix
 
-		global_uniform_data.view_projection_i_matrix = linalg.matrix4_inverse(
-			global_uniform_data.view_projection_matrix,
-		)
+		global_uniform_data.view_projection_i_matrix = linalg.matrix4_inverse(global_uniform_data.view_projection_matrix)
 	}
 
 	global_uniform_data.sun_color = game.state.environment.sun_color
