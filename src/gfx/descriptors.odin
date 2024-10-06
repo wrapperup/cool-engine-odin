@@ -4,15 +4,15 @@ import "core:fmt"
 import vk "vendor:vulkan"
 
 DescriptorBinding :: struct {
-	binding: u32,
-	type:    vk.DescriptorType,
+	binding:          u32,
+	type:             vk.DescriptorType,
+	count: u32,
 }
 
 create_descriptor_set_layout :: proc(
-	stage_flags: vk.ShaderStageFlags = {},
 	bindings: [$N]DescriptorBinding,
-	descriptor_count: u32 = 1,
 	descriptor_set_layout_flags: vk.DescriptorSetLayoutCreateFlags = {},
+	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
 ) -> vk.DescriptorSetLayout {
 	descriptor_set_bindings := [N]vk.DescriptorSetLayoutBinding{}
 
@@ -21,7 +21,7 @@ create_descriptor_set_layout :: proc(
 			stageFlags      = stage_flags,
 			binding         = binding.binding,
 			descriptorType  = binding.type,
-			descriptorCount = descriptor_count,
+			descriptorCount = binding.count > 0 ? binding.count : 1, // Default to 1. 0 doesn't make any sense.
 		}
 	}
 
@@ -91,10 +91,7 @@ create_pool :: proc(
 	reserve(&pool_sizes, len(pool_ratios))
 
 	for ratio, i in pool_ratios {
-		append(
-			&pool_sizes,
-			vk.DescriptorPoolSize{type = ratio.type, descriptorCount = u32(f32(ratio.ratio) * f32(set_count))},
-		)
+		append(&pool_sizes, vk.DescriptorPoolSize{type = ratio.type, descriptorCount = u32(f32(ratio.ratio) * f32(set_count))})
 	}
 
 	pool_info := vk.DescriptorPoolCreateInfo {
@@ -135,11 +132,7 @@ destroy_pools :: proc(allocator: ^DescriptorAllocator, device: vk.Device) {
 	clear(&allocator.full_pools)
 }
 
-allocate_descriptor_set :: proc(
-	allocator: ^DescriptorAllocator,
-	device: vk.Device,
-	layout: vk.DescriptorSetLayout,
-) -> vk.DescriptorSet {
+allocate_descriptor_set :: proc(allocator: ^DescriptorAllocator, device: vk.Device, layout: vk.DescriptorSetLayout) -> vk.DescriptorSet {
 	pool := get_pool(allocator, device)
 	layout := layout
 
@@ -188,12 +181,14 @@ DescriptorWriteImage :: struct {
 	image_view:   vk.ImageView,
 	sampler:      vk.Sampler,
 	image_layout: vk.ImageLayout,
+	array_index:  u32,
 }
 
 DescriptorWriteBuffer :: struct {
-	binding: u32,
-	type:    vk.DescriptorType,
-	buffer:  vk.Buffer,
+	binding:     u32,
+	type:        vk.DescriptorType,
+	buffer:      vk.Buffer,
+	array_index: u32,
 }
 
 write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite) {
@@ -218,6 +213,7 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 				pNext           = nil,
 				dstBinding      = v.binding,
 				dstSet          = descriptor_set,
+				dstArrayElement = v.array_index,
 				descriptorCount = 1,
 				descriptorType  = v.type,
 				pImageInfo      = &image_infos[len(image_infos) - 1],
@@ -237,6 +233,7 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 				pNext           = nil,
 				dstBinding      = v.binding,
 				dstSet          = descriptor_set,
+				dstArrayElement = v.array_index,
 				descriptorCount = 1,
 				descriptorType  = v.type,
 				pBufferInfo     = &buffer_infos[len(buffer_infos) - 1],

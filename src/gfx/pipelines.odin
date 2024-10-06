@@ -206,19 +206,7 @@ pb_delete :: proc(builder: PipelineBuilder) {
 
 // ====================================================================
 
-create_pipeline_layout_only :: proc(
-	device: vk.Device,
-	descriptor_set_layout: ^vk.DescriptorSetLayout,
-) -> (
-	pipeline_layout: vk.PipelineLayout,
-) {
-	pipeline_layout_info := init_pipeline_layout_create_info()
-	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
-
-	return
-}
-
-create_pipeline_layout_push_constant :: proc(
+create_pipeline_layout :: proc(
 	device: vk.Device,
 	descriptor_set_layout: ^vk.DescriptorSetLayout,
 	$T: typeid,
@@ -240,11 +228,6 @@ create_pipeline_layout_push_constant :: proc(
 	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
 
 	return
-}
-
-create_pipeline_layout :: proc {
-	create_pipeline_layout_only,
-	create_pipeline_layout_push_constant,
 }
 
 PipelineCreationInfo :: struct {

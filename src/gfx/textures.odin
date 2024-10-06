@@ -9,9 +9,9 @@ import vma "deps:odin-vma"
 
 import vk "vendor:vulkan"
 
-load_image_from_file :: proc() -> AllocatedImage {
+load_image_from_file :: proc(filename: cstring) -> AllocatedImage {
 	ktx_texture: ^ktx.Texture2
-	ktx_result := ktx.Texture2_CreateFromNamedFile("assets/test.ktx", {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
+	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 
 	assert(ktx_result == .SUCCESS, "Failed to load image.")
 

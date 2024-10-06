@@ -45,20 +45,16 @@ destroy_buffer :: proc(allocated_buffer: ^AllocatedBuffer) {
 
 // Only purpose of this is to be captured during bindgen.
 GPUPointer :: struct($T: typeid) {
-	address: vk.DeviceAddress,
+	a: vk.DeviceAddress,
 }
 
-get_raw_buffer_device_address :: proc(buffer: AllocatedBuffer) -> vk.DeviceAddress {
+get_buffer_device_address :: proc(buffer: AllocatedBuffer) -> vk.DeviceAddress {
 	device_address_info := vk.BufferDeviceAddressInfo {
 		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
 		buffer = buffer.buffer,
 	}
 
 	return vk.GetBufferDeviceAddress(r_ctx.device, &device_address_info)
-}
-
-get_buffer_device_address :: proc(buffer: AllocatedBuffer, gpu_ptr: ^GPUPointer($T)) {
-	gpu_ptr.address = get_raw_buffer_device_address(buffer)
 }
 
 create_mesh_buffers :: proc(indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {
@@ -72,42 +68,40 @@ create_mesh_buffers :: proc(indices: []u32, vertices: []Vertex) -> GPUMeshBuffer
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 	)
-
-	device_address_info := vk.BufferDeviceAddressInfo {
-		sType  = .BUFFER_DEVICE_ADDRESS_INFO,
-		buffer = new_surface.vertex_buffer.buffer,
-	}
-	new_surface.vertex_buffer_address = vk.GetBufferDeviceAddress(r_ctx.device, &device_address_info)
+	new_surface.vertex_buffer_address = get_buffer_device_address(new_surface.vertex_buffer)
 
 	new_surface.index_buffer = create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
 
-	staging := create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY)
+	// Copy data into buffer via staging buffer
+	{
+		staging := create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY)
 
-	data := staging.info.pMappedData
+		data := staging.info.pMappedData
 
-	// TODO: Make these slices somehow? maybe make a helper method for staging buffers?
-	mem.copy(data, raw_data(vertices), int(vertex_buffer_size))
-	mem.copy(mem.ptr_offset((^u8)(data), vertex_buffer_size), raw_data(indices), int(index_buffer_size))
+		// TODO: Make these slices somehow? maybe make a helper method for staging buffers?
+		mem.copy(data, raw_data(vertices), int(vertex_buffer_size))
+		mem.copy(mem.ptr_offset((^u8)(data), vertex_buffer_size), raw_data(indices), int(index_buffer_size))
 
-	if cmd, ok := immediate_submit(); ok {
-		vertex_copy := vk.BufferCopy {
-			dstOffset = 0,
-			srcOffset = 0,
-			size      = vertex_buffer_size,
+		if cmd, ok := immediate_submit(); ok {
+			vertex_copy := vk.BufferCopy {
+				dstOffset = 0,
+				srcOffset = 0,
+				size      = vertex_buffer_size,
+			}
+
+			vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.vertex_buffer.buffer, 1, &vertex_copy)
+
+			index_copy := vk.BufferCopy {
+				dstOffset = 0,
+				srcOffset = vertex_buffer_size,
+				size      = index_buffer_size,
+			}
+
+			vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.index_buffer.buffer, 1, &index_copy)
 		}
 
-		vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.vertex_buffer.buffer, 1, &vertex_copy)
-
-		index_copy := vk.BufferCopy {
-			dstOffset = 0,
-			srcOffset = vertex_buffer_size,
-			size      = index_buffer_size,
-		}
-
-		vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.index_buffer.buffer, 1, &index_copy)
+		destroy_buffer(&staging)
 	}
-
-	destroy_buffer(&staging)
 
 	return new_surface
 }

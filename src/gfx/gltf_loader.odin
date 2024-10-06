@@ -6,7 +6,9 @@ import "core:math/linalg"
 import "core:math/linalg/hlsl"
 import "core:mem"
 import "core:reflect"
+
 import "vendor:cgltf"
+import vk "vendor:vulkan"
 
 Accessor_Buffer_Iterator :: struct($T: typeid) {
 	accessor: ^cgltf.accessor,
@@ -36,15 +38,7 @@ accessor_buf_iterator :: proc(iter: ^Accessor_Buffer_Iterator($T)) -> (T, int, b
 	return cast_value, idx, ok
 }
 
-try_cast_accessor_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-	type: cgltf.type,
-) -> (
-	value: T,
-	ok: bool,
-) {
+try_cast_accessor_type :: proc($T: typeid, value_ptr: rawptr, component_type: cgltf.component_type, type: cgltf.type) -> (value: T, ok: bool) {
 	when intrinsics.type_is_array(T) {
 		value, ok = try_cast_vec_type(T, value_ptr, component_type, type)
 	} else when intrinsics.type_is_integer(T) || intrinsics.type_is_unsigned(T) || intrinsics.type_is_float(T) {
@@ -73,14 +67,7 @@ try_cast_numeric_type :: proc(
 	}
 }
 
-try_cast_int_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_integer(T) {
+try_cast_int_type :: proc($T: typeid, value_ptr: rawptr, component_type: cgltf.component_type) -> (value: T, ok: bool) where intrinsics.type_is_integer(T) {
 	#partial switch component_type {
 	case .r_8:
 		value = cast(T)((cast(^i8)value_ptr)^)
@@ -95,14 +82,7 @@ try_cast_int_type :: proc(
 	return
 }
 
-try_cast_uint_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_unsigned(T) {
+try_cast_uint_type :: proc($T: typeid, value_ptr: rawptr, component_type: cgltf.component_type) -> (value: T, ok: bool) where intrinsics.type_is_unsigned(T) {
 
 	#partial switch component_type {
 	case .r_8u:
@@ -120,14 +100,7 @@ try_cast_uint_type :: proc(
 	return
 }
 
-try_cast_float_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_float(T) {
+try_cast_float_type :: proc($T: typeid, value_ptr: rawptr, component_type: cgltf.component_type) -> (value: T, ok: bool) where intrinsics.type_is_float(T) {
 	switch component_type {
 	case .r_32f:
 		value = cast(T)((cast(^f32)value_ptr)^)
@@ -140,18 +113,8 @@ try_cast_float_type :: proc(
 	return
 }
 
-try_cast_vec_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-	type: cgltf.type,
-) -> (
-	value: T,
-	ok: bool,
-) where len(T) >=
-	1,
-	len(T) <=
-	4,
+try_cast_vec_type :: proc($T: typeid, value_ptr: rawptr, component_type: cgltf.component_type, type: cgltf.type) -> (value: T, ok: bool) where len(T) >= 1,
+	len(T) <= 4,
 	intrinsics.type_is_array(T) {
 	// T = [N]U
 	U :: intrinsics.type_elem_type(T)
@@ -208,15 +171,15 @@ find_attribute :: proc(prim: ^cgltf.primitive, type: cgltf.attribute_type) -> (i
 }
 
 // Allocates two slices if successful. Make sure to free them when you're done.
-temp_parse_mesh_into_mesh_data :: proc(
-	data: ^cgltf.data,
-	mesh_idx: int,
-) -> (
-	indices: []u32,
-	vertices: []Vertex,
-	ok: bool,
-) {
-	primitive := &data.meshes[mesh_idx].primitives[0]
+temp_parse_mesh_into_mesh_data :: proc(data: ^cgltf.data, mesh_idx: int) -> (indices: []u32, vertices: []Vertex, ok: bool) {
+	mesh := &data.meshes[mesh_idx]
+	primitive := &mesh.primitives[0]
+
+	if (mesh_idx < len(data.skins)) {
+		skin := &data.skins[mesh_idx]
+		assert(skin != nil)
+		fmt.println(skin.joints)
+	}
 
 	pos_idx := find_attribute(primitive, .position) or_return
 	norm_idx, norm_ok := find_attribute(primitive, .normal)
@@ -288,4 +251,151 @@ load_mesh_from_file :: proc(path: cstring) -> (buffers: GPUMeshBuffers, ok: bool
 	ok = true
 
 	return
+}
+
+// Allocates two slices if successful. Make sure to free them when you're done.
+temp_parse_mesh_into_skel_mesh_data :: proc(data: ^cgltf.data, mesh_idx: int) -> (indices: []u32, vertices: []SkelVertex, ok: bool) {
+	mesh := &data.meshes[mesh_idx]
+	primitive := &mesh.primitives[0]
+
+	assert(mesh_idx < len(data.skins))
+
+	skin := &data.skins[mesh_idx]
+
+	assert(skin != nil)
+	fmt.println(skin.joints)
+
+	pos_idx := find_attribute(primitive, .position) or_return
+	norm_idx, norm_ok := find_attribute(primitive, .normal)
+	color_idx, color_ok := find_attribute(primitive, .color)
+	uv_idx, uv_ok := find_attribute(primitive, .texcoord)
+
+	// Required for skeletal mesh.
+	joints_idx := find_attribute(primitive, .joints) or_return
+	weights_idx := find_attribute(primitive, .weights) or_return
+
+	index_buffer_data := cast([^]u16)primitive.indices.buffer_view.data
+	indices = make([]u32, primitive.indices.count)
+
+	vertex_buffer_data := cast([^]u16)primitive.attributes[pos_idx].data.buffer_view.data
+	vertices = make([]SkelVertex, primitive.attributes[pos_idx].data.count)
+
+	i_it := make_accessor_buf_iterator(primitive.indices, u32)
+	for val, i in accessor_buf_iterator(&i_it) {
+		indices[i] = val
+	}
+
+	v_it := make_accessor_buf_iterator(primitive.attributes[pos_idx].data, hlsl.float3)
+	data := primitive.attributes[pos_idx].data
+	for val, i in accessor_buf_iterator(&v_it) {
+		vertices[i].position = val
+	}
+
+	if norm_ok {
+		data := primitive.attributes[norm_idx].data
+		n_it := make_accessor_buf_iterator(data, hlsl.float3)
+		for val, i in accessor_buf_iterator(&n_it) {
+			vertices[i].normal = val
+		}
+	}
+
+	if color_ok {
+		c_it := make_accessor_buf_iterator(primitive.attributes[color_idx].data, hlsl.float4)
+		for val, i in accessor_buf_iterator(&c_it) {
+			vertices[i].color = val
+		}
+	}
+	if uv_ok {
+		uv_it := make_accessor_buf_iterator(primitive.attributes[uv_idx].data, hlsl.float2)
+		for val, i in accessor_buf_iterator(&uv_it) {
+			vertices[i].uv_x = val.x
+			vertices[i].uv_y = val.y
+		}
+	}
+
+	joints_it := make_accessor_buf_iterator(primitive.attributes[joints_idx].data, [4]u8)
+	for val, i in accessor_buf_iterator(&joints_it) {
+		vertices[i].joints = val
+	}
+
+	weights_it := make_accessor_buf_iterator(primitive.attributes[weights_idx].data, [4]u8)
+	for val, i in accessor_buf_iterator(&weights_it) {
+		vertices[i].weights = val
+	}
+
+	ok = true
+
+	return indices, vertices, ok
+}
+
+load_skel_mesh_from_file :: proc(path: cstring) -> (buffers: GPUSkelMeshBuffers, ok: bool) {
+	opts := cgltf.options{}
+	data, result := cgltf.parse_file(opts, path)
+	if result != .success do return
+
+	result = cgltf.load_buffers(opts, data, path)
+	if result != .success do return
+
+	defer cgltf.free(data)
+
+	indices, vertices := temp_parse_mesh_into_skel_mesh_data(data, 0) or_return
+
+	defer delete(indices)
+	defer delete(vertices)
+
+	buffers = create_skel_mesh_buffers(indices, vertices)
+	buffers.index_count = u32(len(indices))
+
+	ok = true
+
+	return
+}
+
+create_skel_mesh_buffers :: proc(
+	indices: []u32,
+	vertices: []SkelVertex,
+	/*skel: []Skeleton*/
+) -> GPUSkelMeshBuffers {
+	vertex_buffer_size := vk.DeviceSize(size_of(SkelVertex) * len(vertices))
+	index_buffer_size := vk.DeviceSize(size_of(u32) * len(indices))
+
+	new_surface: GPUSkelMeshBuffers
+
+	new_surface.skel_vertex_buffer = create_buffer(vertex_buffer_size, {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
+	new_surface.skel_vertex_buffer_address = get_buffer_device_address(new_surface.skel_vertex_buffer)
+
+	new_surface.index_buffer = create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
+
+	// Copy data into buffer via staging buffer
+	{
+		staging := create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY)
+
+		data := staging.info.pMappedData
+
+		// TODO: Make these slices somehow? maybe make a helper method for staging buffers?
+		mem.copy(data, raw_data(vertices), int(vertex_buffer_size))
+		mem.copy(mem.ptr_offset((^u8)(data), vertex_buffer_size), raw_data(indices), int(index_buffer_size))
+
+		if cmd, ok := immediate_submit(); ok {
+			vertex_copy := vk.BufferCopy {
+				dstOffset = 0,
+				srcOffset = 0,
+				size      = vertex_buffer_size,
+			}
+
+			vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.skel_vertex_buffer.buffer, 1, &vertex_copy)
+
+			index_copy := vk.BufferCopy {
+				dstOffset = 0,
+				srcOffset = vertex_buffer_size,
+				size      = index_buffer_size,
+			}
+
+			vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.index_buffer.buffer, 1, &index_copy)
+		}
+
+		destroy_buffer(&staging)
+	}
+
+	return new_surface
 }

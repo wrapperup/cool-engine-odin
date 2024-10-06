@@ -132,16 +132,8 @@ current_frame :: proc() -> ^FrameData {
 	return &r_ctx.frames[current_frame_index()]
 }
 
-get_draw_image :: proc() -> ^AllocatedImage {
-	return &r_ctx.draw_image
-}
-
-get_depth_image :: proc() -> ^AllocatedImage {
-	return &r_ctx.depth_image
-}
-
-get_draw_extent :: proc() -> vk.Extent2D {
-	return r_ctx.draw_extent
+renderer :: proc() -> ^Renderer {
+	return &r_ctx
 }
 
 delete_swapchain_support_details :: proc(details: SwapChainSupportDetails) {
