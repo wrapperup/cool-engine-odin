@@ -2,10 +2,7 @@ package gfx
 
 import vk "vendor:vulkan"
 
-init_command_pool_create_info :: proc(
-	queue_family_index: u32,
-	flags: vk.CommandPoolCreateFlags,
-) -> vk.CommandPoolCreateInfo {
+init_command_pool_create_info :: proc(queue_family_index: u32, flags: vk.CommandPoolCreateFlags) -> vk.CommandPoolCreateInfo {
 	info := vk.CommandPoolCreateInfo{}
 	info.sType = .COMMAND_POOL_CREATE_INFO
 	info.pNext = nil
@@ -67,10 +64,7 @@ init_image_subresource_range :: proc(aspect_mask: vk.ImageAspectFlags) -> vk.Ima
 	return sub_image
 }
 
-init_semaphore_submit_info :: proc(
-	stage_mask: vk.PipelineStageFlags2,
-	semaphore: vk.Semaphore,
-) -> vk.SemaphoreSubmitInfo {
+init_semaphore_submit_info :: proc(stage_mask: vk.PipelineStageFlags2, semaphore: vk.Semaphore) -> vk.SemaphoreSubmitInfo {
 	info := vk.SemaphoreSubmitInfo {
 		sType       = .SEMAPHORE_SUBMIT_INFO,
 		pNext       = nil,
@@ -118,10 +112,11 @@ init_image_create_info :: proc(
 	usage_flags: vk.ImageUsageFlags,
 	extent: vk.Extent3D,
 	msaa_samples: vk.SampleCountFlag = ._1,
+	image_type: vk.ImageType = .D2,
 ) -> vk.ImageCreateInfo {
 	info := vk.ImageCreateInfo {
 		sType       = .IMAGE_CREATE_INFO,
-		imageType   = .D2,
+		imageType   = image_type,
 		format      = format,
 		extent      = extent,
 		mipLevels   = 1,
@@ -138,19 +133,14 @@ init_imageview_create_info :: proc(
 	format: vk.Format,
 	image: vk.Image,
 	aspect_flags: vk.ImageAspectFlags,
+	view_type: vk.ImageViewType = .D2,
 ) -> vk.ImageViewCreateInfo {
 	info := vk.ImageViewCreateInfo {
 		sType = .IMAGE_VIEW_CREATE_INFO,
-		viewType = .D2,
+		viewType = view_type,
 		image = image,
 		format = format,
-		subresourceRange = {
-			baseMipLevel = 0,
-			levelCount = 1,
-			baseArrayLayer = 0,
-			layerCount = 1,
-			aspectMask = aspect_flags,
-		},
+		subresourceRange = {baseMipLevel = 0, levelCount = 1, baseArrayLayer = 0, layerCount = 1, aspectMask = aspect_flags},
 	}
 
 	return info
@@ -186,14 +176,19 @@ init_attachment_info :: proc(
 	view: vk.ImageView,
 	clear: ^vk.ClearValue,
 	layout: vk.ImageLayout,
+	resolve_image_view: vk.ImageView = 0,
+	resolve_image_layout: vk.ImageLayout = .UNDEFINED,
 ) -> vk.RenderingAttachmentInfo {
 	attachment := vk.RenderingAttachmentInfo {
-		sType       = .RENDERING_ATTACHMENT_INFO,
-		imageView   = view,
-		imageLayout = layout,
-		loadOp      = clear != nil ? .CLEAR : .LOAD,
-		storeOp     = .STORE,
-		clearValue  = clear != nil ? clear^ : {},
+		sType              = .RENDERING_ATTACHMENT_INFO,
+		imageView          = view,
+		imageLayout        = layout,
+		loadOp             = clear != nil ? .CLEAR : .LOAD,
+		storeOp            = .STORE,
+		clearValue         = clear != nil ? clear^ : {},
+		resolveMode        = resolve_image_view == 0 ? {} : {.AVERAGE},
+		resolveImageView   = resolve_image_view,
+		resolveImageLayout = resolve_image_layout,
 	}
 
 	return attachment

@@ -6,6 +6,19 @@ struct DrawPushConstants {
   float4x4 *model_matrices;
 };
 
+struct SkelVertexAttribute {
+  uint8_t joints[4];
+  float weights[4];
+};
+
+struct SkelDrawPushConstants {
+  GlobalData *global_data_buffer;
+  Vertex *vertex_buffer;
+  float4x4 *model_matrices;
+  float4x4 *joint_matrices;
+  SkelVertexAttribute *attrs;
+};
+
 struct GlobalData {
   float4x4 view_projection_matrix;
   float4x4 view_projection_i_matrix;
@@ -27,16 +40,6 @@ struct Vertex {
   float3 normal;
   float uv_y;
   float4 color;
-};
-
-struct SkelVertex {
-  float3 position;
-  float uv_x;
-  float3 normal;
-  float uv_y;
-  float4 color;
-  uint8_t joints[4];
-  uint4 weights;
 };
 
 struct VertexInput {
@@ -64,7 +67,7 @@ struct PSOutput {
 };
 
 [vk_push_constant]
-ConstantBuffer<DrawPushConstants> pc;
+ConstantBuffer<SkelDrawPushConstants> pc;
 
 static const float4x4 biasMat = {
   0.5, 0.0, 0.0, 0.5, //
@@ -199,15 +202,24 @@ float3 specular(float3 frag_pos, float spec_strength, float3 light_dir,
 [shader("vertex")]
 V2P vertex_main(VertexInput input) {
   let vertex = pc.vertex_buffer[input.vertex_index];
+  let attrs = pc.attrs[input.vertex_index];
+
+  var skin_mat = attrs.weights[0] * pc.joint_matrices[attrs.joints[0]] +
+                 attrs.weights[1] * pc.joint_matrices[attrs.joints[1]] +
+                 attrs.weights[2] * pc.joint_matrices[attrs.joints[2]] +
+                 attrs.weights[3] * pc.joint_matrices[attrs.joints[3]];
+
+  let vert_pos = mul(skin_mat, float4(vertex.position, 1.0));
+  let vert_norm = mul(skin_mat, float4(vertex.normal, 0.0));
+  //let vert_pos = float4(vertex.position, 1.0);
 
   let view_projection_matrix = pc.global_data_buffer.view_projection_matrix;
 
   V2P output;
-  output.pos =
-      mul(view_projection_matrix, mul(pc.model_matrices[input.instance_id],
-                                      float4(vertex.position, 1.0)));
+  output.pos = mul(view_projection_matrix,
+                   mul(pc.model_matrices[input.instance_id], vert_pos));
   output.normal =
-      mul(pc.model_matrices[input.instance_id], float4(vertex.normal, 0.0)).xyz;
+      mul(pc.model_matrices[input.instance_id], vert_norm).xyz;
   output.uv = float2(vertex.uv_x, vertex.uv_y);
   output.frag_pos = vertex.position;
 
@@ -248,9 +260,9 @@ V2P vertex_main(VertexInput input) {
 PSOutput fragment_main(V2P input) {
   PSOutput output;
   let coord = float4(input.pos.x / 1700, input.pos.y / 900, 0.0, 1.0);
-  // let shadow = shadow_calc(input.sun_space_pos);
-  let shadow = filter_pcf(input.pos.xy, input.sun_space_pos);
+  // let shadow = filter_pcf(input.pos.xy, input.sun_space_pos);
   let normal = normalize(input.normal);
+  let shadow = 1.0;
 
   output.frag_color =
       float4(lerp(input.color * pc.global_data_buffer.sun_color,
@@ -262,7 +274,7 @@ PSOutput fragment_main(V2P input) {
 
   let light_dir = normalize(light_pos - input.frag_pos);
 
-  let specular_val = specular(input.frag_pos, 0.25 * shadow, light_dir, 64.f,
+  let specular_val = specular(input.frag_pos, shadow, light_dir, 64.f,
                               1.0, view_pos, normal);
 
   output.frag_color += float4(specular_val, 1.0);

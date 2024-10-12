@@ -2,8 +2,8 @@ package gfx
 
 import "base:runtime"
 
-import "core:fmt"
 import "core:c/libc"
+import "core:fmt"
 import "core:os"
 import "core:reflect"
 import "core:strings"
@@ -54,12 +54,7 @@ query_swapchain_support :: proc(device: vk.PhysicalDevice) -> SwapChainSupportDe
 		vk.GetPhysicalDeviceSurfacePresentModesKHR(device, r_ctx.surface, &present_mode_count, nil)
 
 		present_modes := make([]vk.PresentModeKHR, present_mode_count)
-		vk.GetPhysicalDeviceSurfacePresentModesKHR(
-			device,
-			r_ctx.surface,
-			&present_mode_count,
-			raw_data(present_modes),
-		)
+		vk.GetPhysicalDeviceSurfacePresentModesKHR(device, r_ctx.surface, &present_mode_count, raw_data(present_modes))
 
 		details.present_modes = present_modes
 	}
@@ -91,16 +86,8 @@ choose_swap_extent :: proc(capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Exten
 
 		actual_extent := vk.Extent2D{u32(width), u32(height)}
 
-		actual_extent.width = clamp(
-			actual_extent.width,
-			capabilities.minImageExtent.width,
-			capabilities.maxImageExtent.width,
-		)
-		actual_extent.height = clamp(
-			actual_extent.height,
-			capabilities.minImageExtent.height,
-			capabilities.maxImageExtent.height,
-		)
+		actual_extent.width = clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width)
+		actual_extent.height = clamp(actual_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
 
 		return actual_extent
 	}
@@ -457,29 +444,6 @@ init_commands :: proc() {
 	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.imm_command_pool)
 }
 
-create_image_views :: proc() {
-	r_ctx.swapchain_image_views = make([]vk.ImageView, len(r_ctx.swapchain_images))
-
-	for i in 0 ..< len(r_ctx.swapchain_images) {
-		create_info := vk.ImageViewCreateInfo {
-			sType = .IMAGE_VIEW_CREATE_INFO,
-			image = r_ctx.swapchain_images[i],
-			viewType = .D2,
-			format = r_ctx.swapchain_image_format,
-			components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
-			subresourceRange = {
-				aspectMask = {.COLOR},
-				baseMipLevel = 0,
-				levelCount = 1,
-				baseArrayLayer = 0,
-				layerCount = 1,
-			},
-		}
-
-		vk_check(vk.CreateImageView(r_ctx.device, &create_info, nil, &r_ctx.swapchain_image_views[i]))
-	}
-}
-
 create_swapchain :: proc() {
 	swapchain_support := query_swapchain_support(r_ctx.physical_device)
 	defer delete_swapchain_support_details(swapchain_support)
@@ -494,26 +458,26 @@ create_swapchain :: proc() {
 		image_count = swapchain_support.capabilities.maxImageCount
 	}
 
-	create_info: vk.SwapchainCreateInfoKHR
-	create_info.sType = .SWAPCHAIN_CREATE_INFO_KHR
-	create_info.surface = r_ctx.surface
-	create_info.minImageCount = image_count
-	create_info.imageFormat = surface_format.format
-	create_info.imageColorSpace = surface_format.colorSpace
-	create_info.imageExtent = extent
-	create_info.imageArrayLayers = 1
-	create_info.imageUsage = {.COLOR_ATTACHMENT, .TRANSFER_DST}
+	create_info := vk.SwapchainCreateInfoKHR {
+		sType                 = .SWAPCHAIN_CREATE_INFO_KHR,
+		surface               = r_ctx.surface,
+		minImageCount         = image_count,
+		imageFormat           = surface_format.format,
+		imageColorSpace       = surface_format.colorSpace,
+		imageExtent           = extent,
+		imageArrayLayers      = 1,
+		imageUsage            = {.COLOR_ATTACHMENT, .TRANSFER_DST},
 
-	// TODO: Support multiple queues?
-	create_info.imageSharingMode = .EXCLUSIVE
-	create_info.queueFamilyIndexCount = 0 // Optional
-	create_info.pQueueFamilyIndices = nil // Optional
-
-	create_info.preTransform = swapchain_support.capabilities.currentTransform
-	create_info.compositeAlpha = {.OPAQUE}
-	create_info.presentMode = present_mode
-	create_info.clipped = true
-	create_info.oldSwapchain = {}
+		// TODO: Support multiple queues?
+		imageSharingMode      = .EXCLUSIVE,
+		queueFamilyIndexCount = 0, // Optional
+		pQueueFamilyIndices   = nil, // Optional
+		preTransform          = swapchain_support.capabilities.currentTransform,
+		compositeAlpha        = {.OPAQUE},
+		presentMode           = present_mode,
+		clipped               = true,
+		oldSwapchain          = {},
+	}
 
 	vk_check(vk.CreateSwapchainKHR(r_ctx.device, &create_info, nil, &r_ctx.swapchain))
 
@@ -524,60 +488,49 @@ create_swapchain :: proc() {
 	r_ctx.swapchain_image_format = surface_format.format
 	r_ctx.swapchain_extent = extent
 
+	r_ctx.swapchain_image_views = make([]vk.ImageView, len(r_ctx.swapchain_images))
+
+	for i in 0 ..< len(r_ctx.swapchain_images) {
+		create_info := vk.ImageViewCreateInfo {
+			sType = .IMAGE_VIEW_CREATE_INFO,
+			image = r_ctx.swapchain_images[i],
+			viewType = .D2,
+			format = r_ctx.swapchain_image_format,
+			components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
+			subresourceRange = {aspectMask = {.COLOR}, baseMipLevel = 0, levelCount = 1, baseArrayLayer = 0, layerCount = 1},
+		}
+
+		vk_check(vk.CreateImageView(r_ctx.device, &create_info, nil, &r_ctx.swapchain_image_views[i]))
+	}
+}
+
+create_draw_images :: proc(msaa_samples: vk.SampleCountFlag) {
+	r_ctx.msaa_samples = msaa_samples
+
+	draw_image_format : vk.Format = .R16G16B16A16_SFLOAT
 	draw_image_extent := vk.Extent3D{r_ctx.window_extent.width, r_ctx.window_extent.height, 1}
-
-	r_ctx.draw_image.format = .R16G16B16A16_SFLOAT
-	r_ctx.draw_image.extent = draw_image_extent
-
 	draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
 
-	rimg_info := init_image_create_info(r_ctx.draw_image.format, draw_image_usages, draw_image_extent, ._1)
+	r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples)
+	create_image_view(&r_ctx.draw_image, {.COLOR})
 
-	rimg_alloc_info := vma.AllocationCreateInfo {
-		usage         = .GPU_ONLY,
-		requiredFlags = {.DEVICE_LOCAL},
-	}
+	// Used for MSAA resolution
+	r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, ._1)
+	create_image_view(&r_ctx.resolve_image, {.COLOR})
 
-	vma.CreateImage(
-		r_ctx.allocator,
-		&rimg_info,
-		&rimg_alloc_info,
-		&r_ctx.draw_image.image,
-		&r_ctx.draw_image.allocation,
-		nil,
-	)
-
-	rview_info := init_imageview_create_info(r_ctx.draw_image.format, r_ctx.draw_image.image, {.COLOR})
-
-	vk_check(vk.CreateImageView(r_ctx.device, &rview_info, nil, &r_ctx.draw_image.image_view))
-
-	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.draw_image.image_view)
-	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
-
-	r_ctx.depth_image.format = .D32_SFLOAT
-	r_ctx.depth_image.extent = draw_image_extent
-	depth_image_usages := vk.ImageUsageFlags{.DEPTH_STENCIL_ATTACHMENT}
-
-	dimg_info := init_image_create_info(r_ctx.depth_image.format, depth_image_usages, draw_image_extent, ._1)
-
-	//allocate and create the image
-	vma.CreateImage(
-		r_ctx.allocator,
-		&dimg_info,
-		&rimg_alloc_info,
-		&r_ctx.depth_image.image,
-		&r_ctx.depth_image.allocation,
-		nil,
-	)
-
-	//build a image-view for the draw image to use for rendering
-	dview_info := init_imageview_create_info(r_ctx.depth_image.format, r_ctx.depth_image.image, {.DEPTH})
-
-	vk_check(vk.CreateImageView(r_ctx.device, &dview_info, nil, &r_ctx.depth_image.image_view))
+	r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples)
+	create_image_view(&r_ctx.depth_image, {.DEPTH})
 
 	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.depth_image.image_view)
 	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.depth_image.image, r_ctx.depth_image.allocation)
+
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.resolve_image.image_view)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.resolve_image.image, r_ctx.resolve_image.allocation)
+
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.draw_image.image_view)
+	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
 }
+
 
 init_sync_structures :: proc() {
 	fence_create_info := init_fence_create_info({.SIGNALED})

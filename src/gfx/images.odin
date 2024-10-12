@@ -27,16 +27,14 @@ create_image :: proc(
 		flags         = alloc_flags,
 	}
 
-	img_info := init_image_create_info(format, image_usage_flags, extent, ._1)
+	img_info := init_image_create_info(format, image_usage_flags, extent, sample_count)
 
 	new_image := AllocatedImage {
 		extent = extent,
 		format = format,
 	}
 
-	vk_check(
-		vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil),
-	)
+	vk_check(vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil))
 
 	return new_image
 }
@@ -60,21 +58,7 @@ create_sampler :: proc(
 	return sampler
 }
 
-transition_image_allocated_image :: proc(
-	cmd: vk.CommandBuffer,
-	allocated_image: ^AllocatedImage,
-	current_layout: vk.ImageLayout,
-	new_layout: vk.ImageLayout,
-) {
-	transition_image_vkimage(cmd, allocated_image.image, current_layout, new_layout)
-}
-
-transition_image_vkimage :: proc(
-	cmd: vk.CommandBuffer,
-	image: vk.Image,
-	current_layout: vk.ImageLayout,
-	new_layout: vk.ImageLayout,
-) {
+transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image, current_layout: vk.ImageLayout, new_layout: vk.ImageLayout) {
 	image_barrier := vk.ImageMemoryBarrier2 {
 		sType         = .IMAGE_MEMORY_BARRIER_2,
 		pNext         = nil,
@@ -102,20 +86,7 @@ transition_image_vkimage :: proc(
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }
 
-// Implements a simplistic pipeline barrier for image resources.
-// It's recommended instead to use a render graph.
-transition_image :: proc {
-	transition_image_allocated_image,
-	transition_image_vkimage,
-}
-
-copy_image_to_image :: proc(
-	cmd: vk.CommandBuffer,
-	source: vk.Image,
-	destination: vk.Image,
-	src_size: vk.Extent2D,
-	dst_size: vk.Extent2D,
-) {
+copy_image_to_image :: proc(cmd: vk.CommandBuffer, source: vk.Image, destination: vk.Image, src_size: vk.Extent2D, dst_size: vk.Extent2D) {
 	blit_region := vk.ImageBlit2 {
 		sType = .IMAGE_BLIT_2,
 		pNext = nil,

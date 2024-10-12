@@ -206,7 +206,17 @@ pb_delete :: proc(builder: PipelineBuilder) {
 
 // ====================================================================
 
-create_pipeline_layout :: proc(
+create_pipeline_layout :: proc(device: vk.Device, descriptor_set_layout: ^vk.DescriptorSetLayout) -> (pipeline_layout: vk.PipelineLayout) {
+	pipeline_layout_info := init_pipeline_layout_create_info()
+	pipeline_layout_info.pSetLayouts = descriptor_set_layout
+	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
+
+	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
+
+	return
+}
+
+create_pipeline_layout_pc :: proc(
 	device: vk.Device,
 	descriptor_set_layout: ^vk.DescriptorSetLayout,
 	$T: typeid,
@@ -223,14 +233,14 @@ create_pipeline_layout :: proc(
 	pipeline_layout_info.pPushConstantRanges = &buffer_range
 	pipeline_layout_info.pushConstantRangeCount = 1
 	pipeline_layout_info.pSetLayouts = descriptor_set_layout
-	pipeline_layout_info.setLayoutCount = 1
+	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
 
 	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
 
 	return
 }
 
-PipelineCreationInfo :: struct {
+GraphicsPipelineCreationInfo :: struct {
 	pipeline_layout:       vk.PipelineLayout,
 	shader:                vk.ShaderModule,
 	vertex_entry:          cstring,
@@ -248,7 +258,7 @@ PipelineCreationInfo :: struct {
 	color_format:          vk.Format,
 }
 
-create_graphics_pipeline :: proc(create_info: PipelineCreationInfo) -> vk.Pipeline {
+create_graphics_pipeline :: proc(create_info: GraphicsPipelineCreationInfo) -> vk.Pipeline {
 	pipeline_builder := pb_init()
 	defer pb_delete(pipeline_builder)
 
@@ -276,6 +286,26 @@ create_graphics_pipeline :: proc(create_info: PipelineCreationInfo) -> vk.Pipeli
 	}
 
 	return pb_build_pipeline(&pipeline_builder)
+}
+
+create_compute_pipelines :: proc(pipeline_layout: vk.PipelineLayout, shader: vk.ShaderModule, entry: cstring = "main") -> vk.Pipeline {
+	stage_info := vk.PipelineShaderStageCreateInfo {
+		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage  = {.COMPUTE},
+		module = shader,
+		pName  = entry,
+	}
+
+	compute_pipeline_create_info := vk.ComputePipelineCreateInfo {
+		sType  = .COMPUTE_PIPELINE_CREATE_INFO,
+		layout = pipeline_layout,
+		stage  = stage_info,
+	}
+
+	pipeline: vk.Pipeline
+	vk_check(vk.CreateComputePipelines(r_ctx.device, 0, 1, &compute_pipeline_create_info, nil, &pipeline))
+
+	return pipeline
 }
 
 // ====================================================================

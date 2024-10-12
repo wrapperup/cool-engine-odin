@@ -6,7 +6,7 @@ import vk "vendor:vulkan"
 REQUIRED_FEATURES := vk.PhysicalDeviceFeatures2 {
 	sType = .PHYSICAL_DEVICE_FEATURES_2,
 	pNext = &REQUIRED_VK_11_FEATURES,
-	features = {shaderImageGatherExtended = true, multiDrawIndirect = true, geometryShader = true},
+	features = {shaderStorageImageMultisample = true, shaderImageGatherExtended = true, multiDrawIndirect = true, geometryShader = true},
 }
 
 REQUIRED_VK_11_FEATURES := vk.PhysicalDeviceVulkan11Features {
@@ -17,12 +17,13 @@ REQUIRED_VK_11_FEATURES := vk.PhysicalDeviceVulkan11Features {
 }
 
 REQUIRED_VK_12_FEATURES := vk.PhysicalDeviceVulkan12Features {
-	sType                = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-	pNext                = &REQUIRED_VK_13_FEATURES,
-	bufferDeviceAddress  = true,
-	descriptorIndexing   = true,
-	storagePushConstant8 = true,
-	shaderInt8           = true,
+	sType                  = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+	pNext                  = &REQUIRED_VK_13_FEATURES,
+	bufferDeviceAddress    = true,
+	descriptorIndexing     = true,
+	storagePushConstant8   = true,
+	shaderInt8             = true,
+	runtimeDescriptorArray = true,
 }
 
 REQUIRED_VK_13_FEATURES := vk.PhysicalDeviceVulkan13Features {

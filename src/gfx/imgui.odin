@@ -59,11 +59,6 @@ init_imgui :: proc() {
 		}, &r_ctx.instance)
 
 	im_vk.Init(&init_info, 0)
-
-	// execute a gpu command to upload imgui font textures
-	// newer version of imgui automatically creates a command buffer,
-	// and destroys the upload data, so we don't actually need to do anything else.
-	im_vk.CreateFontsTexture()
 }
 
 render_imgui :: proc() {

@@ -4,8 +4,6 @@ import "base:intrinsics"
 import "core:/math/linalg/hlsl"
 import "core:math/linalg"
 
-import "deps:jolt"
-
 GameState :: struct {
 	environment: Environment,
 	camera_id:   TypedEntityId(Camera),
@@ -23,12 +21,6 @@ Camera :: struct {
 		SceneDepth,
 		SunShadowDepth,
 	},
-}
-
-Ball :: struct {
-	using entity: ^Entity,
-	body:         ^jolt.BodyInterface,
-	body_id:      jolt.BodyID,
 }
 
 Environment :: struct {

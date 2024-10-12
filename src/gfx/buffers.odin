@@ -11,6 +11,7 @@ create_buffer :: proc(
 	usage: vk.BufferUsageFlags,
 	memory_usage: vma.MemoryUsage,
 	alloc_flags: vma.AllocationCreateFlags = {.MAPPED},
+	loc := #caller_location,
 ) -> AllocatedBuffer {
 	buffer_info := vk.BufferCreateInfo {
 		sType = .BUFFER_CREATE_INFO,
@@ -26,14 +27,8 @@ create_buffer :: proc(
 	new_buffer: AllocatedBuffer
 
 	vk_check(
-		vma.CreateBuffer(
-			r_ctx.allocator,
-			&buffer_info,
-			&vma_alloc_info,
-			&new_buffer.buffer,
-			&new_buffer.allocation,
-			&new_buffer.info,
-		),
+		vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info),
+		loc,
 	)
 
 	return new_buffer
@@ -58,17 +53,16 @@ get_buffer_device_address :: proc(buffer: AllocatedBuffer) -> vk.DeviceAddress {
 }
 
 create_mesh_buffers :: proc(indices: []u32, vertices: []Vertex) -> GPUMeshBuffers {
+	assert(len(indices) > 0)
+	assert(len(vertices) > 0)
 	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * len(vertices))
 	index_buffer_size := vk.DeviceSize(size_of(u32) * len(indices))
 
 	new_surface: GPUMeshBuffers
+	new_surface.index_count = u32(len(indices))
 
-	new_surface.vertex_buffer = create_buffer(
-		vertex_buffer_size,
-		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
-		.GPU_ONLY,
-	)
-	new_surface.vertex_buffer_address = get_buffer_device_address(new_surface.vertex_buffer)
+	new_surface.vertex_buffer = create_buffer(vertex_buffer_size, {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
+	new_surface.vertex_address = get_buffer_device_address(new_surface.vertex_buffer)
 
 	new_surface.index_buffer = create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
 

@@ -62,8 +62,10 @@ Renderer :: struct {
 
 	// Draw resources
 	draw_image:                  AllocatedImage,
+	resolve_image:               AllocatedImage,
 	depth_image:                 AllocatedImage,
 	draw_extent:                 vk.Extent2D,
+	msaa_samples:                vk.SampleCountFlag,
 
 	// Descriptors
 	global_descriptor_allocator: DescriptorAllocator,
@@ -132,6 +134,14 @@ current_frame :: proc() -> ^FrameData {
 	return &r_ctx.frames[current_frame_index()]
 }
 
+msaa_samples :: proc() -> vk.SampleCountFlag {
+	return r_ctx.msaa_samples
+}
+
+msaa_enabled :: proc() -> bool {
+	return r_ctx.msaa_samples > ._1
+}
+
 renderer :: proc() -> ^Renderer {
 	return &r_ctx
 }
@@ -143,11 +153,12 @@ delete_swapchain_support_details :: proc(details: SwapChainSupportDetails) {
 
 init_global_descriptor_allocator :: proc() {
 	//create a descriptor pool that will hold 10 sets with 1 image each
-	sizes: []PoolSizeRatio = {{.COMBINED_IMAGE_SAMPLER, 1}}
+	ratio: f32 = 1.0/3.0
+	sizes: []PoolSizeRatio = {{.SAMPLER, ratio}, {.SAMPLED_IMAGE, ratio}, {.STORAGE_IMAGE, ratio}}
 	init_descriptor_allocator(&r_ctx.global_descriptor_allocator, r_ctx.device, 10, sizes, {.UPDATE_AFTER_BIND})
 }
 
-init_vulkan :: proc() -> bool {
+init_vulkan :: proc(config: InitConfig) -> bool {
 	// Begin bootstrapping
 	create_instance() or_return
 	setup_debug_messenger()
@@ -160,7 +171,7 @@ init_vulkan :: proc() -> bool {
 	init_vma()
 
 	create_swapchain()
-	create_image_views()
+	create_draw_images(config.msaa_samples)
 
 	init_commands()
 	init_sync_structures()
@@ -282,7 +293,7 @@ is_shaders_updated :: proc() -> bool {
 }
 
 // Called by the user before they start drawing to the screen.
-begin_draw :: proc() -> vk.CommandBuffer {
+begin_command_buffer :: proc() -> vk.CommandBuffer {
 	render_imgui()
 
 	vk_check(vk.WaitForFences(r_ctx.device, 1, &current_frame().render_fence, true, 1_000_000_000))
@@ -321,39 +332,22 @@ begin_draw :: proc() -> vk.CommandBuffer {
 	return cmd
 }
 
-// Called by the user when they end drawing to the screen.
-end_draw :: proc(cmd: vk.CommandBuffer) {
-	// Prepare swapchain image
-	transition_image(cmd, r_ctx.draw_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL)
+copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_size: vk.Extent2D) {
 	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
-	// execute a copy from the draw image into the swapchain
-	copy_image_to_image(
-		cmd,
-		r_ctx.draw_image.image,
-		r_ctx.swapchain_images[r_ctx.swapchain_image_index],
-		r_ctx.draw_extent,
-		r_ctx.swapchain_extent,
-	)
+	copy_image_to_image(cmd, source, r_ctx.swapchain_images[r_ctx.swapchain_image_index], src_size, r_ctx.swapchain_extent)
+}
 
+// Called by the user when they end drawing to the screen.
+submit :: proc(cmd: vk.CommandBuffer) {
 	// set swapchain image layout to Attachment Optimal so we can draw it
-	transition_image(
-		cmd,
-		r_ctx.swapchain_images[r_ctx.swapchain_image_index],
-		.TRANSFER_DST_OPTIMAL,
-		.COLOR_ATTACHMENT_OPTIMAL,
-	)
+	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .TRANSFER_DST_OPTIMAL, .COLOR_ATTACHMENT_OPTIMAL)
 
 	//draw imgui into the swapchain image
 	draw_imgui(cmd, r_ctx.swapchain_image_views[r_ctx.swapchain_image_index])
 
 	// set swapchain image layout to Present so we can show it on the screen
-	transition_image(
-		cmd,
-		r_ctx.swapchain_images[r_ctx.swapchain_image_index],
-		.COLOR_ATTACHMENT_OPTIMAL,
-		.PRESENT_SRC_KHR,
-	)
+	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .COLOR_ATTACHMENT_OPTIMAL, .PRESENT_SRC_KHR)
 
 	//finalize the command buffer (we can no longer add commands, but it can now be executed)
 	vk_check(vk.EndCommandBuffer(cmd))
@@ -364,6 +358,8 @@ end_draw :: proc(cmd: vk.CommandBuffer) {
 	signal_info := init_semaphore_submit_info({.ALL_GRAPHICS}, current_frame().render_semaphore)
 
 	submit := init_submit_info(&cmd_info, &signal_info, &wait_info)
+
+	x := r_ctx.swapchain_image_index
 
 	vk_check(vk.QueueSubmit2(r_ctx.graphics_queue, 1, &submit, current_frame().render_fence))
 
@@ -381,13 +377,17 @@ end_draw :: proc(cmd: vk.CommandBuffer) {
 	r_ctx.frame_number += 1
 }
 
-init :: proc(window: glfw.WindowHandle) -> bool {
+InitConfig :: struct {
+	msaa_samples: vk.SampleCountFlag,
+}
+
+init :: proc(window: glfw.WindowHandle, config := InitConfig{}) -> bool {
 	r_ctx.window = window
 	width, height := glfw.GetWindowSize(window)
 
 	r_ctx.window_extent = {u32(width), u32(height)}
 
-	init_vulkan() or_return
+	init_vulkan(config) or_return
 
 	return true
 }
