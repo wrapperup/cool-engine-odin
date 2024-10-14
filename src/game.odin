@@ -8,19 +8,29 @@ import vk "vendor:vulkan"
 
 import gfx "gfx"
 
+
+NUM_FRAME_AVG_COUNT :: 10
+
+FrameTimeStats :: enum {
+	Total,
+	GameState,
+	Imgui,
+	Physics,
+	Render,
+}
+
 Game :: struct {
 	window:                     glfw.WindowHandle,
+	window_extent:              [2]u32,
 	frame_data:                 [gfx.FRAME_OVERLAP]GameFrameData,
 	state:                      GameState,
 
 	// Stats
-	frame_time_total:           f32,
-	frame_time_game_state:      f32,
-	frame_time_physics:         f32,
-	frame_time_render:          f32,
+	frame_times:                [len(FrameTimeStats)]f32,
+	frame_times_smooth:         [len(FrameTimeStats)]f32,
+	frame_times_start:          [len(FrameTimeStats)]time.Tick,
 	delta_time:                 f64,
 	live_time:                  f64,
-	start_time:                 time.Tick,
 
 	// Bindless textures, etc
 	bindless_descriptor_layout: vk.DescriptorSetLayout,
@@ -52,6 +62,19 @@ Game :: struct {
 	// Tonemapper pipelines
 	tonemapper_pipeline:        vk.Pipeline,
 	tonemapper_pipeline_layout: vk.PipelineLayout,
+}
+
+@(deferred_in = end_scope_stat_time)
+scope_stat_time :: proc(stat_type: FrameTimeStats) {
+	start_scope_stat_time(stat_type)
+}
+
+start_scope_stat_time :: proc(stat_type: FrameTimeStats) {
+	game.frame_times_start[stat_type] = time.tick_now()
+}
+
+end_scope_stat_time :: proc(stat_type: FrameTimeStats) {
+	game.frame_times[stat_type] = f32(time.tick_since(game.frame_times_start[stat_type])) / f32(time.Millisecond)
 }
 
 game: Game

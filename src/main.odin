@@ -58,8 +58,6 @@ main :: proc() {
 
 	configure_im()
 
-	game.start_time = time.tick_now()
-
 	game_loop()
 }
 
@@ -74,8 +72,9 @@ init_window :: proc(width, height: c.int) -> glfw.WindowHandle {
 
 init_game :: proc() {
 	game.window = init_window(1920, 1080)
+	game.window_extent = {1920, 1080}
 
-	if !gfx.init(game.window, {msaa_samples = ._4}) {
+	if !gfx.init({window = game.window, msaa_samples = ._4}) {
 		fmt.println("Graphics could not be initialized.")
 	}
 
@@ -98,20 +97,16 @@ init_game :: proc() {
 }
 
 game_loop :: proc() {
+	start_live_time := time.tick_now()
 	for !glfw.WindowShouldClose(game.window) {
 		start := time.tick_now()
+		scope_stat_time(.Total)
 
 		update()
-
-		start_render := time.tick_now()
-
 		draw()
 
-		game.frame_time_render = f32(time.tick_since(start_render)) / f32(time.Millisecond)
-
-		game.frame_time_total = f32(time.tick_since(start)) / f32(time.Millisecond)
 		game.delta_time = f64(time.tick_since(start)) / f64(time.Second)
-		game.live_time = f64(time.tick_since(game.start_time)) / f64(time.Second)
+		game.live_time = f64(time.tick_since(start_live_time)) / f64(time.Second)
 
 		// Free temp allocations
 		free_all(context.temp_allocator)
@@ -124,46 +119,49 @@ update :: proc() {
 }
 
 update_game_state :: proc(delta_time: f64) {
-	start_game_state := time.tick_now()
+	scope_stat_time(.GameState)
+
 	player := get_entity(game.state.player_id)
 	camera := get_entity(game.state.camera_id)
 
 	update_main_camera(camera, delta_time)
-
-	game.frame_time_game_state = f32(time.tick_since(start_game_state)) / f32(time.Millisecond)
 }
 
 update_main_camera :: proc(camera: ^Camera, delta_time: f64) {
 	camera := get_entity(game.state.camera_id)
 	{
-		yaw_delta_a, pitch_delta_a := glfw.GetCursorPos(game.window)
-
-		// TODO: fix references to r_ctx.
-		yaw_delta := linalg.to_radians((f32(yaw_delta_a) / f32(gfx.r_ctx.window_extent.width)) - 0.5) * 100
-		pitch_delta := linalg.to_radians((f32(pitch_delta_a) / f32(gfx.r_ctx.window_extent.height)) - 0.5) * -50
+		yaw_delta: f32
+		pitch_delta: f32
 
 		wants_rotate_camera := glfw.GetMouseButton(game.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
+		// wants_rotate_camera := true
+
+		mouse_x, mouse_y := glfw.GetCursorPos(game.window)
+
 		if wants_rotate_camera {
-			// TODO: fix references to r_ctx.
-			glfw.SetCursorPos(game.window, f64(gfx.r_ctx.window_extent.width) / 2, f64(gfx.r_ctx.window_extent.height) / 2)
+			glfw.SetCursorPos(game.window, f64(game.window_extent.x) / 2, f64(game.window_extent.y) / 2)
 		}
 
-		if camera != nil {
-			if camera.rotating_camera {
-				camera.camera_rot += {f32(pitch_delta), f32(yaw_delta)}
-			}
-
-			if camera.rotating_camera != wants_rotate_camera {
-				if wants_rotate_camera {
-					glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-					glfw.SetInputMode(game.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
-				} else {
-					glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
-				}
-			}
-
-			camera.rotating_camera = wants_rotate_camera
+		if camera.rotating_camera {
+			glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+			glfw.SetInputMode(game.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
+		} else {
+			glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
 		}
+
+		if camera.rotating_camera && wants_rotate_camera {
+			center := game.window_extent / 2.0
+
+			mouse_x -= f64(center.x)
+			mouse_y -= f64(center.y)
+
+			yaw_delta = linalg.to_radians(f32(mouse_x)) * 0.1
+			pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.1
+
+			camera.camera_rot += {f32(pitch_delta), f32(yaw_delta)}
+		}
+
+		camera.rotating_camera = wants_rotate_camera
 	}
 
 	if camera != nil {
@@ -213,12 +211,48 @@ update_main_camera :: proc(camera: ^Camera, delta_time: f64) {
 }
 
 update_imgui :: proc() {
+	scope_stat_time(.Imgui)
+
 	io := im.GetIO()
 	glfw.PollEvents()
 
 	im_vk.NewFrame()
 	im_glfw.NewFrame()
 	im.NewFrame()
+
+
+	camera := get_entity(game.state.camera_id)
+	{
+		view_matrix := linalg.matrix4_from_quaternion(camera != nil ? camera.rotation : {})
+
+		projection_matrix := gfx.matrix_ortho3d_z0_f32(-1, 1, -1, 1, 0.1, 1)
+		projection_matrix[1][1] *= -1.0
+
+		view_projection_matrix := view_matrix * projection_matrix
+
+		red := im.GetColorU32ImVec4({1.0, 0.0, 0.0, 1.0})
+		green := im.GetColorU32ImVec4({0.0, 1.0, 0.0, 1.0})
+		blue := im.GetColorU32ImVec4({0.0, 0.0, 1.0, 1.0})
+
+		origin_ws := hlsl.float4{0, 0, 0, 1}
+
+		x_pos_ws := hlsl.float4{1, 0, 0, 1} * 20
+		y_pos_ws := hlsl.float4{0, 1, 0, 1} * 20
+		z_pos_ws := hlsl.float4{0, 0, 1, 1} * 20
+
+		offset_vs := hlsl.float2{f32(gfx.renderer().draw_extent.width) - 30, f32(gfx.renderer().draw_extent.height) - 30}
+
+		origin := (origin_ws * view_projection_matrix).xy + offset_vs
+		x_pos := (x_pos_ws * view_projection_matrix).xy + offset_vs
+		y_pos := (y_pos_ws * view_projection_matrix).xy + offset_vs
+		z_pos := (z_pos_ws * view_projection_matrix).xy + offset_vs
+
+		dl := im.GetForegroundDrawList()
+		im.DrawList_AddLine(dl, origin, x_pos, red, 2)
+		im.DrawList_AddLine(dl, origin, y_pos, green, 2)
+		im.DrawList_AddLine(dl, origin, z_pos, blue, 2)
+
+	}
 
 	if im.Begin("Entities") {
 		if im.CollapsingHeader("Raw Entities") {
@@ -317,8 +351,6 @@ update_imgui :: proc() {
 	}
 	im.End()
 
-	camera := get_entity(game.state.camera_id)
-
 	if camera != nil {
 		if im.Begin("Camera") {
 			im.InputFloat3("pos", &camera.translation)
@@ -340,10 +372,22 @@ update_imgui :: proc() {
 	im.End()
 
 	if (im.Begin("Stats")) {
-		im.Text("total frametime %f ms", game.frame_time_total)
-		im.BulletText("game %f ms", game.frame_time_game_state)
-		im.BulletText("physics %f ms", game.frame_time_physics)
-		im.BulletText("render %f ms", game.frame_time_render)
+		smooth_alpha: f32 = 0.999
+
+		if game.frame_times_smooth[0] == 0 {
+			game.frame_times_smooth = game.frame_times
+		} else {
+			game.frame_times_smooth = math.lerp(game.frame_times, game.frame_times_smooth, smooth_alpha)
+
+			game.frame_times_smooth *= smooth_alpha
+		}
+
+		fields := reflect.enum_field_names(FrameTimeStats)
+
+		for ms, i in game.frame_times_smooth {
+			text_proc := i == 0 ? im.Text : im.BulletText // kinda cursed but ok
+			text_proc("%s %2.2f ms", fmt.ctprint(fields[i]), ms)
+		}
 	}
 	im.End()
 
