@@ -20,6 +20,18 @@ import hlsl "core:math/linalg/hlsl"
 
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 
+log_normal :: proc(args: ..any) {
+	if r_ctx.enable_logs {
+		fmt.println(args)
+	}
+}
+
+log_error :: proc(args: ..any) {
+	if r_ctx.enable_logs {
+		fmt.println(args)
+	}
+}
+
 vk_check :: proc(result: vk.Result, loc := #caller_location) {
 	p := context.assertion_failure_proc
 	if result != .SUCCESS {
@@ -35,6 +47,7 @@ r_ctx: Renderer
 
 Renderer :: struct {
 	debug_messenger:             vk.DebugUtilsMessengerEXT,
+	enable_logs:                 bool,
 	instance:                    vk.Instance,
 	physical_device:             vk.PhysicalDevice,
 	device:                      vk.Device,
@@ -158,9 +171,11 @@ init_global_descriptor_allocator :: proc() {
 }
 
 init_vulkan :: proc(config: InitConfig) -> bool {
+	r_ctx.enable_logs = config.enable_logs
+
 	// Begin bootstrapping
-	create_instance() or_return
-	setup_debug_messenger()
+	create_instance(config.enable_validation_layers) or_return
+	setup_debug_messenger(config.enable_validation_layers)
 	create_surface(config.window)
 
 	pick_physical_device()
@@ -245,9 +260,12 @@ cleanup_vulkan :: proc() {
 	}
 
 	vma.DestroyAllocator(r_ctx.allocator)
-
 	vk.DestroyDevice(r_ctx.device, nil)
-	vk.DestroyDebugUtilsMessengerEXT(r_ctx.instance, r_ctx.debug_messenger, nil)
+
+	if r_ctx.debug_messenger != 0 {
+		vk.DestroyDebugUtilsMessengerEXT(r_ctx.instance, r_ctx.debug_messenger, nil)
+	}
+
 	vk.DestroyInstance(r_ctx.instance, nil)
 }
 
@@ -381,8 +399,10 @@ submit :: proc(cmd: vk.CommandBuffer) {
 }
 
 InitConfig :: struct {
-	window:       glfw.WindowHandle,
-	msaa_samples: vk.SampleCountFlag,
+	window:                   glfw.WindowHandle,
+	msaa_samples:             vk.SampleCountFlag,
+	enable_validation_layers: bool,
+	enable_logs:              bool,
 }
 
 init :: proc(config := InitConfig{}) -> bool {

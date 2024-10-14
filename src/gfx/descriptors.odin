@@ -156,8 +156,6 @@ allocate_descriptor_set :: proc(allocator: ^DescriptorAllocator, device: vk.Devi
 		// Try again, if it fails then we're goofed anyway.
 		result = vk.AllocateDescriptorSets(device, &alloc_info, &descriptor_set)
 
-		fmt.println(result)
-
 		vk_check(result)
 	}
 
@@ -243,5 +241,7 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 	// Finally write out all of the writes
 	vk.UpdateDescriptorSets(r_ctx.device, u32(len(descriptor_writes)), raw_data(descriptor_writes), 0, nil)
 
-	// TODO: cleanup?
+	delete(descriptor_writes)
+	delete(image_infos)
+	delete(buffer_infos)
 }

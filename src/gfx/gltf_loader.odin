@@ -183,7 +183,7 @@ try_cast_vec_type :: proc(
 	}
 
 	if !ty_ok {
-		fmt.print("Bad type:", typeid_of(T), type)
+		log_normal("Bad type:", typeid_of(T), type)
 		ok = false
 		return
 	}

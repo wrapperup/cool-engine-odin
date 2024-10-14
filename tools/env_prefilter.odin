@@ -90,7 +90,6 @@ create_prefiltered_cubemap_pipeline :: proc() -> PrefilteredCubeMapPass {
 	assert(f_ok, "Failed to load shaders.")
 
 	pass.pipeline_layout = gfx.create_pipeline_layout_pc(
-		gfx.renderer().device,
 		&pass.descriptor_set_layout,
 		PrefilteredCubeMapPushConstants,
 		{.COMPUTE},
@@ -119,16 +118,4 @@ run_prefilter_cubemap_pass :: proc(pass: ^PrefilteredCubeMapPass, cmd: vk.Comman
 		vk.CmdPushConstants(cmd, pass.pipeline_layout, {.COMPUTE}, 0, size_of(PrefilteredCubeMapPushConstants), &constants)
 		vk.CmdDispatch(cmd, u32(math.ceil(f32(width >> level) / 16.0)), u32(math.ceil(f32(height >> level) / 16.0)), 6)
 	}
-}
-
-main :: proc() {
-	gfx.init()
-
-	prefilter_pass := create_prefiltered_cubemap_pipeline()
-	if cmd, ok := gfx.immediate_submit(); ok {
-		run_prefilter_cubemap_pass(&prefilter_pass, cmd)
-	}
-
-	gfx.shutdown()
-	fmt.println("Done!")
 }

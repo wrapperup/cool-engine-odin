@@ -25,9 +25,10 @@ create_image :: proc(
 	tiling: vk.ImageTiling = .OPTIMAL,
 	flags: vk.ImageCreateFlags = {},
 	alloc_flags: vma.AllocationCreateFlags = {},
+	usage: vma.MemoryUsage = .GPU_ONLY,
 ) -> AllocatedImage {
 	img_alloc_info := vma.AllocationCreateInfo {
-		usage         = .GPU_ONLY,
+		usage         = usage,
 		requiredFlags = {.DEVICE_LOCAL},
 		flags         = alloc_flags,
 	}

@@ -141,7 +141,7 @@ supports_required_features :: proc(required: $T, test: T) -> bool {
 	}
 
 	if has_any_flags {
-		fmt.print(strings.to_string(builder))
+		log_normal(strings.to_string(builder))
 	}
 
 	return supports_all_flags
@@ -172,7 +172,7 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 
 	vk.GetPhysicalDeviceFeatures2(device, &features)
 
-	fmt.printfln("Required Features:")
+	log_normal("Required Features:")
 	supports_features :=
 		supports_required_features(REQUIRED_FEATURES, features) &&
 		supports_required_features(REQUIRED_VK_11_FEATURES, vk_11_features) &&
@@ -234,21 +234,21 @@ debug_callback :: proc "system" (
 	user_data: rawptr,
 ) -> b32 {
 	context = runtime.default_context()
-	fmt.println(callback_data.pMessage)
+	log_normal(callback_data.pMessage)
 	for i in 0 ..< callback_data.objectCount {
 		name := callback_data.pObjects[i].pObjectName
 
 		if len(name) > 0 {
-			fmt.println(" -", callback_data.pObjects[i].pObjectName)
+			log_normal(" -", callback_data.pObjects[i].pObjectName)
 		}
 	}
 
 	return false
 }
 
-setup_debug_messenger :: proc() {
-	if ENABLE_VALIDATION_LAYERS {
-		fmt.println("Creating Debug Messenger")
+setup_debug_messenger :: proc(enable_validation_layers: bool) {
+	if enable_validation_layers {
+		log_normal("Creating Debug Messenger")
 		create_info := vk.DebugUtilsMessengerCreateInfoEXT {
 			sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
 			messageSeverity = {.VERBOSE, .WARNING, .INFO, .ERROR},
@@ -286,7 +286,7 @@ check_validation_layers :: proc() -> bool {
 	return true
 }
 
-get_required_extensions :: proc() -> [dynamic]cstring {
+get_required_extensions :: proc(enable_validation_layers: bool) -> [dynamic]cstring {
 	glfw_extensions := glfw.GetRequiredInstanceExtensions()
 
 	extension_count := len(glfw_extensions)
@@ -298,14 +298,14 @@ get_required_extensions :: proc() -> [dynamic]cstring {
 		extensions[i] = ext
 	}
 
-	if ENABLE_VALIDATION_LAYERS {
+	if enable_validation_layers {
 		append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 	}
 
 	return extensions
 }
 
-create_instance :: proc() -> bool {
+create_instance :: proc(enable_validation_layers: bool) -> bool {
 	// Loads vulkan api functions needed to create an instance
 	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
 
@@ -317,7 +317,7 @@ create_instance :: proc() -> bool {
 		vk.load_proc_addresses_global(get_instance_proc_address)
 	}
 
-	if ENABLE_VALIDATION_LAYERS && !check_validation_layers() {
+	if enable_validation_layers && !check_validation_layers() {
 		panic("validation layers are not available")
 	}
 
@@ -333,7 +333,7 @@ create_instance :: proc() -> bool {
 	create_info.sType = .INSTANCE_CREATE_INFO
 	create_info.pApplicationInfo = &app_info
 
-	extensions := get_required_extensions()
+	extensions := get_required_extensions(enable_validation_layers)
 	defer delete(extensions)
 
 	create_info.ppEnabledExtensionNames = raw_data(extensions)
@@ -346,7 +346,7 @@ create_instance :: proc() -> bool {
 		enabledValidationFeatureCount = u32(len(VALIDATION_LAYERS)),
 	}
 
-	if ENABLE_VALIDATION_LAYERS {
+	if enable_validation_layers {
 		create_info.enabledLayerCount = u32(len(VALIDATION_LAYERS))
 		create_info.ppEnabledLayerNames = raw_data(VALIDATION_LAYERS)
 
@@ -375,15 +375,15 @@ create_instance :: proc() -> bool {
 
 	vk.EnumerateInstanceExtensionProperties(nil, &n_ext, raw_data(extension_props))
 
-	fmt.println("Available Extensions:")
+	log_normal("Available Extensions:")
 
 	bytes, ok := os.read_entire_file("")
 
 	for &ext in &extension_props {
-		fmt.printfln(" - %s", cstring(&ext.extensionName[0]))
+		log_normal(" - %s", cstring(&ext.extensionName[0]))
 	}
 
-	if ENABLE_VALIDATION_LAYERS && !check_validation_layers() {
+	if enable_validation_layers && !check_validation_layers() {
 		panic("Validation layers are not available")
 	}
 

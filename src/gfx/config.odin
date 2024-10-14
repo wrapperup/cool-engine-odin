@@ -45,11 +45,5 @@ VALIDATION_LAYERS := []cstring{"VK_LAYER_KHRONOS_validation"}
 // Set validation features to enable.
 VALIDATION_FEATURES := []vk.ValidationFeatureEnableEXT{.DEBUG_PRINTF}
 
-when ODIN_DEBUG {
-	ENABLE_VALIDATION_LAYERS := true
-} else {
-	ENABLE_VALIDATION_LAYERS := false
-}
-
 // Number of frames to provide in flight.
 FRAME_OVERLAP :: 2

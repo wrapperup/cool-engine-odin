@@ -44,7 +44,7 @@ ResourceType :: enum {
 
 vk_destroy_resource :: proc(resource: ResourceHandle) {
 	when false {
-		fmt.println("DEBUG: Destroy", resource.ty, "@", resource.caller_location, "-", resource.debug_info)
+		log_normal("DEBUG: Destroy", resource.ty, "@", resource.caller_location, "-", resource.debug_info)
 	}
 
 	if resource_requires_allocation(resource.ty) {
