@@ -1,11 +1,15 @@
-# VkGuide in Odin
+# erm... da engine
 
-Follows [vkguide](https://vkguide.dev/) implementations with a few differences:
-
-1. No vkbootstrap. Initialization is part of this project's code. features,
-extensions, and validation layers are defined in `config.odin`, and are used to pick the best device.
-2. Shaders are written in [slang](https://github.com/shader-slang/slang). `slangc` is expected to be in PATH.
-   - Using slang-specific features (mostly pointers for BDA)
+### Features
+- Bindless
+- Limited glTF loading (Skeletal meshes, normal meshes, etc.)
+- Skeletal meshes
+- PBR Pipeline based on Filament (WIP)
+- IBL (WIP)
+- Sparse Entity system (entities are packed tightly, almost like an ECS)
+- Love!
+- Dear ImGui integration (is this a feature?)
+- There was jolt but I removed it and haven't added it back yet.
 
 ## Dependencies
 
@@ -13,3 +17,4 @@ extensions, and validation layers are defined in `config.odin`, and are used to 
  
  - [odin-vma](https://github.com/DanielGavin/odin-vma)
  - [odin-imgui](https://gitlab.com/L-4/odin-imgui)
+ - [odin-libktx](https://github.com/DanielGavin/odin-libktx)
