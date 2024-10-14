@@ -175,12 +175,8 @@ init_mesh_pipelines :: proc() {
 	triangle_shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv")
 	assert(f_ok, "Failed to load shaders.")
 
-	// game.mesh_pipeline_layout = gfx.create_pipeline_layout(gfx.renderer().device, &game.bindless_descriptor_layout, GPUDrawPushConstants)
-	game.skel_mesh_pipeline_layout = gfx.create_pipeline_layout_pc(
-		gfx.renderer().device,
-		&game.bindless_descriptor_layout,
-		GPUSkelDrawPushConstants,
-	)
+	// game.mesh_pipeline_layout = gfx.create_pipeline_layout(&game.bindless_descriptor_layout, GPUDrawPushConstants)
+	game.skel_mesh_pipeline_layout = gfx.create_pipeline_layout_pc(&game.bindless_descriptor_layout, GPUSkelDrawPushConstants)
 
 	// game.mesh_pipeline = gfx.create_graphics_pipeline(
 	// 	{
@@ -237,8 +233,7 @@ init_tonemapper_pipelines :: proc() {
 	tonemapper_shader, f_ok := gfx.load_shader_module("shaders/out/tonemapping.spv")
 	assert(f_ok, "Failed to load shaders.")
 
-	game.tonemapper_pipeline_layout = gfx.create_pipeline_layout(gfx.renderer().device, &game.bindless_descriptor_layout)
-
+	game.tonemapper_pipeline_layout = gfx.create_pipeline_layout(&game.bindless_descriptor_layout)
 	game.tonemapper_pipeline = gfx.create_compute_pipelines(game.tonemapper_pipeline_layout, tonemapper_shader)
 
 	gfx.destroy_shader_module(tonemapper_shader)

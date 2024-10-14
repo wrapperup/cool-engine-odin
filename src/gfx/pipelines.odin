@@ -206,18 +206,21 @@ pb_delete :: proc(builder: PipelineBuilder) {
 
 // ====================================================================
 
-create_pipeline_layout :: proc(device: vk.Device, descriptor_set_layout: ^vk.DescriptorSetLayout) -> (pipeline_layout: vk.PipelineLayout) {
+create_pipeline_layout :: proc(
+	descriptor_set_layout: ^vk.DescriptorSetLayout,
+) -> (
+	pipeline_layout: vk.PipelineLayout,
+) {
 	pipeline_layout_info := init_pipeline_layout_create_info()
 	pipeline_layout_info.pSetLayouts = descriptor_set_layout
 	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
 
-	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
+	vk_check(vk.CreatePipelineLayout(r_ctx.device, &pipeline_layout_info, nil, &pipeline_layout))
 
 	return
 }
 
 create_pipeline_layout_pc :: proc(
-	device: vk.Device,
 	descriptor_set_layout: ^vk.DescriptorSetLayout,
 	$T: typeid,
 	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
@@ -236,7 +239,7 @@ create_pipeline_layout_pc :: proc(
 	pipeline_layout_info.pSetLayouts = descriptor_set_layout
 	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
 
-	vk_check(vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout))
+	vk_check(vk.CreatePipelineLayout(r_ctx.device, &pipeline_layout_info, nil, &pipeline_layout))
 
 	return
 }
