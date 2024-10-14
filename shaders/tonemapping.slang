@@ -9,7 +9,7 @@ float3 tony_mc_mapface(float3 stimulus) {
   float3 uv = encoded * ((LUT_DIMS - 1.0) / LUT_DIMS) + 0.5 / LUT_DIMS;
 
   // Note: for OpenGL, do `uv.y = 1.0 - uv.y`
-  return LUTs[TONY_MC_MAPFACE_ID].SampleLevel(Samplers[DEFAULT_SAMPLER_ID], uv, 0);
+  return sample_lut_3d(TONY_MC_MAPFACE_ID, uv);
 }
 
 [numthreads(16, 16, 1)]

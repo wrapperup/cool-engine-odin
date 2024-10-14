@@ -3,6 +3,7 @@ package gfx
 import "base:runtime"
 
 import "core:c/libc"
+import "core:dynlib"
 import "core:fmt"
 import "core:os"
 import "core:reflect"
@@ -78,11 +79,11 @@ choose_swap_present_mode :: proc(available_present_modes: []vk.PresentModeKHR) -
 	return .IMMEDIATE
 }
 
-choose_swap_extent :: proc(capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
+choose_swap_extent :: proc(window: glfw.WindowHandle, capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {
 	if (capabilities.currentExtent.width != max(u32)) {
 		return capabilities.currentExtent
 	} else {
-		width, height := glfw.GetFramebufferSize(r_ctx.window)
+		width, height := glfw.GetFramebufferSize(window)
 
 		actual_extent := vk.Extent2D{u32(width), u32(height)}
 
@@ -180,6 +181,11 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 
 	extensions_supported := check_device_extension_support(device)
 
+	// Headless mode
+	if r_ctx.swapchain == 0 {
+		return extensions_supported && properties.deviceType == .DISCRETE_GPU && supports_features
+	}
+
 	swapchain_adequate := false
 	if extensions_supported {
 		swapchain_support := query_swapchain_support(device)
@@ -215,8 +221,10 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 	return true
 }
 
-create_surface :: proc() {
-	vk_check(glfw.CreateWindowSurface(r_ctx.instance, r_ctx.window, nil, &r_ctx.surface))
+create_surface :: proc(window: glfw.WindowHandle) {
+	if window == nil do return
+
+	vk_check(glfw.CreateWindowSurface(r_ctx.instance, window, nil, &r_ctx.surface))
 }
 
 debug_callback :: proc "system" (
@@ -227,6 +235,13 @@ debug_callback :: proc "system" (
 ) -> b32 {
 	context = runtime.default_context()
 	fmt.println(callback_data.pMessage)
+	for i in 0 ..< callback_data.objectCount {
+		name := callback_data.pObjects[i].pObjectName
+
+		if len(name) > 0 {
+			fmt.println(" -", callback_data.pObjects[i].pObjectName)
+		}
+	}
 
 	return false
 }
@@ -292,7 +307,15 @@ get_required_extensions :: proc() -> [dynamic]cstring {
 
 create_instance :: proc() -> bool {
 	// Loads vulkan api functions needed to create an instance
-	vk.load_proc_addresses(rawptr(glfw.GetInstanceProcAddress))
+	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
+
+	// Fallback if glfw is not inialized (headless mode)
+	if vk.GetInstanceProcAddr == nil {
+		lib := dynlib.load_library("vulkan-1.dll") or_else panic("Can't load vulkan-1 library")
+		get_instance_proc_address := dynlib.symbol_address(lib, "vkGetInstanceProcAddr") or_else panic("Can't find vkGetInstanceProcAdr")
+
+		vk.load_proc_addresses_global(get_instance_proc_address)
+	}
 
 	if ENABLE_VALIDATION_LAYERS && !check_validation_layers() {
 		panic("validation layers are not available")
@@ -444,13 +467,15 @@ init_commands :: proc() {
 	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.imm_command_pool)
 }
 
-create_swapchain :: proc() {
+create_swapchain :: proc(window: glfw.WindowHandle) {
+	if window == nil do return
+
 	swapchain_support := query_swapchain_support(r_ctx.physical_device)
 	defer delete_swapchain_support_details(swapchain_support)
 
 	surface_format, _ := choose_swap_surface_format(swapchain_support.formats)
 	present_mode := choose_swap_present_mode(swapchain_support.present_modes)
-	extent := choose_swap_extent(&swapchain_support.capabilities)
+	extent := choose_swap_extent(window, &swapchain_support.capabilities)
 
 	image_count := swapchain_support.capabilities.minImageCount + 1
 
@@ -504,21 +529,21 @@ create_swapchain :: proc() {
 	}
 }
 
-create_draw_images :: proc(msaa_samples: vk.SampleCountFlag) {
+create_draw_images :: proc(extent: [2]i32, msaa_samples: vk.SampleCountFlag) {
 	r_ctx.msaa_samples = msaa_samples
 
-	draw_image_format : vk.Format = .R16G16B16A16_SFLOAT
-	draw_image_extent := vk.Extent3D{r_ctx.window_extent.width, r_ctx.window_extent.height, 1}
+	draw_image_format: vk.Format = .R16G16B16A16_SFLOAT
+	draw_image_extent := vk.Extent3D{u32(extent.x), u32(extent.y), 1}
 	draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
 
-	r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples)
+	r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = msaa_samples)
 	create_image_view(&r_ctx.draw_image, {.COLOR})
 
 	// Used for MSAA resolution
-	r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, ._1)
+	r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
 	create_image_view(&r_ctx.resolve_image, {.COLOR})
 
-	r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples)
+	r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = msaa_samples)
 	create_image_view(&r_ctx.depth_image, {.DEPTH})
 
 	push_deletion_queue(&r_ctx.main_deletion_queue, r_ctx.depth_image.image_view)

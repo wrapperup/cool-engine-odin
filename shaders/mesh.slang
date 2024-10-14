@@ -1,5 +1,6 @@
-#include "./bindless.slang"
-#include "./standard_brdf.slang"
+import bindless;
+import standard_brdf;
+import ibl;
 
 static const float4x4 biasMat = {
   0.5, 0.0, 0.0, 0.5, //
@@ -48,6 +49,15 @@ struct VertexInput {
   uint vertex_index : SV_VertexID;
   uint instance_id : SV_InstanceID;
 };
+
+struct PbrMaterialParams {
+  float4 base_color;
+  float4 emissive;
+  float metallic;
+  float roughness;
+  float reflectance;
+  float ambient_occlussion;
+}
 
 [vk_push_constant]
 DrawPushConstants pc;
@@ -111,21 +121,25 @@ FragmentOutput fragment_main(FragmentInput i) {
 
   float NoL = clamp(dot(n, l), 0.0, 1.0);
 
-  float metallic = 0.f;
-  float3 base_color = {1, 0.0, 0.0}; // For now
-
-  float reflectance = 0.5f; // Plastic Reflectance - https://google.github.io/filament/Filament.md.html#table_commonmatreflectance
+  float3 base_color = 1; // For now
+  float metallic = 1.f;
+  float reflectance = 0.5f;
+  float roughness = 0.25;
+  float linear_roughness = roughness * roughness;
 
   float3 f0 = 0.16f * reflectance * reflectance * (1.0f - metallic) + base_color * metallic;
   float3 diffuse = (1.0 - metallic) * base_color.rgb;
 
-  float3 frag_color = (NoL * pc.global_data_buffer.sun_color) * standard_brdf(diffuse, 0.1, v, l, n, h, f0, NoL);
+  float3 frag_color = (NoL * pc.global_data_buffer.sun_color) * standard_brdf(diffuse, linear_roughness, v, l, n, h, f0, NoL);
   frag_color += pc.global_data_buffer.sky_color * base_color;
+
+  frag_color = evaluate_ibl(n, v, diffuse, f0, 1.0, roughness);
+  // frag_color = sample_cubemap(TEST_ENVIRONMENT_MAP_ID, n, 0).rgb;
 
   // printf("%f %f %f\n", v);
 
   FragmentOutput output;
-  output.frag_color = float4(frag_color, 0.0f);
+  output.frag_color = float4(frag_color, 1.0f);
 
   return output;
 }

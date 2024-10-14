@@ -35,8 +35,6 @@ r_ctx: Renderer
 
 Renderer :: struct {
 	debug_messenger:             vk.DebugUtilsMessengerEXT,
-	window:                      glfw.WindowHandle,
-	window_extent:               vk.Extent2D,
 	instance:                    vk.Instance,
 	physical_device:             vk.PhysicalDevice,
 	device:                      vk.Device,
@@ -76,6 +74,7 @@ Renderer :: struct {
 	imm_command_pool:            vk.CommandPool,
 
 	// Dear Imgui
+	imgui_init:                  bool,
 	imgui_pool:                  vk.DescriptorPool,
 }
 
@@ -153,7 +152,7 @@ delete_swapchain_support_details :: proc(details: SwapChainSupportDetails) {
 
 init_global_descriptor_allocator :: proc() {
 	//create a descriptor pool that will hold 10 sets with 1 image each
-	ratio: f32 = 1.0/3.0
+	ratio: f32 = 1.0 / 3.0
 	sizes: []PoolSizeRatio = {{.SAMPLER, ratio}, {.SAMPLED_IMAGE, ratio}, {.STORAGE_IMAGE, ratio}}
 	init_descriptor_allocator(&r_ctx.global_descriptor_allocator, r_ctx.device, 10, sizes, {.UPDATE_AFTER_BIND})
 }
@@ -162,7 +161,7 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 	// Begin bootstrapping
 	create_instance() or_return
 	setup_debug_messenger()
-	create_surface()
+	create_surface(config.window)
 
 	pick_physical_device()
 	fetch_queues(r_ctx.physical_device)
@@ -170,14 +169,18 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 
 	init_vma()
 
-	create_swapchain()
-	create_draw_images(config.msaa_samples)
+	create_swapchain(config.window)
+
+	if config.window != nil {
+		x, y := glfw.GetWindowSize(config.window)
+		create_draw_images({x, y}, config.msaa_samples)
+	}
 
 	init_commands()
 	init_sync_structures()
 	// End bootstrapping
 
-	init_imgui()
+	init_imgui(config.window)
 
 	init_global_descriptor_allocator()
 
@@ -199,16 +202,13 @@ init_vma :: proc() {
 	vma.CreateAllocator(&allocator_info, &r_ctx.allocator)
 }
 
-cleanup_window :: proc() {
-	glfw.DestroyWindow(r_ctx.window)
-	glfw.Terminate()
-}
-
 cleanup_vulkan :: proc() {
 	vk.DeviceWaitIdle(r_ctx.device)
 
-	im_vk.Shutdown()
-	vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
+	if r_ctx.imgui_init {
+		im_vk.Shutdown()
+		vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
+	}
 
 	// Cleanup queued resources
 	flush_deletion_queue(&r_ctx.main_deletion_queue)
@@ -239,7 +239,10 @@ cleanup_vulkan :: proc() {
 	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
 	destroy_descriptor_allocator(&r_ctx.global_descriptor_allocator)
 
-	vk.DestroySurfaceKHR(r_ctx.instance, r_ctx.surface, nil)
+	// Headless mode
+	if r_ctx.surface != 0 {
+		vk.DestroySurfaceKHR(r_ctx.instance, r_ctx.surface, nil)
+	}
 
 	vma.DestroyAllocator(r_ctx.allocator)
 
@@ -378,15 +381,11 @@ submit :: proc(cmd: vk.CommandBuffer) {
 }
 
 InitConfig :: struct {
+	window:       glfw.WindowHandle,
 	msaa_samples: vk.SampleCountFlag,
 }
 
-init :: proc(window: glfw.WindowHandle, config := InitConfig{}) -> bool {
-	r_ctx.window = window
-	width, height := glfw.GetWindowSize(window)
-
-	r_ctx.window_extent = {u32(width), u32(height)}
-
+init :: proc(config := InitConfig{}) -> bool {
 	init_vulkan(config) or_return
 
 	return true
@@ -394,5 +393,4 @@ init :: proc(window: glfw.WindowHandle, config := InitConfig{}) -> bool {
 
 shutdown :: proc() {
 	cleanup_vulkan()
-	cleanup_window()
 }

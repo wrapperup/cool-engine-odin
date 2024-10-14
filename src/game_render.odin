@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/hlsl"
+import "core:mem"
 
 import vk "vendor:vulkan"
 
@@ -28,6 +29,7 @@ GPUSkelDrawPushConstants :: struct {
 	model_matrices:     gfx.GPUPointer(hlsl.float4x4),
 	joint_matrices:     gfx.GPUPointer(hlsl.float4x4),
 	attrs:              gfx.GPUPointer(gfx.SkeletonVertexAttribute),
+	// pbr_materials:      gfx.GPUPointer(PbrMaterialParams),
 }
 
 // 256 bytes is the maximum allowed in a push constant on a 3090Ti
@@ -112,7 +114,18 @@ init_bindless_descriptors :: proc() {
 	c := gfx.load_image_from_file("assets/test3.ktx")
 	d := gfx.load_image_from_file("assets/test4.ktx")
 	e := gfx.load_image_from_file("assets/test5.ktx")
-	tony_mc_mapface := gfx.load_image_from_file("assets/tony-mc-mapface.ktx2")
+	tony_mc_mapface := gfx.load_image_from_file("assets/tony-mc-mapface.ktx2", .D3, .D3)
+
+	// dfg_lut_data: [256*256][2]f16
+	// compute_dfg_lut_f16(dfg_lut_data[:], 256, 256, true)
+	// dfg_lut_bytes := mem.slice_data_cast([]u8, dfg_lut_data[:])
+
+	// dfg := gfx.load_image_from_bytes(dfg_lut_bytes, {256, 256, 1}, .R16G16_SFLOAT)
+	// dfg := gfx.load_image_from_file("assets/dfg.ktx2")
+	dfg := gfx.load_image_from_file("assets/dfg.ktx2")
+
+	env := gfx.load_image_from_file("assets/ennis.ktx2", .D2, .CUBE)
+	// env := gfx.load_image_from_file("assets/white_furnace.ktx2", .D2, .CUBE)
 
 	// Default Texture Sampler
 	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE)
@@ -124,76 +137,31 @@ init_bindless_descriptors :: proc() {
 
 	gfx.write_descriptor_set(
 		game.bindless_descriptor_set,
-		[]gfx.DescriptorWrite {
-			gfx.DescriptorWriteImage {
+		{
+			{
 				binding = 0,
 				type = .SAMPLED_IMAGE,
 				image_view = game.shadow_depth_image.image_view,
 				image_layout = .DEPTH_READ_ONLY_OPTIMAL,
 				array_index = 0,
 			},
-			gfx.DescriptorWriteImage {
-				binding = 0,
-				type = .SAMPLED_IMAGE,
-				image_view = a.image_view,
-				image_layout = .READ_ONLY_OPTIMAL,
-				array_index = 1,
-			},
-			gfx.DescriptorWriteImage {
-				binding = 0,
-				type = .SAMPLED_IMAGE,
-				image_view = b.image_view,
-				image_layout = .READ_ONLY_OPTIMAL,
-				array_index = 2,
-			},
-			gfx.DescriptorWriteImage {
-				binding = 0,
-				type = .SAMPLED_IMAGE,
-				image_view = c.image_view,
-				image_layout = .READ_ONLY_OPTIMAL,
-				array_index = 3,
-			},
-			gfx.DescriptorWriteImage {
-				binding = 0,
-				type = .SAMPLED_IMAGE,
-				image_view = d.image_view,
-				image_layout = .READ_ONLY_OPTIMAL,
-				array_index = 4,
-			},
-			gfx.DescriptorWriteImage {
-				binding = 0,
-				type = .SAMPLED_IMAGE,
-				image_view = e.image_view,
-				image_layout = .READ_ONLY_OPTIMAL,
-				array_index = 5,
-			},
-			gfx.DescriptorWriteImage {
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = a.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 1},
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = b.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 2},
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = c.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 3},
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = d.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 4},
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = e.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 5},
+			{
 				binding = 0,
 				type = .SAMPLED_IMAGE,
 				image_view = tony_mc_mapface.image_view,
 				image_layout = .READ_ONLY_OPTIMAL,
 				array_index = 6,
 			},
-			gfx.DescriptorWriteImage {
-				binding = 1,
-				type = .SAMPLER,
-				sampler = TEMP_mesh_image_sampler,
-				image_layout = .READ_ONLY_OPTIMAL,
-				array_index = 0,
-			},
-			gfx.DescriptorWriteImage {
-				binding = 1,
-				type = .SAMPLER,
-				sampler = shadow_depth_sampler,
-				image_layout = .DEPTH_READ_ONLY_OPTIMAL,
-				array_index = 1,
-			},
-			gfx.DescriptorWriteImage {
-				binding = 2,
-				type = .STORAGE_IMAGE,
-				image_view = gfx.renderer().draw_image.image_view,
-				image_layout = .GENERAL,
-			},
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = dfg.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 7},
+			{binding = 0, type = .SAMPLED_IMAGE, image_view = env.image_view, image_layout = .READ_ONLY_OPTIMAL, array_index = 8},
+			{binding = 1, type = .SAMPLER, sampler = TEMP_mesh_image_sampler, image_layout = .READ_ONLY_OPTIMAL, array_index = 0},
+			{binding = 1, type = .SAMPLER, sampler = shadow_depth_sampler, image_layout = .DEPTH_READ_ONLY_OPTIMAL, array_index = 1},
+			{binding = 2, type = .STORAGE_IMAGE, image_view = gfx.renderer().draw_image.image_view, image_layout = .GENERAL},
 		},
 	)
 }
@@ -349,6 +317,8 @@ init_buffers :: proc() {
 
 //// RENDERING
 draw :: proc() {
+	scope_stat_time(.Render)
+
 	cmd := gfx.begin_command_buffer()
 
 	update_buffers()
@@ -555,7 +525,7 @@ update_buffers :: proc() {
 
 	// Camera matrices
 	{
-		aspect_ratio := f32(gfx.renderer().window_extent.width) / f32(gfx.r_ctx.window_extent.height)
+		aspect_ratio := f32(game.window_extent.x) / f32(game.window_extent.y)
 
 		translation := linalg.matrix4_translate(camera != nil ? camera.translation : {})
 		rotation := linalg.matrix4_from_quaternion(camera != nil ? camera.rotation : {})

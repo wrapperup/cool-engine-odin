@@ -220,13 +220,14 @@ create_pipeline_layout_pc :: proc(
 	device: vk.Device,
 	descriptor_set_layout: ^vk.DescriptorSetLayout,
 	$T: typeid,
+	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
 ) -> (
 	pipeline_layout: vk.PipelineLayout,
 ) {
 	buffer_range := vk.PushConstantRange {
 		offset     = 0,
 		size       = size_of(T),
-		stageFlags = {.VERTEX, .FRAGMENT},
+		stageFlags = stage_flags,
 	}
 
 	pipeline_layout_info := init_pipeline_layout_create_info()

@@ -5,8 +5,11 @@ import vk "vendor:vulkan"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
+import "vendor:glfw"
 
-init_imgui :: proc() {
+init_imgui :: proc(window: glfw.WindowHandle) {
+	if window == nil do return
+
 	pool_sizes := []vk.DescriptorPoolSize {
 		{.SAMPLER, 1000},
 		{.COMBINED_IMAGE_SAMPLER, 1000},
@@ -37,7 +40,7 @@ init_imgui :: proc() {
 	im.CreateContext()
 
 	// this initializes imgui for glfw
-	im_glfw.InitForVulkan(r_ctx.window, true)
+	im_glfw.InitForVulkan(window, true)
 
 	// this initializes imgui for Vulkan
 	init_info := im_vk.InitInfo{}
@@ -59,6 +62,8 @@ init_imgui :: proc() {
 		}, &r_ctx.instance)
 
 	im_vk.Init(&init_info, 0)
+
+	r_ctx.imgui_init = true
 }
 
 render_imgui :: proc() {

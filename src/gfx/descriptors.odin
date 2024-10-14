@@ -4,9 +4,9 @@ import "core:fmt"
 import vk "vendor:vulkan"
 
 DescriptorBinding :: struct {
-	binding:          u32,
-	type:             vk.DescriptorType,
-	count: u32,
+	binding: u32,
+	type:    vk.DescriptorType,
+	count:   u32,
 }
 
 create_descriptor_set_layout :: proc(
@@ -170,25 +170,18 @@ destroy_descriptor_allocator :: proc(allocator: ^DescriptorAllocator) {
 	delete(allocator.full_pools)
 }
 
-DescriptorWrite :: union {
-	DescriptorWriteImage,
-	DescriptorWriteBuffer,
-}
-
-DescriptorWriteImage :: struct {
+DescriptorWrite :: struct {
 	binding:      u32,
 	type:         vk.DescriptorType,
 	image_view:   vk.ImageView,
 	sampler:      vk.Sampler,
 	image_layout: vk.ImageLayout,
+	buffer:       vk.Buffer,
 	array_index:  u32,
 }
 
-DescriptorWriteBuffer :: struct {
-	binding:     u32,
-	type:        vk.DescriptorType,
-	buffer:      vk.Buffer,
-	array_index: u32,
+is_image_descriptor_type :: proc(ty: vk.DescriptorType) -> bool {
+	return ty == .STORAGE_IMAGE || ty == .SAMPLER || ty == .SAMPLED_IMAGE || ty == .COMBINED_IMAGE_SAMPLER
 }
 
 write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite) {
@@ -198,12 +191,13 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 	buffer_infos: [dynamic]vk.DescriptorBufferInfo
 
 	for write in writes {
-		switch v in write {
-		case DescriptorWriteImage:
+		if is_image_descriptor_type(write.type) {
+			assert(write.buffer == 0, "Descriptor write is an image type, but the buffer field was set.")
+
 			image_info := vk.DescriptorImageInfo {
-				imageLayout = v.image_layout,
-				imageView   = v.image_view,
-				sampler     = v.sampler,
+				imageLayout = write.image_layout,
+				imageView   = write.image_view,
+				sampler     = write.sampler,
 			}
 
 			append(&image_infos, image_info)
@@ -211,19 +205,22 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 			descriptor_write := vk.WriteDescriptorSet {
 				sType           = .WRITE_DESCRIPTOR_SET,
 				pNext           = nil,
-				dstBinding      = v.binding,
+				dstBinding      = write.binding,
 				dstSet          = descriptor_set,
-				dstArrayElement = v.array_index,
+				dstArrayElement = write.array_index,
 				descriptorCount = 1,
-				descriptorType  = v.type,
+				descriptorType  = write.type,
 				pImageInfo      = &image_infos[len(image_infos) - 1],
 			}
 
 			append(&descriptor_writes, descriptor_write)
+		} else {
+			assert(write.image_layout == .UNDEFINED, "Descriptor write is a buffer type, but the image_layout field was set.")
+			assert(write.image_view == 0, "Descriptor write is a buffer type, but the image_view field was set.")
+			assert(write.sampler == 0, "Descriptor write is a buffer type, but the sampler field was set.")
 
-		case DescriptorWriteBuffer:
 			buffer_info := vk.DescriptorBufferInfo {
-				buffer = v.buffer,
+				buffer = write.buffer,
 			}
 
 			append(&buffer_infos, buffer_info)
@@ -231,11 +228,11 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 			descriptor_write := vk.WriteDescriptorSet {
 				sType           = .WRITE_DESCRIPTOR_SET,
 				pNext           = nil,
-				dstBinding      = v.binding,
+				dstBinding      = write.binding,
 				dstSet          = descriptor_set,
-				dstArrayElement = v.array_index,
+				dstArrayElement = write.array_index,
 				descriptorCount = 1,
-				descriptorType  = v.type,
+				descriptorType  = write.type,
 				pBufferInfo     = &buffer_infos[len(buffer_infos) - 1],
 			}
 

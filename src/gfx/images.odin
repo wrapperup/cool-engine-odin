@@ -18,7 +18,12 @@ create_image :: proc(
 	format: vk.Format,
 	extent: vk.Extent3D,
 	image_usage_flags: vk.ImageUsageFlags,
-	sample_count: vk.SampleCountFlag = ._1,
+	mip_levels: u32 = 1,
+	array_layers: u32 = 1,
+	image_type: vk.ImageType = .D2,
+	msaa_samples: vk.SampleCountFlag = ._1,
+	tiling: vk.ImageTiling = .OPTIMAL,
+	flags: vk.ImageCreateFlags = {},
 	alloc_flags: vma.AllocationCreateFlags = {},
 ) -> AllocatedImage {
 	img_alloc_info := vma.AllocationCreateInfo {
@@ -27,7 +32,7 @@ create_image :: proc(
 		flags         = alloc_flags,
 	}
 
-	img_info := init_image_create_info(format, image_usage_flags, extent, sample_count)
+	img_info := init_image_create_info(format, image_usage_flags, extent, mip_levels, array_layers, msaa_samples, image_type, flags, tiling)
 
 	new_image := AllocatedImage {
 		extent = extent,
@@ -39,8 +44,13 @@ create_image :: proc(
 	return new_image
 }
 
-create_image_view :: proc(image: ^AllocatedImage, aspect_flags: vk.ImageAspectFlags) {
-	dview_info := init_imageview_create_info(image.format, image.image, aspect_flags)
+create_image_view :: proc(
+	image: ^AllocatedImage,
+	aspect_flags: vk.ImageAspectFlags,
+	base_mip_level: u32 = 0,
+	image_view_type: vk.ImageViewType = .D2,
+) {
+	dview_info := init_imageview_create_info(image.format, image.image, aspect_flags, base_mip_level, image_view_type)
 	vk_check(vk.CreateImageView(r_ctx.device, &dview_info, nil, &image.image_view))
 }
 

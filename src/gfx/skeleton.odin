@@ -36,7 +36,7 @@ sample_track :: proc(animation: ^JointTrack, key_a: u32, key_b: u32, a: f32) -> 
 
 	if key_a != key_b {
 		translation := linalg.lerp(animation.keyframes_translation[key_a], animation.keyframes_translation[key_b], a)
-		rotation := linalg.lerp(animation.keyframes_rotation[key_a], animation.keyframes_rotation[key_b], a)
+		rotation := linalg.quaternion_slerp(animation.keyframes_rotation[key_a], animation.keyframes_rotation[key_b], a)
 		scale := linalg.lerp(animation.keyframes_scale[key_a], animation.keyframes_scale[key_b], a)
 
 		rotation = linalg.quaternion_normalize(rotation)

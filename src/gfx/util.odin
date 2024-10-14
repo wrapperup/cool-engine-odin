@@ -111,19 +111,24 @@ init_image_create_info :: proc(
 	format: vk.Format,
 	usage_flags: vk.ImageUsageFlags,
 	extent: vk.Extent3D,
+	mip_levels: u32 = 1,
+	array_layers: u32 = 1,
 	msaa_samples: vk.SampleCountFlag = ._1,
 	image_type: vk.ImageType = .D2,
+	flags: vk.ImageCreateFlags = {},
+	tiling: vk.ImageTiling = .OPTIMAL,
 ) -> vk.ImageCreateInfo {
 	info := vk.ImageCreateInfo {
 		sType       = .IMAGE_CREATE_INFO,
 		imageType   = image_type,
 		format      = format,
 		extent      = extent,
-		mipLevels   = 1,
-		arrayLayers = 1,
+		mipLevels   = mip_levels,
+		arrayLayers = array_layers,
 		samples     = {msaa_samples},
-		tiling      = .OPTIMAL,
+		tiling      = tiling,
 		usage       = usage_flags,
+		flags       = flags,
 	}
 
 	return info
@@ -133,6 +138,7 @@ init_imageview_create_info :: proc(
 	format: vk.Format,
 	image: vk.Image,
 	aspect_flags: vk.ImageAspectFlags,
+	base_mip_level: u32 = 0,
 	view_type: vk.ImageViewType = .D2,
 ) -> vk.ImageViewCreateInfo {
 	info := vk.ImageViewCreateInfo {
@@ -140,7 +146,7 @@ init_imageview_create_info :: proc(
 		viewType = view_type,
 		image = image,
 		format = format,
-		subresourceRange = {baseMipLevel = 0, levelCount = 1, baseArrayLayer = 0, layerCount = 1, aspectMask = aspect_flags},
+		subresourceRange = {baseMipLevel = base_mip_level, levelCount = 1, baseArrayLayer = 0, layerCount = 1, aspectMask = aspect_flags},
 	}
 
 	return info
