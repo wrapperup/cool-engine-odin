@@ -1,0 +1,58 @@
+// raddbg project file
+
+/// targets ///////////////////////////////////////////////////////////////////
+
+target:
+{
+  name: "main"
+  executable: "build/debug/main.exe"
+  working_directory: "../vulkan-playground"
+}
+
+/// recent_files //////////////////////////////////////////////////////////////
+
+recent_file: "src/ball.odin"
+
+/// exception code filters ////////////////////////////////////////////////////
+
+exception_code_filters:
+{
+  win32_ctrl_c: 1
+  win32_ctrl_break: 1
+  win32_win_rt_originate_error: 0
+  win32_win_rt_transform_error: 0
+  win32_rpc_call_cancelled: 0
+  win32_datatype_misalignment: 0
+  win32_access_violation: 1
+  win32_in_page_error: 0
+  win32_invalid_handle: 1
+  win32_not_enough_quota: 0
+  win32_illegal_instruction: 0
+  win32_cannot_continue_exception: 0
+  win32_invalid_exception_disposition: 0
+  win32_array_bounds_exceeded: 0
+  win32_floating_point_denormal_operand: 0
+  win32_floating_point_division_by_zero: 0
+  win32_floating_point_inexact_result: 0
+  win32_floating_point_invalid_operation: 0
+  win32_floating_point_overflow: 0
+  win32_floating_point_stack_check: 0
+  win32_floating_point_underflow: 0
+  win32_integer_division_by_zero: 0
+  win32_integer_overflow: 0
+  win32_privileged_instruction: 0
+  win32_stack_overflow: 0
+  win32_unable_to_locate_dll: 0
+  win32_ordinal_not_found: 0
+  win32_entry_point_not_found: 0
+  win32_dll_initialization_failed: 0
+  win32_floating_point_sse_multiple_faults: 0
+  win32_floating_point_sse_multiple_traps: 0
+  win32_assertion_failed: 1
+  win32_module_not_found: 0
+  win32_procedure_not_found: 0
+  win32_sanitizer_error_detected: 1
+  win32_sanitizer_raw_access_violation: 0
+  win32_directx_debug_layer: 1
+}
+

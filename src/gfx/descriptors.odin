@@ -10,11 +10,12 @@ DescriptorBinding :: struct {
 }
 
 create_descriptor_set_layout :: proc(
-	bindings: [$N]DescriptorBinding,
+	bindings: []DescriptorBinding,
 	descriptor_set_layout_flags: vk.DescriptorSetLayoutCreateFlags = {},
 	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
 ) -> vk.DescriptorSetLayout {
-	descriptor_set_bindings := [N]vk.DescriptorSetLayoutBinding{}
+	descriptor_set_bindings: [dynamic]vk.DescriptorSetLayoutBinding
+	resize(&descriptor_set_bindings, len(bindings))
 
 	for binding, i in bindings {
 		descriptor_set_bindings[i] = vk.DescriptorSetLayoutBinding {
@@ -34,6 +35,8 @@ create_descriptor_set_layout :: proc(
 
 	set: vk.DescriptorSetLayout
 	vk_check(vk.CreateDescriptorSetLayout(r_ctx.device, &info, nil, &set))
+
+	delete(descriptor_set_bindings)
 
 	return set
 }

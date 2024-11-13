@@ -240,6 +240,7 @@ temp_parse_mesh_into_mesh_data :: proc(data: ^cgltf.data, mesh_idx: int) -> (ind
 	norm_idx, norm_ok := find_attribute(primitive, .normal)
 	color_idx, color_ok := find_attribute(primitive, .color)
 	uv_idx, uv_ok := find_attribute(primitive, .texcoord)
+	tangent_idx, tangent_ok := find_attribute(primitive, .tangent)
 
 	index_buffer_data := cast([^]u16)primitive.indices.buffer_view.data
 	indices = make([]u32, primitive.indices.count)
@@ -272,6 +273,7 @@ temp_parse_mesh_into_mesh_data :: proc(data: ^cgltf.data, mesh_idx: int) -> (ind
 			vertices[i].color = val
 		}
 	}
+
 	if uv_ok {
 		uv_it := make_accessor_buf_iterator(primitive.attributes[uv_idx].data, hlsl.float2)
 		for val, i in accessor_buf_iterator(&uv_it) {
@@ -279,6 +281,15 @@ temp_parse_mesh_into_mesh_data :: proc(data: ^cgltf.data, mesh_idx: int) -> (ind
 			vertices[i].uv_y = val.y
 		}
 	}
+
+	if tangent_ok {
+		tangent_it := make_accessor_buf_iterator(primitive.attributes[tangent_idx].data, hlsl.float4)
+		for val, i in accessor_buf_iterator(&tangent_it) {
+			vertices[i].tangent = val
+		}
+	}
+
+	assert(tangent_ok)
 
 	ok = true
 
@@ -300,7 +311,8 @@ load_mesh_from_file :: proc(path: cstring) -> (buffers: GPUMeshBuffers, ok: bool
 	defer delete(indices)
 	defer delete(vertices)
 
-	buffers = create_mesh_buffers(indices, vertices)
+	buffers = create_mesh_buffers(auto_cast len(indices), auto_cast len(vertices))
+	staging_write_mesh_buffers(&buffers, indices, vertices)
 	buffers.index_count = u32(len(indices))
 
 	ok = true
@@ -426,7 +438,7 @@ temp_parse_mesh_into_skel_mesh_data :: proc(
 				joint_anim, ok_j := &joint_anims[joint_index]
 				if !ok_j {
 					// TODO: this is kinda ass ngl
-					joint_anims[joint_index] = JointTrack {}
+					joint_anims[joint_index] = JointTrack{}
 					joint_anim = &joint_anims[joint_index]
 				}
 
@@ -467,10 +479,10 @@ temp_parse_mesh_into_skel_mesh_data :: proc(
 	return
 }
 
-load_skel_mesh_from_file :: proc(path: cstring) -> (buffers: GPUSkelMeshBuffers, skeleton: Skeleton, anim: SkeletalAnimation, ok: bool) {
+load_skel_mesh_from_file :: proc(path: cstring) -> (skeleton: Skeleton, anim: SkeletalAnimation, ok: bool) {
 	opts := cgltf.options{}
 	data, result := cgltf.parse_file(opts, path)
-	if result != .success do return
+	assert(result == .success)
 
 	result = cgltf.load_buffers(opts, data, path)
 	if result != .success do return
@@ -485,29 +497,46 @@ load_skel_mesh_from_file :: proc(path: cstring) -> (buffers: GPUSkelMeshBuffers,
 	defer delete(vertices)
 	defer delete(attrs)
 
-	buffers = create_skel_mesh_buffers(indices, vertices, attrs)
+	skeleton.buffers = create_skel_mesh_buffers(u32(len(indices)), u32(len(vertices)), u32(len(attrs)))
+	staging_write_skel_mesh_buffers(&skeleton.buffers, indices, vertices, attrs)
 
 	ok = true
 
 	return
 }
 
-create_skel_mesh_buffers :: proc(indices: []u32, vertices: []Vertex, attrs: []SkeletonVertexAttribute) -> GPUSkelMeshBuffers {
-	assert(len(attrs) > 0)
-	assert(len(vertices) == len(attrs))
+// Creates the buffers, but doesn't fill them.
+create_skel_mesh_buffers :: proc(index_count: u32, vertex_count: u32, attrs_count: u32) -> GPUSkelMeshBuffers {
+	assert(attrs_count > 0)
+	assert(vertex_count == attrs_count)
 
 	new_surface: GPUSkelMeshBuffers
-
-	new_surface.mesh_buffers = create_mesh_buffers(indices, vertices)
-
-	attrs_buffer_size := vk.DeviceSize(size_of(SkeletonVertexAttribute) * len(attrs))
+	new_surface.mesh_buffers = create_mesh_buffers(index_count, vertex_count)
+	new_surface.attrs_count = attrs_count
 
 	new_surface.skel_vert_attrs_buffer = create_buffer(
-		attrs_buffer_size,
+		vk.DeviceSize(size_of(SkeletonVertexAttribute) * attrs_count),
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 	)
-	new_surface.skel_vert_attrs_address = get_buffer_device_address(new_surface.skel_vert_attrs_buffer)
+
+	return new_surface
+}
+
+staging_write_skel_mesh_buffers :: proc(
+	buffers: ^GPUSkelMeshBuffers,
+	indices: []u32,
+	vertices: []Vertex,
+	attrs: []SkeletonVertexAttribute,
+) {
+	assert(len(attrs) > 0)
+	assert(len(vertices) == len(attrs))
+
+	staging_write_mesh_buffers(buffers, indices, vertices)
+
+	attrs_buffer_size := vk.DeviceSize(size_of(SkeletonVertexAttribute) * len(attrs))
+
+	buffers.skel_vert_attrs_buffer = create_buffer(attrs_buffer_size, {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
 
 	// Copy data into buffer via staging buffer
 	{
@@ -525,11 +554,9 @@ create_skel_mesh_buffers :: proc(indices: []u32, vertices: []Vertex, attrs: []Sk
 				size      = attrs_buffer_size,
 			}
 
-			vk.CmdCopyBuffer(cmd, staging.buffer, new_surface.skel_vert_attrs_buffer.buffer, 1, &attrs_copy)
+			vk.CmdCopyBuffer(cmd, staging.buffer, buffers.skel_vert_attrs_buffer.buffer, 1, &attrs_copy)
 		}
 
 		destroy_buffer(&staging)
 	}
-
-	return new_surface
 }

@@ -1,12 +1,7 @@
 static const uint SHADOW_ID = 0;
-static const uint A_ID = 1;
-static const uint B_ID = 2;
-static const uint C_ID = 3;
-static const uint D_ID = 4;
-static const uint E_ID = 5;
-static const uint TONY_MC_MAPFACE_ID = 6;
-static const uint DFG_ID = 7;
-static const uint TEST_ENVIRONMENT_MAP_ID = 8;
+static const uint TONY_MC_MAPFACE_ID = 1;
+static const uint DFG_ID = 2;
+static const uint ENVIRONMENT_MAP_ID = 3;
 
 [vk_binding(0, 0)] Texture2D Textures[];
 [vk_binding(0, 0)] Texture2D<float4> TexturesHDR[];
@@ -17,11 +12,12 @@ static const uint TEST_ENVIRONMENT_MAP_ID = 8;
 
 static const uint DEFAULT_SAMPLER_ID = 0;
 static const uint SHADOW_SAMPLER_ID = 1;
+static const uint ENVIRONMENT_SAMPLER_ID = 2;
 
 [vk_binding(1, 0)] SamplerState Samplers[];
 [vk_binding(1, 0)] SamplerComparisonState DepthSamplers[];
 
-static const uint DRAW_IMAGE_ID = 0;
+static const uint RESOLVED_IMAGE_ID = 0;
 
 [vk_binding(2, 0)] RWTexture2D Images[];
 [vk_binding(2, 0)] RWTexture2D<float4> HDRImages[];
@@ -51,9 +47,9 @@ float3 sample_lut_3d(uint id, float3 coord) {
 }
 
 float4 sample_cubemap(uint id, float3 coord) {
-    return Cubemaps[id].Sample(Samplers[DEFAULT_SAMPLER_ID], coord);
+    return Cubemaps[id].Sample(Samplers[ENVIRONMENT_SAMPLER_ID], coord);
 }
 
-float4 sample_cubemap(uint id, float3 coord, uint level) {
-    return Cubemaps[id].SampleLevel(Samplers[DEFAULT_SAMPLER_ID], coord, level);
+float4 sample_cubemap(uint id, float3 coord, float level) {
+    return Cubemaps[id].SampleLevel(Samplers[ENVIRONMENT_SAMPLER_ID], coord, level);
 }

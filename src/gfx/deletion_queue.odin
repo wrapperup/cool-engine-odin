@@ -6,7 +6,7 @@ import "core:mem"
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
 
-// The deletion queue is implemented a bit differently to the one found
+// The deletion arena is implemented a bit differently to the one found
 // in vkguide. Since Odin doesn't have convenient lambdas, and since Vulkan
 // handles are (usually) all 64-bit pointers/handles, we can generalize an API
 // that has similar ergonomics.
@@ -15,10 +15,10 @@ import vk "vendor:vulkan"
 // a lambda/procedure. If you allocated with VMA, you can also
 // pass in the allocation.
 //
-// The deletion queue is now basically a (crappy) state machine.
+// The deletion arena is now basically a (crappy) state machine.
 
-DeletionQueue :: struct {
-	resource_del_queue: [dynamic]ResourceHandle,
+VulkanArena :: struct {
+	resource_arena: [dynamic]ResourceHandle,
 }
 
 ResourceHandle :: struct {
@@ -42,7 +42,43 @@ ResourceType :: enum {
 	Sampler,
 }
 
-vk_destroy_resource :: proc(resource: ResourceHandle) {
+destroy_resource :: proc(
+	handle: $T,
+	allocation: vma.Allocation = nil,
+) {
+	when T == vk.Buffer || T == vk.Image {
+		when allocation == nil {
+			#assert(false)
+		}
+	}
+
+	ty := resource_type_of_handle(T)
+
+	switch ty {
+	case .VmaBuffer:
+		vma.DestroyBuffer(r_ctx.allocator, transmute(vk.Buffer)resource.handle, resource.allocation)
+	case .VmaImage:
+		vma.DestroyImage(r_ctx.allocator, transmute(vk.Image)resource.handle, resource.allocation)
+	case .CommandPool:
+		vk.DestroyCommandPool(r_ctx.device, transmute(vk.CommandPool)resource.handle, nil)
+	case .DescriptorPool:
+		vk.DestroyDescriptorPool(r_ctx.device, transmute(vk.DescriptorPool)resource.handle, nil)
+	case .DescriptorSetLayout:
+		vk.DestroyDescriptorSetLayout(r_ctx.device, transmute(vk.DescriptorSetLayout)resource.handle, nil)
+	case .Fence:
+		vk.DestroyFence(r_ctx.device, transmute(vk.Fence)resource.handle, nil)
+	case .ImageView:
+		vk.DestroyImageView(r_ctx.device, transmute(vk.ImageView)resource.handle, nil)
+	case .Pipeline:
+		vk.DestroyPipeline(r_ctx.device, transmute(vk.Pipeline)resource.handle, nil)
+	case .PipelineLayout:
+		vk.DestroyPipelineLayout(r_ctx.device, transmute(vk.PipelineLayout)resource.handle, nil)
+	case .Sampler:
+		vk.DestroySampler(r_ctx.device, transmute(vk.Sampler)resource.handle, nil)
+	}
+}
+
+vk_destroy_resource_by_handle :: proc(resource: ResourceHandle) {
 	when false {
 		log_normal("DEBUG: Destroy", resource.ty, "@", resource.caller_location, "-", resource.debug_info)
 	}
@@ -92,6 +128,14 @@ resource_type_of_handle :: proc($T: typeid) -> ResourceType {
 	//odinfmt: enable
 }
 
+type_requires_allocation :: proc($T: typeid) -> bool {
+	return \
+		true when T == vk.Buffer else
+		true when T == vk.Image else
+		false
+	//odinfmt: enable
+}
+
 resource_requires_allocation :: proc(type: ResourceType) -> bool {
 	#partial switch type {
 	case .VmaBuffer:
@@ -103,8 +147,8 @@ resource_requires_allocation :: proc(type: ResourceType) -> bool {
 	}
 }
 
-push_deletion_queue :: proc(
-	queue: ^DeletionQueue,
+defer_destroy :: proc(
+	arena: ^VulkanArena,
 	handle: $T,
 	allocation: vma.Allocation = nil,
 	debug: string = "UNKNOWN",
@@ -124,17 +168,26 @@ push_deletion_queue :: proc(
 		caller_location = loc,
 	}
 
-	append(&queue.resource_del_queue, resource_handle)
+	append(&arena.resource_arena, resource_handle)
 }
 
-flush_deletion_queue :: proc(queue: ^DeletionQueue) {
-	#reverse for &resource in queue.resource_del_queue {
-		vk_destroy_resource(resource)
+defer_destroy_buffer :: proc(
+	arena: ^VulkanArena,
+	buffer: GPUBuffer,
+	debug: string = "UNKNOWN",
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	defer_destroy(arena, buffer.buffer, buffer.allocation);
+}
+
+flush_vk_arena :: proc(arena: ^VulkanArena) {
+	#reverse for &resource in arena.resource_arena {
+		vk_destroy_resource_by_handle(resource)
 	}
 
-	clear(&queue.resource_del_queue)
+	clear(&arena.resource_arena)
 }
 
-delete_deletion_queue :: proc(queue: DeletionQueue) {
-	delete(queue.resource_del_queue)
+delete_vk_arena :: proc(arena: VulkanArena) {
+	delete(arena.resource_arena)
 }

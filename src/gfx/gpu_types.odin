@@ -6,12 +6,6 @@ import hlsl "core:math/linalg/hlsl"
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
 
-AllocatedBuffer :: struct {
-	buffer:     vk.Buffer,
-	allocation: vma.Allocation,
-	info:       vma.AllocationInfo,
-}
-
 @(ShaderShared)
 Vertex :: struct {
 	position: hlsl.float3,
@@ -19,6 +13,7 @@ Vertex :: struct {
 	normal:   hlsl.float3,
 	uv_y:     f32,
 	color:    hlsl.float4,
+	tangent:  hlsl.float4,
 }
 
 @(ShaderShared)
@@ -28,16 +23,16 @@ SkeletonVertexAttribute :: struct {
 }
 
 GPUMeshBuffers :: struct {
-	index_buffer:   AllocatedBuffer,
-	index_count:    u32,
-	vertex_buffer:  AllocatedBuffer,
-	vertex_address: vk.DeviceAddress,
+	index_buffer:  GPUBuffer,
+	index_count:   u32,
+	vertex_buffer: GPUBuffer,
+	vertex_count:  u32,
 }
 
 GPUSkelMeshBuffers :: struct {
-	using mesh_buffers:            GPUMeshBuffers,
+	using mesh_buffers:     GPUMeshBuffers,
 
 	// Array of SkeletonVertexAttribute
-	skel_vert_attrs_buffer:        AllocatedBuffer,
-	skel_vert_attrs_address:       vk.DeviceAddress,
+	skel_vert_attrs_buffer: GPUBuffer,
+	attrs_count:            u32,
 }

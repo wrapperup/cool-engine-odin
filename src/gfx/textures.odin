@@ -14,7 +14,10 @@ load_image_from_file :: proc(
 	filename: cstring,
 	image_type: vk.ImageType = .D2,
 	image_view_type: vk.ImageViewType = .D2,
-) -> AllocatedImage {
+	out_width: ^u32 = nil,
+	out_height: ^u32 = nil,
+	out_depth: ^u32 = nil,
+) -> GPUImage {
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 
@@ -37,10 +40,20 @@ load_image_from_file :: proc(
 	data := ktx.Texture_GetData(ktx_texture)
 	format := ktx.Texture_GetVkFormat(ktx_texture)
 
+	fmt.println("format:", format)
+
 	extent := vk.Extent3D{ktx_texture.baseWidth, ktx_texture.baseHeight, ktx_texture.baseDepth}
 
-	image := create_image(format, extent, {.SAMPLED, .TRANSFER_DST}, image_type = image_type, array_layers = num_layers, flags = is_cubemap ? {.CUBE_COMPATIBLE} : {})
-	create_image_view(&image, {.COLOR}, image_view_type = image_view_type)
+	image := create_image(
+		format,
+		extent,
+		{.SAMPLED, .TRANSFER_DST},
+		image_type = image_type,
+		mip_levels = num_levels,
+		array_layers = num_layers,
+		flags = is_cubemap ? {.CUBE_COMPATIBLE} : {},
+	)
+	create_image_view(&image, {.COLOR}, image_view_type, 0, num_levels, 0, num_layers)
 
 	// Next, upload image data to vk Image
 	staging := create_buffer(vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
@@ -66,9 +79,9 @@ load_image_from_file :: proc(
 			copy_region.imageSubresource.mipLevel = level
 			copy_region.imageSubresource.baseArrayLayer = i
 			copy_region.imageSubresource.layerCount = 1
-			copy_region.imageExtent.width = ktx_texture.baseWidth >> level
-			copy_region.imageExtent.height = ktx_texture.baseHeight >> level
-			copy_region.imageExtent.depth = ktx_texture.baseDepth >> level
+			copy_region.imageExtent.width = max(ktx_texture.baseWidth >> level, 1)
+			copy_region.imageExtent.height = max(ktx_texture.baseHeight >> level, 1)
+			copy_region.imageExtent.depth = max(ktx_texture.baseDepth >> level, 1)
 			copy_region.bufferOffset = vk.DeviceSize(offset)
 
 			append(&copy_regions, copy_region)
@@ -83,8 +96,18 @@ load_image_from_file :: proc(
 
 	destroy_buffer(&staging)
 
-	push_deletion_queue(&r_ctx.main_deletion_queue, image.image_view)
-	push_deletion_queue(&r_ctx.main_deletion_queue, image.image, image.allocation)
+	defer_destroy(&r_ctx.global_arena, image.image_view)
+	defer_destroy(&r_ctx.global_arena, image.image, image.allocation)
+
+	if out_width != nil {
+		out_width^ = ktx_texture.baseWidth
+	}
+	if out_height != nil {
+		out_height^ = ktx_texture.baseHeight
+	}
+	if out_depth != nil {
+		out_depth^ = ktx_texture.baseDepth
+	}
 
 	return image
 }
@@ -95,12 +118,12 @@ load_image_from_bytes :: proc(
 	image_format: vk.Format,
 	image_type: vk.ImageType = .D2,
 	image_view_type: vk.ImageViewType = .D2,
-) -> AllocatedImage {
+) -> GPUImage {
 	image := create_image(image_format, extent, {.SAMPLED, .TRANSFER_DST}, image_type = image_type)
 	create_image_view(&image, {.COLOR}, image_view_type = image_view_type)
 
-	push_deletion_queue(&r_ctx.main_deletion_queue, image.image_view)
-	push_deletion_queue(&r_ctx.main_deletion_queue, image.image, image.allocation)
+	defer_destroy(&r_ctx.global_arena, image.image_view)
+	defer_destroy(&r_ctx.global_arena, image.image, image.allocation)
 
 	// Next, upload image data to vk Image
 	staging := create_buffer(vk.DeviceSize(len(bytes)), {.TRANSFER_SRC}, .CPU_ONLY)
@@ -127,4 +150,61 @@ load_image_from_bytes :: proc(
 	destroy_buffer(&staging)
 
 	return image
+}
+
+write_buffer_to_ktx_file :: proc(
+	filename: cstring,
+	buffer: ^GPUBuffer,
+	extent: vk.Extent3D,
+	format: vk.Format,
+	format_size: u32,
+	image_type: vk.ImageType = .D2,
+	levels: u32 = 1,
+	layers: u32 = 1,
+	faces: u32 = 1,
+	is_array: bool = false,
+) {
+	info := buffer.info
+	max_size := info.size
+	data := cast([^]u8)info.pMappedData
+
+	assert(info.pMappedData != nil)
+
+	ktx_texture: ^ktx.Texture2
+	createInfo := ktx.TextureCreateInfo {
+		vkFormat        = format,
+		baseWidth       = extent.width,
+		baseHeight      = extent.height,
+		baseDepth       = extent.depth,
+		numDimensions   = u32(image_type) + 1,
+		numLevels       = levels,
+		numLayers       = layers,
+		numFaces        = faces,
+		isArray         = is_array,
+		generateMipmaps = false,
+	}
+
+	ktx.Texture2_Create(&createInfo, .TEXTURE_CREATE_ALLOC_STORAGE, &ktx_texture)
+
+	offset: u32
+	for level in 0 ..< levels {
+		for face in 0 ..< faces {
+			w := extent.width >> level
+			h := extent.width >> level
+
+			size := w * h * format_size
+
+			assert(u32(offset) + size <= u32(max_size))
+
+			res := ktx.Texture_SetImageFromMemory(ktx_texture, level, 0, face, data[offset:], uint(size))
+			assert(res == .SUCCESS)
+
+			offset += size
+		}
+	}
+
+	res := ktx.Texture_WriteToNamedFile(ktx_texture, filename)
+	assert(res == .SUCCESS)
+
+	ktx.Texture_Destroy(ktx_texture)
 }

@@ -4,3 +4,9 @@
 [submodule "deps/jolt"]
 	path = deps/jolt
 	url = https://gitlab.com/raygarner13/jolt
+[submodule "deps/physx-odin"]
+	path = deps/physx-odin
+	url = https://github.com/tgolsson/physx-odin
+[submodule "deps/odin-vma"]
+	path = deps/odin-vma
+	url = https://github.com/DanielGavin/odin-vma

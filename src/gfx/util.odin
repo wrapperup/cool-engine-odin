@@ -138,15 +138,18 @@ init_imageview_create_info :: proc(
 	format: vk.Format,
 	image: vk.Image,
 	aspect_flags: vk.ImageAspectFlags,
-	base_mip_level: u32 = 0,
 	view_type: vk.ImageViewType = .D2,
+	base_mip_level: u32 = 0,
+	mip_count: u32 = 1,
+	base_array_layer: u32 = 0,
+	layer_count: u32 = 1,
 ) -> vk.ImageViewCreateInfo {
 	info := vk.ImageViewCreateInfo {
 		sType = .IMAGE_VIEW_CREATE_INFO,
 		viewType = view_type,
 		image = image,
 		format = format,
-		subresourceRange = {baseMipLevel = base_mip_level, levelCount = 1, baseArrayLayer = 0, layerCount = 1, aspectMask = aspect_flags},
+		subresourceRange = {baseMipLevel = base_mip_level, levelCount = mip_count, baseArrayLayer = base_array_layer, layerCount = layer_count, aspectMask = aspect_flags},
 	}
 
 	return info
@@ -157,6 +160,7 @@ init_sampler_create_info :: proc(
 	address_mode: vk.SamplerAddressMode,
 	compare_op: vk.CompareOp = .NEVER,
 	border_color: vk.BorderColor = .FLOAT_TRANSPARENT_BLACK,
+	max_lod: f32 = 1.0
 ) -> vk.SamplerCreateInfo {
 	sampler_create_info := vk.SamplerCreateInfo {
 		sType         = .SAMPLER_CREATE_INFO,
@@ -169,7 +173,7 @@ init_sampler_create_info :: proc(
 		mipLodBias    = 0.0,
 		maxAnisotropy = 1.0,
 		minLod        = 0.0,
-		maxLod        = 1.0,
+		maxLod        = max_lod,
 		borderColor   = border_color,
 		compareOp     = compare_op,
 		compareEnable = compare_op != .NEVER,

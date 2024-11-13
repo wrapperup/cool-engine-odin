@@ -37,7 +37,8 @@ init_imgui :: proc(window: glfw.WindowHandle) {
 	// 2: initialize imgui library
 
 	// this initializes the core structures of imgui
-	im.CreateContext()
+	r_ctx.imgui_ctx = im.CreateContext()
+	im.SetCurrentContext(r_ctx.imgui_ctx)
 
 	// this initializes imgui for glfw
 	im_glfw.InitForVulkan(window, true)

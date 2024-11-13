@@ -5,6 +5,7 @@ tasks:
     - task: run
 
   run:
+    deps: [build-hotreload]
     cmds:
       - task build-debug
       - ./build/debug/main.exe
@@ -39,9 +40,66 @@ tasks:
     cmds:
       - pwsh ./build-release.ps1
 
+  build-hotreload:
+    cmds:
+      - pwsh ./build-hotreload.ps1
+
   check:
     cmds:
       - odin check . -strict-style -warnings-as-errors -vet
+
+  build-dfg:
+    sources:
+      - src/**/*.odin
+      - tools/**/*.odin
+    deps: [build-shaders]
+    cmds:
+      - odin build ./tools/dfg.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -lld
+
+  build-prefilter:
+    sources:
+      - src/**/*.odin
+      - tools/**/*.odin
+    deps: [build-shaders]
+    cmds:
+      - odin build ./tools/prefilter.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -lld
+
+  build-sh:
+    sources:
+      - src/**/*.odin
+      - tools/**/*.odin
+    deps: [build-shaders]
+    cmds:
+      - odin build ./tools/sh.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -lld
+
+  dfg:
+    deps: [build-dfg]
+    cmds:
+      - ./dfg.exe assets/gen/dfg -size=256
+
+  test-cubemap:
+    deps: [build-prefilter, build-sh]
+    cmds:
+      - ./prefilter.exe assets/textures/environment/test_cubemap.ktx2 assets/gen/test_cubemap_ld
+      - ./sh.exe assets/textures/environment/test_cubemap.ktx2 > assets/gen/sh_cubemaps.txt
+
+  ennis-raw-cubemap:
+    deps: [build-prefilter, build-sh]
+    cmds:
+      - ./prefilter.exe assets/textures/environment/ennis_raw.ktx2 assets/gen/test_cubemap_ld -size=512
+      - ./sh.exe assets/textures/environment/ennis_raw.ktx2 > assets/gen/sh_cubemaps.txt
+
+  ennis-cubemap:
+    deps: [build-prefilter, build-sh]
+    cmds:
+      - ./prefilter.exe assets/textures/environment/ennis.ktx2 assets/gen/test_cubemap_ld
+      - ./sh.exe assets/textures/environment/ennis.ktx2 > assets/gen/sh_cubemaps.txt
+
+  white-furnace-cubemap:
+    deps: [build-prefilter, build-sh]
+    cmds:
+      - ./prefilter.exe assets/textures/environment/white_furnace.ktx2 assets/gen/test_cubemap_ld
+      - ./sh.exe assets/textures/environment/white_furnace.ktx2 > assets/gen/sh_cubemaps.txt
 
   test:
     cmds:

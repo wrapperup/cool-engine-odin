@@ -4,11 +4,7 @@ import "core:math"
 import "core:math/linalg"
 
 @(require_results)
-matrix4_perspective_z0_f32 :: proc "contextless" (
-	fovy, aspect, near, far: f32,
-) -> (
-	m: linalg.Matrix4f32,
-) #no_bounds_check {
+matrix4_perspective_z0_f32 :: proc "contextless" (fovy, aspect, near, far: f32) -> (m: linalg.Matrix4f32) #no_bounds_check {
 	tan_half_fovy := math.tan(0.5 * fovy)
 	m[0, 0] = 1 / (aspect * tan_half_fovy)
 	m[1, 1] = 1 / (tan_half_fovy)
@@ -23,11 +19,7 @@ matrix4_perspective_z0_f32 :: proc "contextless" (
 }
 
 @(require_results)
-matrix_ortho3d_z0_f32 :: proc "contextless" (
-	left, right, bottom, top, near, far: f32,
-) -> (
-	m: linalg.Matrix4f32,
-) #no_bounds_check {
+matrix_ortho3d_z0_f32 :: proc "contextless" (left, right, bottom, top, near, far: f32) -> (m: linalg.Matrix4f32) #no_bounds_check {
 	m[0, 0] = +2 / (right - left)
 	m[1, 1] = +2 / (top - bottom)
 	m[0, 3] = -(right + left) / (right - left)
@@ -43,11 +35,7 @@ matrix_ortho3d_z0_f32 :: proc "contextless" (
 }
 
 @(require_results)
-matrix4_infinite_perspective_z0_f32 :: proc "contextless" (
-	fovy, aspect, near: f32,
-) -> (
-	m: linalg.Matrix4f32,
-) #no_bounds_check {
+matrix4_infinite_perspective_z0_f32 :: proc "contextless" (fovy, aspect, near: f32) -> (m: linalg.Matrix4f32) #no_bounds_check {
 	tan_half_fovy := math.tan(0.5 * fovy)
 	m[0, 0] = 1 / (aspect * tan_half_fovy)
 	m[1, 1] = 1 / (tan_half_fovy)

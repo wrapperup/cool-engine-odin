@@ -23,6 +23,9 @@ Skeleton :: struct {
 	// A matrix describing the transformation from model space to joint space.
 	// Useful for transforming vertices in model space to joint space.
 	inverse_bind_matrices: [dynamic]JointMatrix,
+
+	// Base static buffers representing the skeleton on the GPU.
+	buffers: GPUSkelMeshBuffers
 }
 
 JointTrack :: struct {

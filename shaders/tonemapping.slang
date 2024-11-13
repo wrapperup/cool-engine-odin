@@ -18,14 +18,17 @@ void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
   let texel_coord = uint2(dispatchThreadID.xy);
 
   uint2 size;
-  HDRImages[DRAW_IMAGE_ID].GetDimensions(size.x, size.y);
+  HDRImages[RESOLVED_IMAGE_ID].GetDimensions(size.x, size.y);
 
+  let exposure = 1.6f;
   if (texel_coord.x < size.x && texel_coord.y < size.y) {
-    for (uint i = 0; i < 4; i++) {
-      let hdr_color = HDRImagesMS[DRAW_IMAGE_ID][texel_coord, i].rgb;
-      let mapped = tony_mc_mapface(hdr_color);
+    let hdr_color = HDRImages[RESOLVED_IMAGE_ID][texel_coord].rgb * exposure;
+    let mapped = tony_mc_mapface(hdr_color);
 
-      HDRImagesMS[DRAW_IMAGE_ID][texel_coord, i] = float4(mapped, 1.0);
-    }
+    let gamma_corrected = float4(pow(mapped, float3(1.0/2.2)), 1.0);
+    let linear_color = float4(mapped, 1.0);
+
+    HDRImages[RESOLVED_IMAGE_ID][texel_coord] = gamma_corrected;
+    // HDRImages[RESOLVED_IMAGE_ID][texel_coord] = linear_color;
   }
 }

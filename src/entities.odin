@@ -1,4 +1,4 @@
-package main
+package game
 
 import "base:intrinsics"
 import "base:runtime"
@@ -44,7 +44,7 @@ remove_elem_sparse_set :: proc(set: ^SparseSet($T), id: EntityId) -> (ok: bool) 
 	// Fix affected mapping that was moved
 	for &k, &v in set.sparse {
 		if old_index == v {
-			set.sparse[k] = deleted_index	
+			set.sparse[k] = deleted_index
 		}
 	}
 
@@ -68,6 +68,33 @@ EntityId :: distinct bit_field u32 {
 	index:      u32  | 24,
 }
 
+// For rawptr conversion only.
+_EntityId64 :: distinct bit_field u64 {
+	live:       bool | 1,
+	generation: u8   | 7,
+	index:      u32  | 24,
+	pad:        u32  | 32,
+}
+
+entity_id_to_rawptr :: proc(id: EntityId) -> rawptr {
+	raw_id := _EntityId64 {
+		live       = id.live,
+		generation = id.generation,
+		index      = id.index,
+	}
+	return transmute(rawptr)raw_id
+}
+
+entity_id_from_rawptr :: proc(ptr: rawptr) -> EntityId {
+	raw_id := transmute(_EntityId64)ptr
+	id := EntityId {
+		live       = raw_id.live,
+		generation = raw_id.generation,
+		index      = raw_id.index,
+	}
+	return id
+}
+
 // Strongly typed ID, brings some checks back to compile-time to ensure
 // the entity you queried is the correct type.
 TypedEntityId :: struct($T: typeid) {
@@ -80,44 +107,75 @@ TypedEntityId :: struct($T: typeid) {
 // possible.
 Entity :: struct {
 	id:          EntityId,
+	subtype:     typeid,
 	translation: [3]f32,
 	velocity:    [3]f32,
 	rotation:    linalg.Quaternionf32,
 }
 
-MAX_ENTITIES :: 16_777_216
+MAX_ENTITY_STORAGE :: 16_777_216
 
-NUM_ENTITIES: u32 = 0
+EntityStorage :: struct {
+	num_entities:    u32,
 
-// Holds cache-friendly, common data across entities
-ENTITIES: [MAX_ENTITIES]Entity
+	// Holds cache-friendly, common data across entities
+	entities:        [MAX_ENTITY_STORAGE]Entity,
 
-// Maps typeid of T to SparseSet(T). 
-//
-// Safety: NEVER use this raw, use `new_or_get_entity_subtype_storage`
-// or `get_entity_subtype_storage to get the correct typing.
-SUBTYPE_STORAGE: map[typeid]rawptr
+	// Maps typeid of T to SparseSet(T). 
+	//
+	// Safety: NEVER use this raw, use `new_or_get_entity_subtype_storage`
+	// or `get_entity_subtype_storage to get the correct typing.
+	subtype_storage: map[string]SubtypeStorage,
+}
+
+SubtypeStorage :: struct {
+	ptr:       ^RawSparseSet,
+	type_info: runtime.Type_Info,
+}
+
+entity_storage: ^EntityStorage
+
+init_entity_storage :: proc() -> ^EntityStorage {
+	entity_storage = new(EntityStorage)
+	return entity_storage
+}
+
+set_entity_storage :: proc(s: ^EntityStorage) {
+	entity_storage = s
+}
 
 new_or_get_entity_subtype_storage :: proc($T: typeid) -> ^SparseSet(T) {
-	if _, ok := SUBTYPE_STORAGE[T]; !ok {
-		SUBTYPE_STORAGE[T] = new(SparseSet(T))
+	ty_info := type_info_of(T).variant.(runtime.Type_Info_Named)
+	name := ty_info.name
+
+	if _, ok := entity_storage.subtype_storage[name]; !ok {
+		entity_storage.subtype_storage[name] = {
+			ptr       = cast(^RawSparseSet)new(SparseSet(T)),
+			type_info = type_info_of(T)^,
+		}
 	}
 
 	return get_entity_subtype_storage(T)
 }
 
 get_entity_subtype_storage :: proc "contextless" ($T: typeid) -> ^SparseSet(T) {
-	return cast(^SparseSet(T))(SUBTYPE_STORAGE[T])
+	ty_info := type_info_of(T).variant.(runtime.Type_Info_Named)
+	name := ty_info.name
+
+	return cast(^SparseSet(T))(entity_storage.subtype_storage[name].ptr)
 }
 
 new_entity_subtype :: proc($T: typeid) -> ^T where intrinsics.type_is_subtype_of(T, ^Entity) {
 	data := T{}
 	data.entity = new_entity_raw()
+	data.entity.subtype = T
 
 	storage := new_or_get_entity_subtype_storage(T)
 
 	return assign_at_sparse_set(storage, data.entity.id, data)
 }
+
+#assert(size_of(typeid) == 8)
 
 new_entity_subtype_id :: proc($T: typeid) -> (^T, TypedEntityId(T)) where intrinsics.type_is_subtype_of(T, ^Entity) {
 	subtype := new_entity_subtype(T)
@@ -129,13 +187,14 @@ new_entity_subtype_id :: proc($T: typeid) -> (^T, TypedEntityId(T)) where intrin
 // extended, returns true, else if an entity was revived, false.
 new_entity_raw :: proc() -> ^Entity {
 	created_entity := Entity {
-		id = {live = true, generation = 0, index = NUM_ENTITIES},
+		id = {live = true, generation = 0, index = entity_storage.num_entities},
+		subtype = Entity, // none assigned.
 	}
 
-	ENTITIES[NUM_ENTITIES] = created_entity
-	NUM_ENTITIES += 1
+	entity_storage.entities[entity_storage.num_entities] = created_entity
+	entity_storage.num_entities += 1
 
-	return &ENTITIES[NUM_ENTITIES - 1]
+	return &entity_storage.entities[entity_storage.num_entities - 1]
 }
 
 new_entity :: proc {
@@ -146,23 +205,22 @@ new_entity :: proc {
 // Get entity. Generational index ensures that the entity
 // you get is a valid entity, don't persist the pointer. Can return nil.
 get_entity_raw :: proc(id: EntityId) -> ^Entity {
-	entity := ENTITIES[id.index]
+	entity := entity_storage.entities[id.index]
 
 	// Safety: Compare generation, this ensures that the entity we find isn't invalidated.
 	if entity.id.generation != id.generation {
 		return nil
 	}
 
-	return &ENTITIES[id.index]
+	return &entity_storage.entities[id.index]
 }
 
 get_entity_subtype :: proc($T: typeid, id: EntityId) -> ^T where intrinsics.type_is_subtype_of(T, ^Entity) {
 	storage := get_entity_subtype_storage(T)
-	type_t, ok := get_elem_sparse_set(storage, id)
+	if storage == nil do return nil
 
-	if !ok {
-		return nil
-	}
+	type_t, ok := get_elem_sparse_set(storage, id)
+	if !ok do return nil
 
 	// if type_t.id.generation != id.generation {
 	// 	return nil
@@ -185,7 +243,7 @@ get_entity :: proc {
 
 // Removes entity from the entities list, and invalidates all existing handles.
 remove_entity_raw :: proc(id: EntityId) -> bool {
-	entity := &ENTITIES[id.index]
+	entity := &entity_storage.entities[id.index]
 
 	// Compare generation 
 	if entity.id.generation != id.generation {
@@ -225,11 +283,21 @@ entity_id_of :: proc(subtype_entity: ^$T) -> TypedEntityId(T) where intrinsics.t
 }
 
 get_entities :: proc($T: typeid) -> []T {
-	return get_entity_subtype_storage(T).dense[:]
+	storage := get_entity_subtype_storage(T)
+	if storage != nil {
+		return storage.dense[:]
+	} else {
+		return {}
+	}
 }
 
 len_entities :: proc($T: typeid) -> int {
-	return len(get_entity_subtype_storage(T).dense)
+	storage := get_entity_subtype_storage(T)
+	if storage != nil {
+		return len(storage.dense)
+	} else {
+		return 0
+	}
 }
 
 
@@ -258,9 +326,7 @@ parallel_for_entities_data :: proc(
 		}, &parallel_for_entity_data)
 }
 
-parallel_for_entities_no_data :: proc(
-	procedure: proc(entity: ^$T, index: int),
-) where intrinsics.type_is_subtype_of(T, ^Entity) {
+parallel_for_entities_no_data :: proc(procedure: proc(entity: ^$T, index: int)) where intrinsics.type_is_subtype_of(T, ^Entity) {
 	storage := get_entity_subtype_storage(T)
 
 	Parallel_For_Entity_Data :: struct {

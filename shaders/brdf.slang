@@ -32,11 +32,43 @@ float2 hammersley(uint i, float numSamples) {
 	return float2(i / numSamples, bits / pow(2.f,32.f));
 }
 
-float3 D_importance_sample_ggx(float2 u, float a) {
+float3 hemisphere_importance_sample_ggx(float2 u, float a) {
 	float phi = 2.0 * float(PI) * u.x;
 	// NOTE: (aa-1) == (a-1)(a+1) produces better fp accuracy
 	float cosTheta2 = (1 - u.y) / (1 + (a + 1) * ((a - 1) * u.y));
 	float cosTheta = sqrt(cosTheta2);
 	float sinTheta = sqrt(1 - cosTheta2);
 	return float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+}
+
+float distribution_ggx(float NoH, float p_roughness) {
+    // NOTE: (aa-1) == (a-1)(a+1) produces better fp accuracy
+    float a = p_roughness * p_roughness;
+    float f = (a - 1) * ((a + 1) * (NoH * NoH)) + 1;
+    return (a * a) / ((float) PI * f * f);
+}
+
+// GGX NDF via importance sampling
+float3 importance_sample_ggx(float2 Xi, float3 N, float roughness)
+{
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+	
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (alpha2 - 1.0) * Xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+	
+    // from spherical coordinates to cartesian coordinates
+    float3 H;
+    H.x = cos(phi) * sinTheta;
+    H.y = sin(phi) * sinTheta;
+    H.z = cosTheta;
+	
+    // from tangent-space vector to world-space sample vector
+    float3 up        = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent   = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+	
+    float3 sampleVec = tangent * H.x + bitangent * H.y + N * H.z;
+    return normalize(sampleVec);
 }

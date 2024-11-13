@@ -1,6 +1,9 @@
 import bindless;
+import common;
+import shadows;
 import standard_brdf;
 import ibl;
+import brdf;
 
 static const float4x4 biasMat = {
   0.5, 0.0, 0.0, 0.5, //
@@ -9,45 +12,17 @@ static const float4x4 biasMat = {
   0.0, 0.0, 0.0, 1.0, //
 };
 
-struct Vertex {
-  float3 position;
-  float uv_x;
-  float3 normal;
-  float uv_y;
-  float4 color;
-};
-
-struct SkelVertexAttribute {
-  uint8_t joints[4];
-  float weights[4];
-};
-
-struct GlobalData {
-  float4x4 view_projection_matrix;
-  float4x4 view_projection_i_matrix;
-  float4x4 sun_view_projection_matrix;
-  float4x4 sun_view_projection_i_matrix;
-  float3 sun_color;
-  float bias;
-  float3 sky_color;
-  float pad_0;
-  float3 camera_pos;
-  float pad_1;
-  float3 sun_pos;
-  float pad_2;
-};
-
 struct DrawPushConstants {
   GlobalData *global_data_buffer;
   Vertex *vertex_buffer;
   float4x4 *model_matrices;
-  float4x4 *joint_matrices;
-  SkelVertexAttribute *attrs;
+  PBRMaterial *materials;
+  uint model_index;
+  uint material_index;
 };
 
 struct VertexInput {
   uint vertex_index : SV_VertexID;
-  uint instance_id : SV_InstanceID;
 };
 
 struct PbrMaterialParams {
@@ -62,34 +37,48 @@ struct PbrMaterialParams {
 [vk_push_constant]
 DrawPushConstants pc;
 
+struct V2PShadow {
+  float4 pos : SV_Position;
+}
+
+[shader("vertex")]
+V2PShadow vertex_shadow_main(VertexInput input) {
+  let vertex = pc.vertex_buffer[input.vertex_index];
+
+  let model_to_world = pc.model_matrices[pc.model_index];
+  let view_projection_matrix = pc.global_data_buffer.sun_view_projection_matrix;
+
+  V2PShadow output;
+  output.pos = mul(view_projection_matrix,
+                   mul(model_to_world, float4(vertex.position, 1.0)));
+
+  return output;
+}
+
 [shader("vertex")]
 FragmentInput vertex_main(VertexInput input) {
   let vertex = pc.vertex_buffer[input.vertex_index];
-  let attrs = pc.attrs[input.vertex_index];
 
   let view_projection_matrix = pc.global_data_buffer.view_projection_matrix;
   let sun_view_projection_matrix =
       pc.global_data_buffer.sun_view_projection_matrix;
 
-  var skin_mat = attrs.weights[0] * pc.joint_matrices[attrs.joints[0]] +
-                 attrs.weights[1] * pc.joint_matrices[attrs.joints[1]] +
-                 attrs.weights[2] * pc.joint_matrices[attrs.joints[2]] +
-                 attrs.weights[3] * pc.joint_matrices[attrs.joints[3]];
+  let model_to_world = pc.model_matrices[pc.model_index];
 
-  let vert_pos = mul(skin_mat, float4(vertex.position, 1.0));
-  let vert_norm = mul(skin_mat, float4(vertex.normal, 0.0));
-  let vert_uv = float2(vertex.uv_x, vertex.uv_y);
+  let pos = mul(model_to_world, float4(vertex.position, 1.0));
+  let uv = float2(vertex.uv_x, vertex.uv_y);
+
+  let T = normalize(mul((float3x3)model_to_world, vertex.tangent.xyz));
+  let N = normalize(mul((float3x3)model_to_world, -vertex.normal));
+  let B = cross(N, T) * vertex.tangent.w;
 
   FragmentInput output;
   output.color = 1;
-  output.pos = mul(view_projection_matrix,
-                   mul(pc.model_matrices[input.instance_id], vert_pos));
-  output.normal = mul(pc.model_matrices[input.instance_id], vert_norm).xyz;
-  output.uv = vert_uv;
-  output.frag_pos = vert_pos.xyz;
-  output.sun_space_pos =
-      mul(biasMat, mul(sun_view_projection_matrix,
-                       mul(pc.model_matrices[input.instance_id], vert_pos)));
+  output.pos = mul(view_projection_matrix, pos);
+  output.uv = uv;
+  output.frag_pos = pos.xyz;
+  output.tbn = float3x3(T, B ,N);
+  output.sun_space_pos = mul(biasMat, mul(sun_view_projection_matrix, pos));
 
   return output;
 }
@@ -98,9 +87,9 @@ struct FragmentInput {
   float4 pos : SV_Position;
   float3 color : COLOR0;
   float2 uv : TEXCOORD0;
-  float3 normal;
   float3 frag_pos;
   float4 sun_space_pos;
+  float3x3 tbn;
   uint tex_id;
 };
 
@@ -114,29 +103,55 @@ FragmentOutput fragment_main(FragmentInput i) {
   float3 frag_pos = i.frag_pos;
   float3 view_pos = pc.global_data_buffer.camera_pos;
 
-  float3 n = normalize(i.normal);
+  let material = pc.materials[pc.material_index];
+
+  float3 normal = sample_texture(material.normal_map_id, i.uv).rgb * 2.0 - 1.0;
+  normal.y *= -1;
+  normal = mul(normal, i.tbn);
+  normal = normalize(normal);
+
+  let shadow =
+      filter_pcf(i.pos.xy, i.sun_space_pos, pc.global_data_buffer.bias);
+
+  float3 base_color = sample_texture(material.base_color_id, i.uv).xyz;
+  float reflectance = 1.0f;
+
+  let ao_roughness_metallic =
+      sample_texture(material.ao_roughness_metallic, i.uv);
+
+  let ao = ao_roughness_metallic.r;
+  let proughness = ao_roughness_metallic.g;
+  let metallic = ao_roughness_metallic.b;
+
+  float3 f0 = 0.16 * reflectance * reflectance * (1.0 - metallic) +
+              base_color * metallic;
+
+  float3 diffuse = (1.0 - metallic) * base_color.rgb;
+
+  float3 n = normal;
   float3 v = normalize(view_pos - frag_pos);
   float3 l = normalize(pc.global_data_buffer.sun_pos); // Directional light
   float3 h = normalize(v + l);
-
   float NoL = clamp(dot(n, l), 0.0, 1.0);
 
-  float3 base_color = 1; // For now
-  float metallic = 1.f;
-  float reflectance = 0.5f;
-  float roughness = 0.25;
-  float linear_roughness = roughness * roughness;
+  float3 frag_color = 0;
+  frag_color = saturate((NoL * ao * shadow * pc.global_data_buffer.sun_color) *
+               standard_brdf(diffuse, proughness, v, l, n, h, f0, NoL));
 
-  float3 f0 = 0.16f * reflectance * reflectance * (1.0f - metallic) + base_color * metallic;
-  float3 diffuse = (1.0 - metallic) * base_color.rgb;
+  // frag_color = evaluate_ibl(n, v, diffuse, f0, 1.0, roughness);
+  frag_color += pc.global_data_buffer.sky_color * ao *
+                evaluate_ibl(n, v, diffuse, f0, proughness, pc.global_data_buffer.environment.sh_coeffs);
 
-  float3 frag_color = (NoL * pc.global_data_buffer.sun_color) * standard_brdf(diffuse, linear_roughness, v, l, n, h, f0, NoL);
-  frag_color += pc.global_data_buffer.sky_color * base_color;
-
-  frag_color = evaluate_ibl(n, v, diffuse, f0, 1.0, roughness);
-  // frag_color = sample_cubemap(TEST_ENVIRONMENT_MAP_ID, n, 0).rgb;
-
-  // printf("%f %f %f\n", v);
+  // DEBUG
+  // float3 r = reflect(-v, n);
+  // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, r, 0).rgb;
+  // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, n, 0).rgb;
+  // frag_color = evaluate_specular_ibl(r, roughness);
+  // frag_color = irradiance_sh(n);
+  // frag_color = saturate(normal);
+  // frag_color = saturate(i.tbn[0]); // Tangent
+  // frag_color = saturate(i.tbn[1]); // Bitangent
+  // frag_color = saturate(i.tbn[2]); // Normal
 
   FragmentOutput output;
   output.frag_color = float4(frag_color, 1.0f);

@@ -1,0 +1,11 @@
+Generating SH coefficients...
+let sh0 = float3(1.225,1.173,1.231);
+let sh1 = float3(0.147,0.148,0.155);
+let sh2 = float3(0.373,0.474,0.653);
+let sh3 = float3(2.135,2.140,2.326);
+let sh4 = float3(0.246,0.229,0.239);
+let sh5 = float3(0.863,0.978,1.285);
+let sh6 = float3(0.062,0.061,0.074);
+let sh7 = float3(0.685,0.680,0.734);
+let sh8 = float3(0.003,-0.027,-0.078);
+Done in 1.5679282s

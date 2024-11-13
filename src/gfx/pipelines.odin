@@ -9,7 +9,6 @@ import vk "vendor:vulkan"
 DEFAULT_VERTEX_ENTRY: cstring : "vertex_main"
 DEFAULT_FRAGMENT_ENTRY: cstring : "fragment_main"
 
-
 PipelineBuilder :: struct {
 	shader_stages:           [dynamic]vk.PipelineShaderStageCreateInfo,
 	input_assembly:          vk.PipelineInputAssemblyStateCreateInfo,
@@ -59,8 +58,13 @@ pb_set_shaders :: proc(
 	fragment_entry: cstring = DEFAULT_FRAGMENT_ENTRY,
 ) {
 	clear(&builder.shader_stages)
-	append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.VERTEX}, shader, vertex_entry))
-	append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.FRAGMENT}, shader, fragment_entry))
+	if vertex_entry != nil {
+		append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.VERTEX}, shader, vertex_entry))
+	}
+
+	if fragment_entry != nil {
+		append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.FRAGMENT}, shader, fragment_entry))
+	}
 }
 
 pb_set_input_topology :: proc(builder: ^PipelineBuilder, topology: vk.PrimitiveTopology) {
@@ -206,11 +210,7 @@ pb_delete :: proc(builder: PipelineBuilder) {
 
 // ====================================================================
 
-create_pipeline_layout :: proc(
-	descriptor_set_layout: ^vk.DescriptorSetLayout,
-) -> (
-	pipeline_layout: vk.PipelineLayout,
-) {
+create_pipeline_layout :: proc(descriptor_set_layout: ^vk.DescriptorSetLayout = nil) -> (pipeline_layout: vk.PipelineLayout) {
 	pipeline_layout_info := init_pipeline_layout_create_info()
 	pipeline_layout_info.pSetLayouts = descriptor_set_layout
 	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
@@ -244,49 +244,42 @@ create_pipeline_layout_pc :: proc(
 	return
 }
 
-GraphicsPipelineCreationInfo :: struct {
-	pipeline_layout:       vk.PipelineLayout,
-	shader:                vk.ShaderModule,
-	vertex_entry:          cstring,
-	fragment_entry:        cstring,
-	input_topology:        vk.PrimitiveTopology,
-	polygon_mode:          vk.PolygonMode,
-	front_face:            vk.FrontFace,
-	cull_mode:             vk.CullModeFlags,
-	multisampling_samples: vk.SampleCountFlag,
-	depth:                 struct {
+create_graphics_pipeline :: proc(
+	pipeline_layout: vk.PipelineLayout,
+	shader: vk.ShaderModule,
+	input_topology: vk.PrimitiveTopology,
+	polygon_mode: vk.PolygonMode,
+	front_face: vk.FrontFace,
+	cull_mode: vk.CullModeFlags,
+	depth: struct {
 		write_enabled: b32,
 		compare_op:    vk.CompareOp,
 		format:        vk.Format,
 	},
-	color_format:          vk.Format,
-}
-
-create_graphics_pipeline :: proc(create_info: GraphicsPipelineCreationInfo) -> vk.Pipeline {
+	multisampling_samples: vk.SampleCountFlag = ._1,
+	color_format: vk.Format = .UNDEFINED,
+	vertex_entry: cstring = DEFAULT_VERTEX_ENTRY,
+	fragment_entry: cstring = DEFAULT_FRAGMENT_ENTRY,
+) -> vk.Pipeline {
 	pipeline_builder := pb_init()
 	defer pb_delete(pipeline_builder)
 
-	pipeline_builder.pipeline_layout = create_info.pipeline_layout
-	pb_set_shaders(
-		&pipeline_builder,
-		create_info.shader,
-		create_info.vertex_entry != nil ? create_info.vertex_entry : DEFAULT_VERTEX_ENTRY,
-		create_info.fragment_entry != nil ? create_info.fragment_entry : DEFAULT_FRAGMENT_ENTRY,
-	)
-	pb_set_input_topology(&pipeline_builder, create_info.input_topology)
-	pb_set_polygon_mode(&pipeline_builder, create_info.polygon_mode)
-	pb_set_cull_mode(&pipeline_builder, create_info.cull_mode, create_info.front_face)
-	pb_set_multisampling(&pipeline_builder, create_info.multisampling_samples)
+	pipeline_builder.pipeline_layout = pipeline_layout
+	pb_set_shaders(&pipeline_builder, shader, vertex_entry, fragment_entry)
+	pb_set_input_topology(&pipeline_builder, input_topology)
+	pb_set_polygon_mode(&pipeline_builder, polygon_mode)
+	pb_set_cull_mode(&pipeline_builder, cull_mode, front_face)
+	pb_set_multisampling(&pipeline_builder, multisampling_samples)
 
 	pb_disable_blending(&pipeline_builder)
 
-	pb_enable_depthtest(&pipeline_builder, create_info.depth.write_enabled, create_info.depth.compare_op)
-	pb_set_depth_format(&pipeline_builder, create_info.depth.format)
+	pb_enable_depthtest(&pipeline_builder, depth.write_enabled, depth.compare_op)
+	pb_set_depth_format(&pipeline_builder, depth.format)
 
-	if create_info.color_format == .UNDEFINED {
+	if color_format == .UNDEFINED {
 		pb_disable_color_attachment(&pipeline_builder)
 	} else {
-		pb_set_color_attachment_format(&pipeline_builder, create_info.color_format)
+		pb_set_color_attachment_format(&pipeline_builder, color_format)
 	}
 
 	return pb_build_pipeline(&pipeline_builder)

@@ -5,7 +5,7 @@ import vk "vendor:vulkan"
 
 import "core:fmt"
 
-AllocatedImage :: struct {
+GPUImage :: struct {
 	image:      vk.Image,
 	image_view: vk.ImageView,
 	allocation: vma.Allocation,
@@ -26,16 +26,26 @@ create_image :: proc(
 	flags: vk.ImageCreateFlags = {},
 	alloc_flags: vma.AllocationCreateFlags = {},
 	usage: vma.MemoryUsage = .GPU_ONLY,
-) -> AllocatedImage {
+) -> GPUImage {
 	img_alloc_info := vma.AllocationCreateInfo {
 		usage         = usage,
 		requiredFlags = {.DEVICE_LOCAL},
 		flags         = alloc_flags,
 	}
 
-	img_info := init_image_create_info(format, image_usage_flags, extent, mip_levels, array_layers, msaa_samples, image_type, flags, tiling)
+	img_info := init_image_create_info(
+		format,
+		image_usage_flags,
+		extent,
+		mip_levels,
+		array_layers,
+		msaa_samples,
+		image_type,
+		flags,
+		tiling,
+	)
 
-	new_image := AllocatedImage {
+	new_image := GPUImage {
 		extent = extent,
 		format = format,
 	}
@@ -46,12 +56,24 @@ create_image :: proc(
 }
 
 create_image_view :: proc(
-	image: ^AllocatedImage,
+	image: ^GPUImage,
 	aspect_flags: vk.ImageAspectFlags,
-	base_mip_level: u32 = 0,
 	image_view_type: vk.ImageViewType = .D2,
+	base_mip_level: u32 = 0,
+	mip_count: u32 = 1,
+	base_array_layer: u32 = 0,
+	layer_count: u32 = 1,
 ) {
-	dview_info := init_imageview_create_info(image.format, image.image, aspect_flags, base_mip_level, image_view_type)
+	dview_info := init_imageview_create_info(
+		image.format,
+		image.image,
+		aspect_flags,
+		image_view_type,
+		base_mip_level,
+		mip_count,
+		base_array_layer,
+		layer_count,
+	)
 	vk_check(vk.CreateImageView(r_ctx.device, &dview_info, nil, &image.image_view))
 }
 
@@ -60,8 +82,9 @@ create_sampler :: proc(
 	address_mode: vk.SamplerAddressMode,
 	compare_op: vk.CompareOp = .NEVER,
 	border_color: vk.BorderColor = .FLOAT_TRANSPARENT_BLACK,
+	max_lod: f32 = 1.0,
 ) -> vk.Sampler {
-	sampler_create_info := init_sampler_create_info(filter, address_mode, compare_op, border_color)
+	sampler_create_info := init_sampler_create_info(filter, address_mode, compare_op, border_color, max_lod)
 
 	sampler: vk.Sampler
 	vk_check(vk.CreateSampler(r_ctx.device, &sampler_create_info, nil, &sampler))
