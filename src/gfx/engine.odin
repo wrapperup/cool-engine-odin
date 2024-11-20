@@ -493,7 +493,7 @@ choose_swap_surface_format :: proc(available_formats: []vk.SurfaceFormatKHR) -> 
 }
 
 choose_swap_present_mode :: proc(available_present_modes: []vk.PresentModeKHR) -> vk.PresentModeKHR {
-	return .IMMEDIATE
+	return .FIFO
 }
 
 choose_swap_extent :: proc(window: glfw.WindowHandle, capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {

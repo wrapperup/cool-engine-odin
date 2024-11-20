@@ -2,3 +2,5 @@ build/
 .task/
 imgui.ini
 .vs/
+*.pdb
+*.exe

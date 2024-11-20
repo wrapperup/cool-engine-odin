@@ -166,7 +166,7 @@ init_test_materials :: proc() {
 	)
 	gfx.defer_destroy_buffer(&gfx.renderer().global_arena, game.render_state.scene_resources.materials_buffer)
 
-	base_color_id := add_texture(gfx.load_image_from_file("assets/textures/test_basecolor2.ktx2"))
+	base_color_id := add_texture(gfx.load_image_from_file("assets/textures/test_basecolor.ktx2"))
 	normal_map_id := add_texture(gfx.load_image_from_file("assets/textures/test_normalmap.ktx2"))
 	proughness_metallic_ao_id := add_texture(gfx.load_image_from_file("assets/textures/test_rma.ktx2"))
 

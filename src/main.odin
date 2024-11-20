@@ -59,6 +59,7 @@ game_init_window :: proc() -> glfw.WindowHandle {
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
+	glfw.SwapInterval(1)
 
 	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
 
