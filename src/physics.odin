@@ -6,10 +6,10 @@ import "core:math/linalg"
 import px "deps:physx-odin"
 
 GamePhysicsFilter :: enum u32 {
-    NonWalkable,
+	NonWalkable,
 }
 
-GamePhysicsFilterSet :: bit_set[GamePhysicsFilter; u32]
+GamePhysicsFilterSet :: bit_set[GamePhysicsFilter;u32]
 
 get_words_from_filter :: proc(filter_set: GamePhysicsFilterSet) -> (word0, word1, word2, word3: u32) {
 	bits: u32 = transmute(u32)filter_set
@@ -22,9 +22,7 @@ RAYCAST_BUFFER_BASE_STRUCT := px.create_raycast_buffer()
 
 matrix_from_transform :: proc(transform: px.Transform) -> matrix[4, 4]f32 {
 	translation := linalg.matrix4_translate_f32(transmute([3]f32)transform.p)
-	rotation := linalg.matrix4_from_quaternion(
-		transmute(quaternion128)transform.q,
-	)
+	rotation := linalg.matrix4_from_quaternion(transmute(quaternion128)transform.q)
 
 	return translation * rotation
 }
@@ -41,7 +39,10 @@ query_raycast_single :: proc(
 	filter: GamePhysicsFilterSet = {},
 	query_flags: px.QueryFlags_Set = {.Static},
 	debug: bool = false,
-) -> (px.RaycastHit, bool) {
+) -> (
+	px.RaycastHit,
+	bool,
+) {
 	hit := init_raycast_buffer()
 	filter_data := px.filter_data_new_2(get_words_from_filter(filter))
 	query_filter := px.query_filter_data_new_1(filter_data, query_flags)
@@ -70,26 +71,15 @@ query_raycast_single :: proc(
 	return hit.block, ok
 }
 
-collision_filter_shader :: proc "c" (
-	info: ^px.FilterShaderCallbackInfo,
-) -> px.FilterFlags_Set {
+collision_filter_shader :: proc "c" (info: ^px.FilterShaderCallbackInfo) -> px.FilterFlags_Set {
 	context = runtime.default_context()
 
-	info.pair_flags^ = {
-		.SolveContact,
-		.DetectDiscreteContact,
-		.NotifyTouchFound,
-	}
+	info.pair_flags^ = {.SolveContact, .DetectDiscreteContact, .NotifyTouchFound}
 
 	return {}
 }
 
-collision_callback :: proc "c" (
-	user_data: rawptr,
-	pair_header: ^px.ContactPairHeader,
-	pairs: ^px.ContactPair,
-	nb_pairs: u32,
-) {
+collision_callback :: proc "c" (user_data: rawptr, pair_header: ^px.ContactPairHeader, pairs: ^px.ContactPair, nb_pairs: u32) {
 	context = runtime.default_context()
 
 	for actor in pair_header.actors {
@@ -103,40 +93,30 @@ collision_callback :: proc "c" (
 	}
 }
 
-trigger_callback :: proc "c" (
-	user_data: rawptr,
-	pairs: ^px.TriggerPair,
-	nb_pairs: u32,
-) {
+trigger_callback :: proc "c" (user_data: rawptr, pairs: ^px.TriggerPair, nb_pairs: u32) {
 	context = runtime.default_context()
 	fmt.println("trigger")
 }
 
-constraint_break_callback :: proc "c" (
-	user_data: rawptr,
-	constraints: ^px.ConstraintInfo,
-	nb_pairs: u32,
-) {
+constraint_break_callback :: proc "c" (user_data: rawptr, constraints: ^px.ConstraintInfo, nb_pairs: u32) {
 	context = runtime.default_context()
 	fmt.println("constraint break")
 }
 
-wake_sleep_callback :: proc "c" (
-	user_data: rawptr,
-	actors: [^]^px.Actor,
-	count: u32,
-	is_wake: bool,
-) {
+wake_sleep_callback :: proc "c" (user_data: rawptr, actors: [^]^px.Actor, count: u32, is_wake: bool) {
 	context = runtime.default_context()
 	fmt.println("wake_sleep", is_wake)
 }
 
-advance_callback :: proc "c" (
-	user_data: rawptr,
-	body_buffer: [^]^px.RigidBody,
-	pose_buffer: [^]px.Transform,
-	count: u32,
-) {
+advance_callback :: proc "c" (user_data: rawptr, body_buffer: [^]^px.RigidBody, pose_buffer: [^]px.Transform, count: u32) {
 	context = runtime.default_context()
 	fmt.println("advance")
+}
+
+test := 0.0
+
+user_error_callback :: proc "c" (code: px.ErrorCode, message: cstring, file: cstring, line: i32, user_data: rawptr) {
+	context = runtime.default_context()
+	fmt.println(code, message, file, line)
+	test = 102.0
 }

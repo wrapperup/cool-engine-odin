@@ -2,6 +2,7 @@ package game
 
 import "base:intrinsics"
 import "core:/math/linalg/hlsl"
+import "core:fmt"
 import "core:math/linalg"
 import "core:time"
 
@@ -54,10 +55,13 @@ init_skeletal_mesh_instance :: proc(skel: ^gfx.Skeleton, anim: ^gfx.SkeletalAnim
 			.CPU_TO_GPU,
 		)
 		instance.preskinned_vertex_buffers[i] = gfx.create_buffer(
-			auto_cast (instance.skel.buffers.vertex_count * size_of(gfx.Vertex)),
+			vk.DeviceSize(instance.skel.buffers.vertex_count * size_of(gfx.Vertex)),
 			{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 			.GPU_ONLY,
 		)
+
+		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, instance.joint_matrices_buffers[i])
+		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, instance.preskinned_vertex_buffers[i])
 	}
 
 	return instance

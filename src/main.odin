@@ -28,13 +28,12 @@ game: ^Game
 @(export)
 game_init :: proc(window: glfw.WindowHandle) {
 	game = new(Game)
-	fmt.println(window)
 	glfw.Init()
 
 	game.window = window
 	game.window_extent = {1920, 1080}
 
-	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = true, enable_logs = true})
+	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = false, enable_logs = false})
 	if game.renderer == nil {
 		fmt.println("Graphics could not be initialized.")
 	}
@@ -62,8 +61,6 @@ game_init_window :: proc() -> glfw.WindowHandle {
 	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
 
 	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
-
-	fmt.println(window)
 
 	return window
 }
@@ -111,13 +108,27 @@ init_input :: proc() {
 	add_axis_mouse_axis(.LookUp, mouse_y = true)
 }
 
+g_physx_error_callback := px.create_error_callback(user_error_callback, nil)
+
 init_physics :: proc() {
 	using px
 
-	game.phys.foundation = create_foundation_ext()
+	PX_PHYSICS_VERSION_MAJOR :: 5
+	PX_PHYSICS_VERSION_MINOR :: 1
+	PX_PHYSICS_VERSION_BUGFIX :: 3
+
+	PX_PHYSICS_VERSION :: ((PX_PHYSICS_VERSION_MAJOR<<24) + (PX_PHYSICS_VERSION_MINOR<<16) + (PX_PHYSICS_VERSION_BUGFIX<<8) + 0)
+
+	game.phys.foundation = px.create_foundation(PX_PHYSICS_VERSION, px.get_default_allocator(), g_physx_error_callback)
+	
+	assert(game.phys.foundation != nil)
+
 	game.phys.dispatcher = default_cpu_dispatcher_create(1, nil, px.DefaultCpuDispatcherWaitForWorkMode.WaitForWork, 0)
 
 	game.phys.physics = create_physics_ext(game.phys.foundation)
+
+	assert(px.get_foundation() == game.phys.foundation)
+	assert(px.physics_get_foundation_mut(game.phys.physics) == game.phys.foundation)
 
 	callback_info := SimulationEventCallbackInfo {
 		collision_callback        = collision_callback,
@@ -172,9 +183,9 @@ init_game_state :: proc() {
 
 	grid_size: f32 = 3.0
 
-	skeleton, anim, ok := gfx.load_skel_mesh_from_file("assets/meshes/skel/materialball.glb")
-	// buffers, skeleton, anim, ok := gfx.load_skel_mesh_from_file("assets/meshes/skel/skeltest2.glb")
+	skeleton, anim, ok := gfx.load_skel_mesh_from_file("assets/meshes/skel/cube.glb")
 	assert(ok)
+	gfx.defer_destroy_gpu_skel_mesh(&gfx.renderer().global_arena, skeleton.buffers)
 
 	// LEAK: Needs asset system.
 	skel_ptr := new(gfx.Skeleton)
@@ -184,17 +195,17 @@ init_game_state :: proc() {
 	anim_ptr := new(gfx.SkeletalAnimation)
 	anim_ptr^ = anim
 
-	for i in 0 ..< grid_size / 2 {
-		for j in 0 ..< grid_size * 4 {
-			for k in 0 ..< grid_size / 2 {
-				ball := new_entity(Ball)
-				init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
-			}
-		}
-	}
+	// for i in 0 ..< grid_size / 2 {
+	// 	for j in 0 ..< grid_size * 4 {
+	// 		for k in 0 ..< grid_size / 2 {
+	// 			ball := new_entity(Ball)
+	// 			init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
+	// 		}
+	// 	}
+	// }
 
 	test_mesh := new_entity(StaticMesh)
-	init_static_mesh(test_mesh, "assets/meshes/static/cube.glb", 1)
+	init_static_mesh(test_mesh, "assets/meshes/static/map_test.glb", 0)
 
 	game.state = GameState {
 		camera_id = entity_id_of(camera),
@@ -269,4 +280,6 @@ game_shutdown :: proc() {
 	foundation_release_mut(game.phys.foundation)
 
 	gfx.shutdown()
+
+	fmt.println("TEST VALUE: ", test)
 }
