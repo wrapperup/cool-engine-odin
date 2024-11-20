@@ -10,3 +10,6 @@
 [submodule "deps/odin-vma"]
 	path = deps/odin-vma
 	url = https://github.com/DanielGavin/odin-vma
+[submodule "deps/odin-mikktspace"]
+	path = deps/odin-mikktspace
+	url = https://github.com/wrapperup/odin-mikktspace
