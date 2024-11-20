@@ -164,18 +164,12 @@ init_test_materials :: proc() {
 		{.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 	)
+	gfx.defer_destroy_buffer(&gfx.renderer().global_arena, game.render_state.scene_resources.materials_buffer)
 
-	base_color_id := add_texture(gfx.load_image_from_file("assets/textures/test_basecolor.ktx2"))
+	base_color_id := add_texture(gfx.load_image_from_file("assets/textures/test_basecolor2.ktx2"))
 	normal_map_id := add_texture(gfx.load_image_from_file("assets/textures/test_normalmap.ktx2"))
 	proughness_metallic_ao_id := add_texture(gfx.load_image_from_file("assets/textures/test_rma.ktx2"))
 
-	add_material({base_color_id = base_color_id, normal_map_id = normal_map_id, ao_roughness_metallic_id = proughness_metallic_ao_id})
-
-	base_color_id = add_texture(gfx.load_image_from_file("assets/textures/test_basecolor.ktx2"))
-	normal_map_id = add_texture(gfx.load_image_from_file("assets/textures/test_normalmap2.ktx2"))
-	proughness_metallic_ao_id = add_texture(gfx.load_image_from_file("assets/textures/test_rma.ktx2"))
-
-	// TODO: store this
 	add_material({base_color_id = base_color_id, normal_map_id = normal_map_id, ao_roughness_metallic_id = proughness_metallic_ao_id})
 }
 
@@ -318,40 +312,18 @@ init_pipelines :: proc() {
 }
 
 init_mesh_pipelines :: proc() {
-	triangle_shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv")
+	shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv")
 	assert(f_ok, "Failed to load shaders.")
 
 	game.render_state.mesh_pipeline_layout = gfx.create_pipeline_layout_pc(
 		&game.render_state.bindless_descriptor_layout,
 		GPUDrawPushConstants,
 	)
+	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_pipeline_layout)
 
 	game.render_state.mesh_pipeline = gfx.create_graphics_pipeline(
 		pipeline_layout = game.render_state.mesh_pipeline_layout,
-		shader = triangle_shader,
-		input_topology = .TRIANGLE_LIST,
-		polygon_mode = .FILL,
-		cull_mode = {.BACK},
-		front_face = .COUNTER_CLOCKWISE,
-		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-		color_format = gfx.renderer().draw_image.format,
-	)
-
-	game.render_state.mesh_shadow_pipeline = gfx.create_graphics_pipeline(
-		pipeline_layout = game.render_state.mesh_pipeline_layout,
-		shader = triangle_shader,
-		vertex_entry = "vertex_shadow_main",
-		fragment_entry = nil, // We don't need a fancy fragment shader since we're just rendering vertex depth.
-		input_topology = .TRIANGLE_LIST,
-		polygon_mode = .FILL,
-		cull_mode = {.BACK},
-		front_face = .COUNTER_CLOCKWISE,
-		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-	)
-
-	game.render_state.mesh_pipeline = gfx.create_graphics_pipeline(
-		pipeline_layout = game.render_state.mesh_pipeline_layout,
-		shader = triangle_shader,
+		shader = shader,
 		input_topology = .TRIANGLE_LIST,
 		polygon_mode = .FILL,
 		cull_mode = {.BACK},
@@ -360,11 +332,22 @@ init_mesh_pipelines :: proc() {
 		color_format = gfx.renderer().draw_image.format,
 		multisampling_samples = gfx.msaa_samples(),
 	)
-
-	gfx.destroy_shader_module(triangle_shader)
-
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_pipeline_layout)
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_pipeline)
+
+	game.render_state.mesh_shadow_pipeline = gfx.create_graphics_pipeline(
+		pipeline_layout = game.render_state.mesh_pipeline_layout,
+		shader = shader,
+		vertex_entry = "vertex_shadow_main",
+		fragment_entry = nil, // We don't need a fancy fragment shader since we're just rendering vertex depth.
+		input_topology = .TRIANGLE_LIST,
+		polygon_mode = .FILL,
+		cull_mode = {},
+		front_face = .COUNTER_CLOCKWISE,
+		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+	)
+	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_shadow_pipeline)
+
+	gfx.destroy_shader_module(shader)
 }
 
 init_skinning_pipelines :: proc() {
@@ -372,10 +355,12 @@ init_skinning_pipelines :: proc() {
 	assert(ok, "Failed to load shaders.")
 
 	game.render_state.skinning_pipeline_layout = gfx.create_pipeline_layout_pc(nil, GPUSkinningPushConstants, {.COMPUTE})
-	game.render_state.skinning_pipeline = gfx.create_compute_pipelines(game.render_state.skinning_pipeline_layout, shader)
-
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skinning_pipeline)
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skinning_pipeline_layout)
+
+	game.render_state.skinning_pipeline = gfx.create_compute_pipelines(game.render_state.skinning_pipeline_layout, shader)
+	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skinning_pipeline)
+
+	gfx.destroy_shader_module(shader)
 }
 
 init_skybox_pipelines :: proc() {
@@ -420,14 +405,16 @@ init_tonemapper_pipelines :: proc() {
 init_buffers :: proc() {
 	// Skybox 
 	{
-		mesh, ok := gfx.load_mesh_from_file("assets/meshes/static/skybox.glb")
+		mesh, ok := gfx.load_gpu_mesh_from_file("assets/meshes/static/skybox.glb")
 		assert(ok)
+		gfx.defer_destroy_gpu_mesh(&gfx.renderer().global_arena, mesh)
 		game.render_state.skybox_mesh = mesh
 	}
 
 	for &frame in game.render_state.frame_data {
 		// Global uniform buffer
 		frame.global_uniform_buffer = gfx.create_buffer(size_of(GPUGlobalData), {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
+		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.global_uniform_buffer)
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(
@@ -435,8 +422,6 @@ init_buffers :: proc() {
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
-
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.global_uniform_buffer)
 		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.model_matrices_buffer)
 	}
 
