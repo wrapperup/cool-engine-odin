@@ -21,6 +21,7 @@ create_buffer :: proc(
 	memory_usage: vma.MemoryUsage,
 	alloc_flags: vma.AllocationCreateFlags = {.MAPPED},
 	loc := #caller_location,
+	debug_name: cstring = nil,
 ) -> GPUBuffer {
 	buffer_info := vk.BufferCreateInfo {
 		sType = .BUFFER_CREATE_INFO,
@@ -44,6 +45,14 @@ create_buffer :: proc(
 		new_buffer.address = get_buffer_device_address(new_buffer)
 	}
 
+	when ODIN_DEBUG {
+		if debug_name == nil {
+			debug_set_object_name(new_buffer.buffer, fmt.ctprint(loc))
+		} else {
+			debug_set_object_name(new_buffer.buffer, debug_name)
+		}
+	}
+
 	return new_buffer
 }
 
@@ -52,6 +61,7 @@ destroy_buffer :: proc(allocated_buffer: ^GPUBuffer) {
 }
 
 // Only purpose of this is to be captured during bindgen.
+// TODO: Revisit this, I do want to generate shader bindings automatically...
 // GPUPointer :: struct($T: typeid) {
 // 	a: vk.DeviceAddress,
 // }
@@ -63,61 +73,6 @@ get_buffer_device_address :: proc(buffer: GPUBuffer) -> vk.DeviceAddress {
 	}
 
 	return vk.GetBufferDeviceAddress(r_ctx.device, &device_address_info)
-}
-
-create_mesh_buffers :: proc(index_count: u32, vertex_count: u32) -> GPUMeshBuffers {
-	assert(index_count > 0)
-	assert(vertex_count > 0)
-
-	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * vertex_count)
-	index_buffer_size := vk.DeviceSize(size_of(u32) * index_count)
-
-	new_surface: GPUMeshBuffers
-	new_surface.index_count = index_count
-	new_surface.vertex_count = vertex_count
-
-	new_surface.vertex_buffer = create_buffer(vertex_buffer_size, {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
-	new_surface.index_buffer = create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
-
-	return new_surface
-}
-
-staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, indices: []u32, vertices: []Vertex) {
-	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * len(vertices))
-	index_buffer_size := vk.DeviceSize(size_of(u32) * len(indices))
-
-	assert(buffers.index_count == u32(len(indices)))
-	assert(buffers.vertex_count == u32(len(vertices)))
-
-	staging := create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY)
-
-	data := cast([^]u8)staging.info.pMappedData
-
-	mem.copy(data, raw_data(vertices), int(vertex_buffer_size))
-	mem.copy(data[vertex_buffer_size:], raw_data(indices), int(index_buffer_size))
-
-	write_buffer_slice(&staging, vertices)
-	write_buffer_slice(&staging, indices, vertex_buffer_size)
-
-	if cmd, ok := immediate_submit(); ok {
-		vertex_copy := vk.BufferCopy {
-			dstOffset = 0,
-			srcOffset = 0,
-			size      = vertex_buffer_size,
-		}
-
-		vk.CmdCopyBuffer(cmd, staging.buffer, buffers.vertex_buffer.buffer, 1, &vertex_copy)
-
-		index_copy := vk.BufferCopy {
-			dstOffset = 0,
-			srcOffset = vertex_buffer_size,
-			size      = index_buffer_size,
-		}
-
-		vk.CmdCopyBuffer(cmd, staging.buffer, buffers.index_buffer.buffer, 1, &index_copy)
-	}
-
-	destroy_buffer(&staging)
 }
 
 // Writes to the buffer with the input data at offset.
@@ -210,6 +165,9 @@ transition_buffer :: proc(
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
 }
 
+// TODO: Do we need this? It would be useful I think at some point.
+// It's specific push/pop functions will update a buffer automatically,
+// and maps to an Odin dynamic array.
 GPUDynamicArray :: struct {
-	using GPUBuffer
+	using _: GPUBuffer,
 }

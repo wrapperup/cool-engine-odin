@@ -241,6 +241,9 @@ cleanup_vulkan :: proc() {
 		vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
 	}
 
+	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
+	destroy_descriptor_allocator(&r_ctx.global_descriptor_allocator)
+
 	// Cleanup queued resources
 	flush_vk_arena(&r_ctx.global_arena)
 	delete_vk_arena(r_ctx.global_arena)
@@ -266,9 +269,6 @@ cleanup_vulkan :: proc() {
 
 	delete(r_ctx.swapchain_image_views)
 	delete(r_ctx.swapchain_images)
-
-	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
-	destroy_descriptor_allocator(&r_ctx.global_descriptor_allocator)
 
 	// Headless mode
 	if r_ctx.surface != 0 {
@@ -659,6 +659,7 @@ debug_callback :: proc "system" (
 			log_normal(" -", callback_data.pObjects[i].pObjectName)
 		}
 	}
+	log_normal()
 
 	return false
 }

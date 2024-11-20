@@ -1,5 +1,6 @@
 package gfx
 
+import "base:runtime"
 import "core:fmt"
 import vk "vendor:vulkan"
 
@@ -13,6 +14,8 @@ create_descriptor_set_layout :: proc(
 	bindings: []DescriptorBinding,
 	descriptor_set_layout_flags: vk.DescriptorSetLayoutCreateFlags = {},
 	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
+	debug_name: cstring = nil,
+	loc := #caller_location,
 ) -> vk.DescriptorSetLayout {
 	descriptor_set_bindings: [dynamic]vk.DescriptorSetLayoutBinding
 	resize(&descriptor_set_bindings, len(bindings))
@@ -38,6 +41,14 @@ create_descriptor_set_layout :: proc(
 
 	delete(descriptor_set_bindings)
 
+	when ODIN_DEBUG {
+		if debug_name == nil {
+			debug_set_object_name(set, fmt.ctprint(loc))
+		} else {
+			debug_set_object_name(set, debug_name)
+		}
+	}
+
 	return set
 }
 
@@ -47,6 +58,7 @@ DescriptorAllocator :: struct {
 	ready_pools:   [dynamic]vk.DescriptorPool,
 	full_pools:    [dynamic]vk.DescriptorPool,
 	flags:         vk.DescriptorPoolCreateFlags,
+	debug_name:    cstring,
 }
 
 PoolSizeRatio :: struct {
@@ -60,6 +72,8 @@ init_descriptor_allocator :: proc(
 	max_sets: u32,
 	pool_ratios: []PoolSizeRatio,
 	flags: vk.DescriptorPoolCreateFlags = {},
+	debug_name: cstring = nil,
+	loc := #caller_location,
 ) {
 	clear(&allocator.pool_ratios)
 
@@ -69,6 +83,14 @@ init_descriptor_allocator :: proc(
 
 	new_pool := create_pool(allocator, device, max_sets, pool_ratios, flags)
 	allocator.flags = flags
+
+	when ODIN_DEBUG {
+		if debug_name == nil {
+			allocator.debug_name = fmt.ctprint(loc)
+		} else {
+			allocator.debug_name = debug_name
+		}
+	}
 
 	append(&allocator.ready_pools, new_pool)
 }
@@ -108,6 +130,10 @@ create_pool :: proc(
 	new_pool: vk.DescriptorPool
 	vk_check(vk.CreateDescriptorPool(device, &pool_info, nil, &new_pool))
 
+	when ODIN_DEBUG {
+		debug_set_object_name(new_pool, allocator.debug_name)
+	}
+
 	return new_pool
 }
 
@@ -135,7 +161,13 @@ destroy_pools :: proc(allocator: ^DescriptorAllocator, device: vk.Device) {
 	clear(&allocator.full_pools)
 }
 
-allocate_descriptor_set :: proc(allocator: ^DescriptorAllocator, device: vk.Device, layout: vk.DescriptorSetLayout) -> vk.DescriptorSet {
+allocate_descriptor_set :: proc(
+	allocator: ^DescriptorAllocator,
+	device: vk.Device,
+	layout: vk.DescriptorSetLayout,
+	debug_name: cstring = nil,
+	loc := #caller_location,
+) -> vk.DescriptorSet {
 	pool := get_pool(allocator, device)
 	layout := layout
 
@@ -161,6 +193,17 @@ allocate_descriptor_set :: proc(allocator: ^DescriptorAllocator, device: vk.Devi
 
 		vk_check(result)
 	}
+
+	append(&allocator.ready_pools, pool)
+
+	when ODIN_DEBUG {
+		if debug_name == nil {
+			debug_set_object_name(descriptor_set, fmt.ctprint(loc))
+		} else {
+			debug_set_object_name(descriptor_set, debug_name)
+		}
+	}
+
 
 	return descriptor_set
 }
