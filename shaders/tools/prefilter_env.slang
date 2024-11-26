@@ -17,7 +17,7 @@ static const uint ROUGHNESS_LEVELS = 9;
 // z = face index
 [numthreads(16, 16, 1)]
 [shader("compute")]
-void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
+void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
   let texel_coord = int3(dispatchThreadID.xyz);
 
   uint3 size;
@@ -46,7 +46,7 @@ void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.f) {
-      sum_prefilter += EnvironmentMap.SampleLevel(L, pc.mip_level).rgb * NoL;
+      sum_prefilter += clamp(EnvironmentMap.SampleLevel(L, pc.mip_level).rgb * NoL, 0.0, 10.0);
       sum_NoL += NoL;
     }
   }

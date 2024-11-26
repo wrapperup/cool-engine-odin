@@ -18,7 +18,7 @@ SkinningPushConstants pc;
 
 [numthreads(64, 1, 1)]
 [shader("compute")]
-void main(uint3 dispatch_thread_id: SV_DispatchThreadID) {
+void compute_main(uint3 dispatch_thread_id: SV_DispatchThreadID) {
   let vertex_index = dispatch_thread_id.x;
   
   if (vertex_index >= pc.vertex_count) {

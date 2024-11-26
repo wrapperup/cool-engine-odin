@@ -69,7 +69,7 @@ update_camera :: proc(camera: ^Camera, delta_time: f64) {
 
 	collision_flags := px.controller_move_mut(
 		camera.controller,
-		transmute(px.Vec3)((camera.velocity * f32(delta_time)) - {0, 0.01, 0}),
+		transmute(px.Vec3)((camera.velocity * f32(delta_time)) - {0, camera.is_grounded_last_frame ? 0.1 : 0, 0}),
 		0.001,
 		f32(delta_time),
 		filters,
@@ -111,13 +111,11 @@ update_camera :: proc(camera: ^Camera, delta_time: f64) {
 	is_sliding := false
 	is_grounded := false
 
-	sum_normals: [3]f32
-
 	acceleration: [3]f32
 
 	for normal in camera.ground_contact_normals {
 		slope_angle := linalg.vector_angle_between(normal, [3]f32{0, 1, 0})
-		is_grounded = slope_angle < 0.5
+		is_grounded = is_grounded || slope_angle < 0.5
 		is_sliding = !is_grounded
 
 		if is_grounded || is_sliding {
@@ -151,8 +149,6 @@ update_camera :: proc(camera: ^Camera, delta_time: f64) {
 
 	move_direction := move_forward * forward + move_right * right
 	move_direction_n := linalg.normalize0(move_forward * forward + move_right * right)
-	// move_direction_n := linalg.normalize0(move_right * forward + -move_forward * right)
-
 
 	clamp_to_length :: proc(v: [3]$T, max_length: T) -> [3]T {
 		if (max_length < 0.001) {
@@ -339,12 +335,12 @@ world_space_to_clip_space :: proc(view_projection: matrix[4, 4]f32, vec: [3]f32)
 	ok := true
 
 	// TODO: uhh.... is there a better way?
-	if clip_vec.x > 1 do ok = false
-	if clip_vec.y > 1 do ok = false
-	if clip_vec.z > 1 do ok = false
-	if clip_vec.x < -1 do ok = false
-	if clip_vec.y < -1 do ok = false
-	if clip_vec.z < -1 do ok = false
+	// if clip_vec.x > 1 do ok = false
+	// if clip_vec.y > 1 do ok = false
+	// if clip_vec.z > 1 do ok = false
+	// if clip_vec.x < -1 do ok = false
+	// if clip_vec.y < -1 do ok = false
+	// if clip_vec.z < -1 do ok = false
 
 	return (clip_vec.xy * 0.5 + 0.5) * [2]f32{f32(game.window_extent.x), f32(game.window_extent.y)}, ok
 }

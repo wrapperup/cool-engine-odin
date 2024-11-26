@@ -70,7 +70,7 @@ FragmentInput vertex_main(VertexInput input) {
 
   let T = normalize(mul((float3x3)model_to_world, vertex.tangent.xyz));
   let N = normalize(mul((float3x3)model_to_world, -vertex.normal));
-  let B = cross(N, T) * vertex.tangent.w;
+  let B = cross(N, T);
 
   FragmentInput output;
   output.color = 1;
@@ -114,14 +114,18 @@ FragmentOutput fragment_main(FragmentInput i) {
       filter_pcf(i.pos.xy, i.sun_space_pos, pc.global_data_buffer.bias);
 
   float3 base_color = sample_texture(material.base_color_id, i.uv).xyz;
-  float reflectance = 1.0f;
+  float reflectance = 0.5f;
 
   let ao_roughness_metallic =
-      sample_texture(material.ao_roughness_metallic, i.uv);
+      sample_texture(material.ao_roughness_metallic, i.uv).rgb;
+
+  let ao_roughness_metallic_srgb =
+      linear_to_srgb(ao_roughness_metallic);
 
   let ao = ao_roughness_metallic.r;
-  let proughness = ao_roughness_metallic.g;
-  let metallic = ao_roughness_metallic.b;
+  // let proughness = ao_roughness_metallic.g;
+  let proughness = ao_roughness_metallic_srgb.g;
+  let metallic = ao_roughness_metallic_srgb.b;
 
   float3 f0 = 0.16 * reflectance * reflectance * (1.0 - metallic) +
               base_color * metallic;
@@ -146,8 +150,8 @@ FragmentOutput fragment_main(FragmentInput i) {
   // float3 r = reflect(-v, n);
   // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, r, 0).rgb;
   // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, n, 0).rgb;
-  // frag_color = evaluate_specular_ibl(r, roughness);
-  // frag_color = irradiance_sh(n);
+  // frag_color = evaluate_specular_ibl(r, proughness);
+  // frag_color = irradiance_sh(n, pc.global_data_buffer.environment.sh_coeffs);
   // frag_color = saturate(normal);
   // frag_color = saturate(i.tbn[0]); // Tangent
   // frag_color = saturate(i.tbn[1]); // Bitangent

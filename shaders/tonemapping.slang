@@ -14,13 +14,13 @@ float3 tony_mc_mapface(float3 stimulus) {
 
 [numthreads(16, 16, 1)]
 [shader("compute")]
-void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
+void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
   let texel_coord = uint2(dispatchThreadID.xy);
 
   uint2 size;
   HDRImages[RESOLVED_IMAGE_ID].GetDimensions(size.x, size.y);
 
-  let exposure = 1.6f;
+  let exposure = 2.0f;
   if (texel_coord.x < size.x && texel_coord.y < size.y) {
     let hdr_color = HDRImages[RESOLVED_IMAGE_ID][texel_coord].rgb * exposure;
     let mapped = tony_mc_mapface(hdr_color);
@@ -29,6 +29,5 @@ void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
     let linear_color = float4(mapped, 1.0);
 
     HDRImages[RESOLVED_IMAGE_ID][texel_coord] = gamma_corrected;
-    // HDRImages[RESOLVED_IMAGE_ID][texel_coord] = linear_color;
   }
 }

@@ -32,7 +32,7 @@ float area_element(float x, float y) {
 
 [numthreads(1, 1, 1)]
 [shader("compute")]
-void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
+void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     uint2 size;
     uint levels;

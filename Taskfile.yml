@@ -22,27 +22,27 @@ tasks:
   debug:
     cmds:
       - task build-debug
-      - powershell ./debug-rad.ps1
+      - powershell ./scripts/debug-rad.ps1
 
   build-shaders:
     sources:
       - shaders/**/*.slang
     cmds:
-      - pwsh ./build-shaders.ps1
+      - pwsh ./scripts/build-shaders.ps1
 
   build-debug:
     deps: [build-shaders]
     cmds:
-      - pwsh ./build-debug.ps1
+      - pwsh ./scripts/build-debug.ps1
 
   build-release:
     deps: [build-shaders]
     cmds:
-      - pwsh ./build-release.ps1
+      - pwsh ./scripts/build-release.ps1
 
   build-hotreload:
     cmds:
-      - pwsh ./build-hotreload.ps1
+      - pwsh ./scripts/build-hotreload.ps1
 
   check:
     cmds:
@@ -54,7 +54,7 @@ tasks:
       - tools/**/*.odin
     deps: [build-shaders]
     cmds:
-      - odin build ./tools/dfg.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -lld
+      - odin build ./tools/dfg.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -linker:lld
 
   build-prefilter:
     sources:
@@ -62,7 +62,7 @@ tasks:
       - tools/**/*.odin
     deps: [build-shaders]
     cmds:
-      - odin build ./tools/prefilter.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -lld
+      - odin build ./tools/prefilter.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -linker:lld
 
   build-sh:
     sources:
@@ -70,7 +70,7 @@ tasks:
       - tools/**/*.odin
     deps: [build-shaders]
     cmds:
-      - odin build ./tools/sh.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -lld
+      - odin build ./tools/sh.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -linker:lld
 
   dfg:
     deps: [build-dfg]
@@ -78,28 +78,29 @@ tasks:
       - ./dfg.exe assets/gen/dfg -size=256
 
   test-cubemap:
-    deps: [build-prefilter, build-sh]
+    deps: [build-prefilter]
     cmds:
       - ./prefilter.exe assets/textures/environment/test_cubemap.ktx2 assets/gen/test_cubemap_ld
-      - ./sh.exe assets/textures/environment/test_cubemap.ktx2 > assets/gen/sh_cubemaps.txt
 
   ennis-raw-cubemap:
-    deps: [build-prefilter, build-sh]
+    deps: [build-prefilter]
     cmds:
       - ./prefilter.exe assets/textures/environment/ennis_raw.ktx2 assets/gen/test_cubemap_ld -size=512
-      - ./sh.exe assets/textures/environment/ennis_raw.ktx2 > assets/gen/sh_cubemaps.txt
 
   ennis-cubemap:
-    deps: [build-prefilter, build-sh]
+    deps: [build-prefilter]
     cmds:
       - ./prefilter.exe assets/textures/environment/ennis.ktx2 assets/gen/test_cubemap_ld
-      - ./sh.exe assets/textures/environment/ennis.ktx2 > assets/gen/sh_cubemaps.txt
+
+  rosendal-cubemap:
+    deps: [build-prefilter]
+    cmds:
+      - ./prefilter.exe assets/textures/environment/rosendal.ktx2 assets/gen/test_cubemap_ld
 
   white-furnace-cubemap:
-    deps: [build-prefilter, build-sh]
+    deps: [build-prefilter]
     cmds:
       - ./prefilter.exe assets/textures/environment/white_furnace.ktx2 assets/gen/test_cubemap_ld
-      - ./sh.exe assets/textures/environment/white_furnace.ktx2 > assets/gen/sh_cubemaps.txt
 
   test:
     cmds:

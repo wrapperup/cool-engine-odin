@@ -8,6 +8,7 @@ import vk "vendor:vulkan"
 
 DEFAULT_VERTEX_ENTRY: cstring : "vertex_main"
 DEFAULT_FRAGMENT_ENTRY: cstring : "fragment_main"
+DEFAULT_COMPUTE_ENTRY: cstring : "compute_main"
 
 PipelineBuilder :: struct {
 	shader_stages:           [dynamic]vk.PipelineShaderStageCreateInfo,
@@ -284,7 +285,10 @@ create_graphics_pipeline :: proc(
 	color_format: vk.Format = .UNDEFINED,
 	vertex_entry: cstring = DEFAULT_VERTEX_ENTRY,
 	fragment_entry: cstring = DEFAULT_FRAGMENT_ENTRY,
-) -> vk.Pipeline {
+) -> (
+	vk.Pipeline,
+	bool,
+) {
 	pipeline_builder := pb_init()
 	defer pb_delete(pipeline_builder)
 
@@ -306,10 +310,18 @@ create_graphics_pipeline :: proc(
 		pb_set_color_attachment_format(&pipeline_builder, color_format)
 	}
 
-	return pb_build_pipeline(&pipeline_builder)
+	return pb_build_pipeline(&pipeline_builder), true
 }
 
-create_compute_pipelines :: proc(pipeline_layout: vk.PipelineLayout, shader: vk.ShaderModule, entry: cstring = "main") -> vk.Pipeline {
+create_compute_pipelines :: proc(
+	pipeline_layout: vk.PipelineLayout,
+	shader: vk.ShaderModule,
+	entry: cstring = DEFAULT_COMPUTE_ENTRY,
+	loc := #caller_location,
+) -> (
+	vk.Pipeline,
+	bool,
+) {
 	stage_info := vk.PipelineShaderStageCreateInfo {
 		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 		stage  = {.COMPUTE},
@@ -324,9 +336,9 @@ create_compute_pipelines :: proc(pipeline_layout: vk.PipelineLayout, shader: vk.
 	}
 
 	pipeline: vk.Pipeline
-	vk_check(vk.CreateComputePipelines(r_ctx.device, 0, 1, &compute_pipeline_create_info, nil, &pipeline))
+	vk_check(vk.CreateComputePipelines(r_ctx.device, 0, 1, &compute_pipeline_create_info, nil, &pipeline), loc)
 
-	return pipeline
+	return pipeline, true
 }
 
 // ====================================================================
@@ -340,10 +352,19 @@ load_shader_module :: proc(file_name: string) -> (vk.ShaderModule, bool) {
 
 	defer delete(buffer)
 
+	return load_shader_module_from_bytes(buffer)
+}
+
+load_shader_module_from_bytes :: proc(bytes: []u8) -> (vk.ShaderModule, bool) {
+	// Byte length needs to be a multiple of 4
+	if len(bytes) % 4 != 0 {
+		return 0, false
+	}
+
 	info := vk.ShaderModuleCreateInfo {
 		sType    = .SHADER_MODULE_CREATE_INFO,
-		codeSize = len(buffer), // codeSize needs to be in bytes
-		pCode    = raw_data(slice.reinterpret([]u32, buffer)), // code needs to be in 32bit words
+		codeSize = len(bytes), // codeSize needs to be in bytes
+		pCode    = raw_data(slice.reinterpret([]u32, bytes)), // code needs to be in 32bit words
 	}
 
 	module: vk.ShaderModule

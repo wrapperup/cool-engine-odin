@@ -116,7 +116,7 @@ create_prefiltered_cubemap_pipeline :: proc(filename: cstring, out_width, out_he
 	assert(f_ok, "Failed to load shaders.")
 
 	pass.pipeline_layout = gfx.create_pipeline_layout_pc(&pass.descriptor_set_layout, PrefilteredCubeMapPushConstants, {.COMPUTE})
-	pass.pipeline = gfx.create_compute_pipelines(pass.pipeline_layout, prefilter_shader)
+	pass.pipeline, _ = gfx.create_compute_pipelines(pass.pipeline_layout, prefilter_shader)
 
 	gfx.destroy_shader_module(prefilter_shader)
 

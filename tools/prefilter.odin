@@ -20,6 +20,7 @@ EnvPrefilterCommand :: struct {
 	input:  cstring `args:"pos=0,required" usage:"Input file."`,
 	output: cstring `args:"pos=1,required" usage:"Output file."`,
 	size:   u32 `usage:"Size (in px) of the output texture"`,
+	samples:   u32 `usage:"Samples to use in prefiltering"`,
 }
 
 main :: proc() {
@@ -59,6 +60,7 @@ main :: proc() {
 		fmt.println("Available flags:")
 		fmt.println("")
 		fmt.println("  -size=256       Size of the generated prefiltered cubemap faces. [ktx]")
+		fmt.println("  -samples=4096   Number of samples to use in prefiltering.")
 		fmt.println("")
 	case flags.Parse_Error:
 		fmt.println(v.message)
@@ -70,14 +72,22 @@ main :: proc() {
 
 	start_time := time.now()
 
-	process_env_to_file(fmt.ctprint(command.input), fmt.ctprintf("%s%s", command.output, ".ktx2"), command.size, command.size)
+	if command.size == 0 {
+		command.size = 256
+	}
+
+	if command.samples == 0 {
+		command.samples = 4096
+	}
+
+	process_env_to_file(fmt.ctprint(command.input), fmt.ctprintf("%s%s", command.output, ".ktx2"), command.size, command.size, command.samples)
 
 	fmt.println("Done in", time.since(start_time))
 
 	free_all()
 }
 
-process_env_to_file :: proc(in_filename: cstring, out_filename: cstring, out_width, out_height: u32) {
+process_env_to_file :: proc(in_filename: cstring, out_filename: cstring, out_width, out_height: u32, samples: u32) {
 	gfx.init({enable_validation_layers = true, enable_logs = true})
 
 	fmt.println("Generating Cubemap image...")
@@ -86,7 +96,7 @@ process_env_to_file :: proc(in_filename: cstring, out_filename: cstring, out_wid
 	assert(pass.height > 0)
 	if cmd, ok := gfx.immediate_submit(); ok {
 		gfx.transition_image(cmd, pass.prefilter_image.image, .UNDEFINED, .GENERAL)
-		impl.run_prefilter_cubemap_pass(&pass, cmd, 4096)
+		impl.run_prefilter_cubemap_pass(&pass, cmd, samples)
 
 		buffer_offset: u32
 		for level in 0 ..< impl.MAX_ROUGHNESS_LEVELS {

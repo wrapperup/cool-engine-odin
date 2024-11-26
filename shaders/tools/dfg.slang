@@ -60,7 +60,7 @@ float2 dfg(float NoV, float linear_roughness, int sample_count, bool multiscatte
 // Recommended to store this in a R16G16_SFLOAT texture.
 [numthreads(16, 16, 1)]
 [shader("compute")]
-void main(uint3 dispatchThreadID: SV_DispatchThreadID) {
+void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
     let texel_coord = uint2(dispatchThreadID.xy);
 
     uint width;

@@ -13,3 +13,6 @@
 [submodule "deps/odin-mikktspace"]
 	path = deps/odin-mikktspace
 	url = https://github.com/wrapperup/odin-mikktspace
+[submodule "deps/odin-slang"]
+	path = deps/odin-slang
+	url = https://github.com/DragosPopse/odin-slang

@@ -5,9 +5,11 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/hlsl"
 import "core:mem"
+import "core:os"
 
 import vk "vendor:vulkan"
 
+import sp "deps:odin-slang/slang"
 import vma "deps:odin-vma"
 
 import gfx "gfx"
@@ -100,11 +102,6 @@ GameFrameData :: struct {
 	skel_instances:                [dynamic]^SkeletalMeshInstance,
 }
 
-Shader :: struct {
-	layout:   vk.PipelineLayout,
-	pipeline: vk.Pipeline,
-}
-
 RenderState :: struct {
 	frame_data:                 [gfx.FRAME_OVERLAP]GameFrameData,
 
@@ -119,27 +116,28 @@ RenderState :: struct {
 		materials_buffer:             gfx.GPUBuffer,
 	},
 	shaders:                    [dynamic]Shader,
+	global_session:             ^sp.IGlobalSession,
 
 	// Mesh pipelines
 	mesh_pipeline_layout:       vk.PipelineLayout,
-	mesh_pipeline:              vk.Pipeline,
+	mesh_shader:                ShaderId,
 	model_matrices:             [dynamic]hlsl.float4x4,
 
 	// Skeletal mesh pipelines
 	skinning_pipeline_layout:   vk.PipelineLayout,
-	skinning_pipeline:          vk.Pipeline,
+	skinning_shader:            ShaderId,
 
 	// Shadow pipelines
-	mesh_shadow_pipeline:       vk.Pipeline,
+	mesh_shadow_shader:         ShaderId,
 	shadow_depth_image:         gfx.GPUImage,
 
 	// Tonemapper pipelines
-	tonemapper_pipeline:        vk.Pipeline,
+	tonemapper_shader:          ShaderId,
 	tonemapper_pipeline_layout: vk.PipelineLayout,
 
 	// Skybox pipelines
 	skybox_pipeline_layout:     vk.PipelineLayout,
-	skybox_pipeline:            vk.Pipeline,
+	skybox_shader:              ShaderId,
 	skybox_mesh:                gfx.GPUMeshBuffers,
 	draw_skybox:                bool,
 }
@@ -166,9 +164,15 @@ init_test_materials :: proc() {
 	)
 	gfx.defer_destroy_buffer(&gfx.renderer().global_arena, game.render_state.scene_resources.materials_buffer)
 
-	base_color_id := add_texture(gfx.load_image_from_file("assets/textures/test_basecolor.ktx2"))
+	base_color_id := add_texture(gfx.load_image_from_file("assets/textures/test_basecolor2.ktx2"))
 	normal_map_id := add_texture(gfx.load_image_from_file("assets/textures/test_normalmap.ktx2"))
 	proughness_metallic_ao_id := add_texture(gfx.load_image_from_file("assets/textures/test_rma.ktx2"))
+
+	add_material({base_color_id = base_color_id, normal_map_id = normal_map_id, ao_roughness_metallic_id = proughness_metallic_ao_id})
+
+	base_color_id = add_texture(gfx.load_image_from_file("assets/textures/materialball2/basecolor.ktx2"))
+	normal_map_id = add_texture(gfx.load_image_from_file("assets/textures/materialball2/normalmap.ktx2"))
+	proughness_metallic_ao_id = add_texture(gfx.load_image_from_file("assets/textures/materialball2/rma.ktx2"))
 
 	add_material({base_color_id = base_color_id, normal_map_id = normal_map_id, ao_roughness_metallic_id = proughness_metallic_ao_id})
 }
@@ -305,6 +309,7 @@ init_bindless_descriptors :: proc() {
 }
 
 init_pipelines :: proc() {
+	assert(sp.createGlobalSession(sp.API_VERSION, &game.render_state.global_session) == sp.OK)
 	init_mesh_pipelines()
 	init_skinning_pipelines()
 	init_skybox_pipelines()
@@ -312,94 +317,99 @@ init_pipelines :: proc() {
 }
 
 init_mesh_pipelines :: proc() {
-	shader, f_ok := gfx.load_shader_module("shaders/out/shaders.spv")
-	assert(f_ok, "Failed to load shaders.")
-
 	game.render_state.mesh_pipeline_layout = gfx.create_pipeline_layout_pc(
 		&game.render_state.bindless_descriptor_layout,
 		GPUDrawPushConstants,
 	)
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_pipeline_layout)
 
-	game.render_state.mesh_pipeline = gfx.create_graphics_pipeline(
-		pipeline_layout = game.render_state.mesh_pipeline_layout,
-		shader = shader,
-		input_topology = .TRIANGLE_LIST,
-		polygon_mode = .FILL,
-		cull_mode = {.BACK},
-		front_face = .COUNTER_CLOCKWISE,
-		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-		color_format = gfx.renderer().draw_image.format,
-		multisampling_samples = gfx.msaa_samples(),
+	game.render_state.mesh_shader = add_shader(
+		"shaders/mesh.slang",
+		{"vertex_main", "fragment_main"},
+		proc(module: vk.ShaderModule) -> (vk.Pipeline, bool) {
+			return gfx.create_graphics_pipeline(
+				pipeline_layout = game.render_state.mesh_pipeline_layout,
+				shader = module,
+				input_topology = .TRIANGLE_LIST,
+				polygon_mode = .FILL,
+				cull_mode = {.BACK},
+				front_face = .COUNTER_CLOCKWISE,
+				depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+				color_format = gfx.renderer().draw_image.format,
+				multisampling_samples = gfx.msaa_samples(),
+			)
+		},
 	)
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_pipeline)
 
-	game.render_state.mesh_shadow_pipeline = gfx.create_graphics_pipeline(
-		pipeline_layout = game.render_state.mesh_pipeline_layout,
-		shader = shader,
-		vertex_entry = "vertex_shadow_main",
-		fragment_entry = nil, // We don't need a fancy fragment shader since we're just rendering vertex depth.
-		input_topology = .TRIANGLE_LIST,
-		polygon_mode = .FILL,
-		cull_mode = {},
-		front_face = .COUNTER_CLOCKWISE,
-		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+	game.render_state.mesh_shadow_shader = add_shader(
+	"shaders/mesh.slang",
+	{"vertex_main", "fragment_main"},
+	proc(module: vk.ShaderModule) -> (vk.Pipeline, bool) {
+		return gfx.create_graphics_pipeline(
+			pipeline_layout = game.render_state.mesh_pipeline_layout,
+			shader = module,
+			vertex_entry = "vertex_shadow_main",
+			fragment_entry = nil, // We don't need a fragment shader since we're just rendering vertex depth (currently).
+			input_topology = .TRIANGLE_LIST,
+			polygon_mode = .FILL,
+			cull_mode = {},
+			front_face = .COUNTER_CLOCKWISE,
+			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+		)
+	},
 	)
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.mesh_shadow_pipeline)
-
-	gfx.destroy_shader_module(shader)
 }
 
 init_skinning_pipelines :: proc() {
-	shader, ok := gfx.load_shader_module("shaders/out/skinning.spv")
-	assert(ok, "Failed to load shaders.")
-
 	game.render_state.skinning_pipeline_layout = gfx.create_pipeline_layout_pc(nil, GPUSkinningPushConstants, {.COMPUTE})
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skinning_pipeline_layout)
 
-	game.render_state.skinning_pipeline = gfx.create_compute_pipelines(game.render_state.skinning_pipeline_layout, shader)
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skinning_pipeline)
-
-	gfx.destroy_shader_module(shader)
+	game.render_state.skinning_shader = add_shader(
+		"shaders/skinning.slang",
+		{"compute_main"},
+		proc(module: vk.ShaderModule) -> (vk.Pipeline, bool) {
+			return gfx.create_compute_pipelines(game.render_state.skinning_pipeline_layout, module)
+		},
+	)
 }
 
 init_skybox_pipelines :: proc() {
-	skybox_shader, f_ok := gfx.load_shader_module("shaders/out/skybox.spv")
-	assert(f_ok, "Failed to load shaders.")
-
 	game.render_state.skybox_pipeline_layout = gfx.create_pipeline_layout_pc(
 		&game.render_state.bindless_descriptor_layout,
 		GPUSkyboxPushConstants,
 	)
-	game.render_state.skybox_pipeline = gfx.create_graphics_pipeline(
-		pipeline_layout = game.render_state.skybox_pipeline_layout,
-		shader = skybox_shader,
-		input_topology = .TRIANGLE_LIST,
-		polygon_mode = .FILL,
-		cull_mode = {.BACK},
-		front_face = .COUNTER_CLOCKWISE,
-		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-		color_format = gfx.renderer().draw_image.format,
-		multisampling_samples = gfx.msaa_samples(),
-	)
-
-	gfx.destroy_shader_module(skybox_shader)
-
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skybox_pipeline_layout)
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.skybox_pipeline)
+
+	game.render_state.skybox_shader = add_shader(
+		"shaders/skybox.slang",
+		{"vertex_main", "fragment_main"},
+		proc(module: vk.ShaderModule) -> (vk.Pipeline, bool) {
+			return gfx.create_graphics_pipeline(
+				pipeline_layout = game.render_state.skybox_pipeline_layout,
+				shader = module,
+				input_topology = .TRIANGLE_LIST,
+				polygon_mode = .FILL,
+				cull_mode = {.BACK},
+				front_face = .COUNTER_CLOCKWISE,
+				depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+				color_format = gfx.renderer().draw_image.format,
+				multisampling_samples = gfx.msaa_samples(),
+			)
+		},
+	)
 }
 
 init_tonemapper_pipelines :: proc() {
-	tonemapper_shader, f_ok := gfx.load_shader_module("shaders/out/tonemapping.spv")
-	assert(f_ok, "Failed to load shaders.")
-
 	game.render_state.tonemapper_pipeline_layout = gfx.create_pipeline_layout(&game.render_state.bindless_descriptor_layout)
-	game.render_state.tonemapper_pipeline = gfx.create_compute_pipelines(game.render_state.tonemapper_pipeline_layout, tonemapper_shader)
-
-	gfx.destroy_shader_module(tonemapper_shader)
-
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.tonemapper_pipeline)
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.tonemapper_pipeline_layout)
+
+	game.render_state.tonemapper_shader = add_shader(
+		"shaders/tonemapping.slang",
+		{"compute_main"},
+		proc(module: vk.ShaderModule) -> (vk.Pipeline, bool) {
+			return gfx.create_compute_pipelines(game.render_state.tonemapper_pipeline_layout, module)
+		},
+	)
 }
 
 init_buffers :: proc() {
@@ -439,17 +449,42 @@ init_buffers :: proc() {
 	reserve(&game.render_state.model_matrices, 16_000)
 }
 
-add_shader :: proc(pipeline: vk.Pipeline, layout: vk.PipelineLayout) -> ShaderId {
-	id := ShaderId(u32(len(game.render_state.shaders)))
-	append(&game.render_state.shaders, Shader{layout = layout, pipeline = pipeline})
-	return id
-}
-
 get_shader :: proc(id: ShaderId) -> ^Shader {
 	return &game.render_state.shaders[id]
 }
 
-check_shader_hotreload :: proc() {
+add_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callback: ShaderCreatePipelineCallback) -> ShaderId {
+	shader := init_shader(path, entrypoints, pipeline_create_callback)
+
+	id := ShaderId(u32(len(game.render_state.shaders)))
+	append(&game.render_state.shaders, shader)
+
+	return ShaderId(id)
+}
+
+check_shader_hotreload :: proc() -> (needs_reload: bool) {
+	// TODO: SPEED: Maybe defer this across frames?
+	for &shader in game.render_state.shaders {
+		last_write_time, ok := os.last_write_time_by_name(string(shader.path))
+		if shader.last_write_time != last_write_time {
+			needs_reload = true
+		}
+	}
+
+	return
+}
+
+hotreload_modified_shaders :: proc() {
+	// TODO: SPEED: Maybe defer this across frames?
+	for &shader in game.render_state.shaders {
+		last_write_time, ok := os.last_write_time_by_name(string(shader.path))
+		if shader.last_write_time != last_write_time {
+			reload_shader_pipeline(&shader)
+			shader.last_write_time = last_write_time
+		}
+	}
+
+	return
 }
 
 //// RENDERING
@@ -457,7 +492,10 @@ draw :: proc() {
 	scope_stat_time(.Render)
 
 	when ODIN_DEBUG {
-		check_shader_hotreload()
+		if check_shader_hotreload() {
+			gfx.vk_check(vk.DeviceWaitIdle(gfx.renderer().device))
+			hotreload_modified_shaders()
+		}
 	}
 
 	// TEMP: test draw command
@@ -575,7 +613,7 @@ draw :: proc() {
 }
 
 skinning_pass :: proc(cmd: vk.CommandBuffer, instance: ^SkeletalMeshInstance) {
-	vk.CmdBindPipeline(cmd, .COMPUTE, game.render_state.skinning_pipeline)
+	vk.CmdBindPipeline(cmd, .COMPUTE, get_shader(game.render_state.skinning_shader).pipeline)
 
 	skinning_pc := GPUSkinningPushConstants {
 		input_vertex_buffer  = instance.skel.buffers.vertex_buffer.address,
@@ -679,7 +717,7 @@ shadow_map_pass :: proc(cmd: vk.CommandBuffer) {
 
 	gfx.set_viewport_and_scissor(cmd, game.render_state.shadow_depth_image.extent)
 
-	vk.CmdBindPipeline(cmd, .GRAPHICS, game.render_state.mesh_shadow_pipeline)
+	vk.CmdBindPipeline(cmd, .GRAPHICS, get_shader(game.render_state.mesh_shadow_shader).pipeline)
 	vk.CmdBindDescriptorSets(
 		cmd,
 		.GRAPHICS,
@@ -723,7 +761,7 @@ geometry_pass :: proc(cmd: vk.CommandBuffer) {
 
 	gfx.set_viewport_and_scissor(cmd, gfx.renderer().draw_extent)
 
-	vk.CmdBindPipeline(cmd, .GRAPHICS, game.render_state.mesh_pipeline)
+	vk.CmdBindPipeline(cmd, .GRAPHICS, get_shader(game.render_state.mesh_shader).pipeline)
 	vk.CmdBindDescriptorSets(
 		cmd,
 		.GRAPHICS,
@@ -757,7 +795,7 @@ skybox_pass :: proc(cmd: vk.CommandBuffer) {
 
 	gfx.set_viewport_and_scissor(cmd, gfx.renderer().draw_extent)
 
-	vk.CmdBindPipeline(cmd, .GRAPHICS, game.render_state.skybox_pipeline)
+	vk.CmdBindPipeline(cmd, .GRAPHICS, get_shader(game.render_state.skybox_shader).pipeline)
 
 	vk.CmdBindDescriptorSets(
 		cmd,
@@ -808,7 +846,7 @@ skybox_pass :: proc(cmd: vk.CommandBuffer) {
 }
 
 post_processing_pass :: proc(cmd: vk.CommandBuffer) {
-	vk.CmdBindPipeline(cmd, .COMPUTE, game.render_state.tonemapper_pipeline)
+	vk.CmdBindPipeline(cmd, .COMPUTE, get_shader(game.render_state.tonemapper_shader).pipeline)
 	vk.CmdBindDescriptorSets(
 		cmd,
 		.COMPUTE,

@@ -47,16 +47,7 @@ vk_check :: proc(result: vk.Result, loc := #caller_location) {
 
 r_ctx: ^Renderer
 
-when true {
-	Cursed :: struct {
-		x: u32,
-	}
-} else {
-	Cursed :: struct {}
-}
-
 Renderer :: struct {
-	using cursed:                Cursed,
 	debug_messenger:             vk.DebugUtilsMessengerEXT,
 	enable_logs:                 bool,
 	instance:                    vk.Instance,

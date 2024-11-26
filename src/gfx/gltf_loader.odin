@@ -15,15 +15,41 @@ import vk "vendor:vulkan"
 
 import mikk "deps:odin-mikktspace"
 
-slice_accessor :: proc(accessor: ^cgltf.accessor, $T: typeid, loc := #caller_location) -> []T {
-	assert(accessor.stride == size_of(T), loc = loc)
+Accessor_Buffer_Iterator :: struct($T: typeid) {
+	accessor: ^cgltf.accessor,
+	idx:      int,
+	expr:     string,
+	loc:      runtime.Source_Code_Location,
+}
 
-	start := accessor.offset + accessor.buffer_view.offset
-	end := start + accessor.buffer_view.size
+make_accessor_buf_iterator :: proc(
+	accessor: ^cgltf.accessor,
+	$T: typeid,
+	expr := #caller_expression,
+	loc := #caller_location,
+) -> Accessor_Buffer_Iterator(T) {
+	return Accessor_Buffer_Iterator(T){accessor, 0, expr, loc}
+}
 
-	slice_data_bytes := cast([^]u8)accessor.buffer_view.buffer.data
-	slice_data := slice_data_bytes[start:end]
-	return slice.reinterpret([]T, slice_data)
+accessor_buf_iterator :: proc(iter: ^Accessor_Buffer_Iterator($T)) -> (T, int, bool) {
+	idx := iter.idx
+
+	if uint(idx) >= iter.accessor.count {
+		return 0, idx, false
+	}
+
+	value_ptr := mem.ptr_offset(
+		cast(^u8)iter.accessor.buffer_view.buffer.data,
+		int(iter.accessor.offset) + int(iter.accessor.buffer_view.offset) + (idx * int(iter.accessor.stride)),
+	)
+
+	iter.idx += 1
+
+	cast_value, ok := try_cast_accessor_type(T, value_ptr, iter.accessor.component_type, iter.accessor.type)
+
+	assert(ok, iter.expr, iter.loc)
+
+	return cast_value, idx, ok
 }
 
 try_cast_accessor_type :: proc(
@@ -203,6 +229,16 @@ find_attribute :: proc(prim: ^cgltf.primitive, type: cgltf.attribute_type) -> (i
 	return 0, false
 }
 
+find_custom_attribute :: proc(prim: ^cgltf.primitive, name: cstring) -> (int, bool) {
+	for attribute, i in &prim.attributes {
+		if attribute.type == .custom && attribute.name == name {
+			return i, true
+		}
+	}
+
+	return 0, false
+}
+
 create_mesh_buffers :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffers {
 	index_count := u32(len(mesh.indices))
 	vertex_count := u32(len(mesh.vertices))
@@ -271,50 +307,65 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 		assert(skin != nil)
 	}
 
+	for attribute in primitive.attributes {
+		fmt.println(attribute.name)
+	}
+
 	pos_idx := find_attribute(primitive, .position) or_return
 	norm_idx, norm_ok := find_attribute(primitive, .normal)
 	color_idx, color_ok := find_attribute(primitive, .color)
 	uv_idx, uv_ok := find_attribute(primitive, .texcoord)
+	//lightmap_uv_idx, lightmap_uv_ok := find_attribute(primitive, .texcoord)
 	tangent_idx, tangent_ok := find_attribute(primitive, .tangent)
 
 	mesh.indices = make([]u32, primitive.indices.count)
 
-	for val, i in slice_accessor(primitive.indices, u16) {
-		mesh.indices[i] = auto_cast val
+	{
+		it := make_accessor_buf_iterator(primitive.indices, u32)
+		for val, i in accessor_buf_iterator(&it) {
+			mesh.indices[i] = val
+		}
 	}
 
-	data := primitive.attributes[pos_idx].data
-	mesh.vertices = make([]Vertex, data.count)
+	{
+		data := primitive.attributes[pos_idx].data
+		mesh.vertices = make([]Vertex, data.count)
 
-	for val, i in slice_accessor(data, hlsl.float3) {
-		mesh.vertices[i].position = val
+		it := make_accessor_buf_iterator(data, hlsl.float3)
+		for val, i in accessor_buf_iterator(&it) {
+			mesh.vertices[i].position = val
+		}
 	}
 
 	if norm_ok {
 		data := primitive.attributes[norm_idx].data
-		for val, i in slice_accessor(data, hlsl.float3) {
+		it := make_accessor_buf_iterator(data, hlsl.float3)
+		for val, i in accessor_buf_iterator(&it) {
 			mesh.vertices[i].normal = val
 		}
 	}
 
 	if color_ok {
 		data := primitive.attributes[color_idx].data
-		for val, i in slice_accessor(data, hlsl.float4) {
+		it := make_accessor_buf_iterator(data, hlsl.float4)
+		for val, i in accessor_buf_iterator(&it) {
 			mesh.vertices[i].color = val
 		}
 	}
 
 	if uv_ok {
 		data := primitive.attributes[uv_idx].data
-		for val, i in slice_accessor(data, hlsl.float2) {
+		it := make_accessor_buf_iterator(data, hlsl.float2)
+		for val, i in accessor_buf_iterator(&it) {
 			mesh.vertices[i].uv_x = val.x
 			mesh.vertices[i].uv_y = val.y
 		}
 	}
 
-	if tangent_ok {
+	if false {
 		data := primitive.attributes[tangent_idx].data
-		for val, i in slice_accessor(data, hlsl.float4) {
+		it := make_accessor_buf_iterator(data, hlsl.float4)
+		for val, i in accessor_buf_iterator(&it) {
 			mesh.vertices[i].tangent = val
 		}
 	} else if uv_ok && norm_ok {
@@ -492,11 +543,14 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 	skel_mesh.attrs = make([]SkeletonVertexAttribute, primitive.attributes[joints_idx].data.count)
 
 	{
-		for val, i in slice_accessor(primitive.attributes[joints_idx].data, [4]u8) {
+		it := make_accessor_buf_iterator(primitive.attributes[joints_idx].data, [4]u8)
+		for val, i in accessor_buf_iterator(&it) {
 			skel_mesh.attrs[i].joints = val
 		}
-
-		for val, i in slice_accessor(primitive.attributes[weights_idx].data, [4]f32) {
+	}
+	{
+		it := make_accessor_buf_iterator(primitive.attributes[weights_idx].data, [4]f32)
+		for val, i in accessor_buf_iterator(&it) {
 			skel_mesh.attrs[i].weights = val
 		}
 	}
@@ -510,7 +564,8 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 
 		skeleton.joint_count = len(skin.joints)
 
-		for val, i in slice_accessor(skin.inverse_bind_matrices, [16]f32) {
+		it := make_accessor_buf_iterator(skin.inverse_bind_matrices, [16]f32)
+		for val, i in accessor_buf_iterator(&it) {
 			append(&skeleton.inverse_bind_matrices, gltf_matrix_to_odin_matrix(val))
 		}
 
@@ -557,16 +612,19 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 
 				#partial switch channel.target_path {
 				case .translation:
-					for val, i in slice_accessor(channel.sampler.output, [3]f32) {
+					it := make_accessor_buf_iterator(channel.sampler.output, [3]f32)
+					for val, i in accessor_buf_iterator(&it) {
 						append(&joint_anim.keyframes_translation, val)
 					}
 				case .rotation:
-					for val, i in slice_accessor(channel.sampler.output, [4]f32) {
+					it := make_accessor_buf_iterator(channel.sampler.output, [4]f32)
+					for val, i in accessor_buf_iterator(&it) {
 						q := quaternion(w = val.w, x = val.x, y = val.y, z = val.z)
 						append(&joint_anim.keyframes_rotation, q)
 					}
 				case .scale:
-					for val, i in slice_accessor(channel.sampler.output, [3]f32) {
+					it := make_accessor_buf_iterator(channel.sampler.output, [3]f32)
+					for val, i in accessor_buf_iterator(&it) {
 						append(&joint_anim.keyframes_scale, val)
 					}
 				case:
@@ -635,11 +693,7 @@ create_skel_mesh_buffers :: proc(skel_mesh: SkeletalMesh, loc := #caller_locatio
 	return new_surface
 }
 
-staging_write_skel_mesh_buffers :: proc(
-	buffers: ^GPUSkelMeshBuffers,
-	skel_mesh: SkeletalMesh,
-	loc := #caller_location,
-) {
+staging_write_skel_mesh_buffers :: proc(buffers: ^GPUSkelMeshBuffers, skel_mesh: SkeletalMesh, loc := #caller_location) {
 	assert(len(skel_mesh.attrs) > 0)
 	assert(len(skel_mesh.vertices) == len(skel_mesh.attrs))
 

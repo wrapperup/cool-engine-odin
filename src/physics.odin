@@ -113,10 +113,7 @@ advance_callback :: proc "c" (user_data: rawptr, body_buffer: [^]^px.RigidBody, 
 	fmt.println("advance")
 }
 
-test := 0.0
-
 user_error_callback :: proc "c" (code: px.ErrorCode, message: cstring, file: cstring, line: i32, user_data: rawptr) {
 	context = runtime.default_context()
-	fmt.println(code, message, file, line)
-	test = 102.0
+	fmt.println("Physx Error:", code, message, file, line)
 }

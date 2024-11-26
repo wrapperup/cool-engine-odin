@@ -64,7 +64,7 @@ create_dfg_generate_pipeline :: proc(width, height: u32) -> DfgGeneratePass {
 	assert(f_ok, "Failed to load shaders.")
 
 	pass.pipeline_layout = gfx.create_pipeline_layout_pc(&pass.descriptor_set_layout, DfgGeneratePassPC, {.COMPUTE})
-	pass.pipeline = gfx.create_compute_pipelines(pass.pipeline_layout, dfg_shader)
+	pass.pipeline, _ = gfx.create_compute_pipelines(pass.pipeline_layout, dfg_shader)
 
 	gfx.destroy_shader_module(dfg_shader)
 

@@ -9,11 +9,11 @@ float3 evaluate_specular_ibl(float3 r, float perceptualRoughness) {
 
 // TODO: Load SH coefs.
 float3 irradiance_sh(float3 n, float4 sh[9]) {    
-    let z = n.z;
-    let x = n.x;
-    let y = n.y;
+    let x = -n.z;
+    let y = n.x;
+    let z = n.y;
 
-    return
+    let color =
           sh[0].rgb
         + sh[1].rgb * (x)
         + sh[2].rgb * (y)
@@ -23,6 +23,8 @@ float3 irradiance_sh(float3 n, float4 sh[9]) {
         + sh[6].rgb * (y * x)
         + sh[7].rgb * (3.0 * z * z - 1.0)
         + sh[8].rgb * (x * x - y * y);
+
+    return max(color, 0);
 }
 
 float3 sample_dfg(float NoV, float p_roughness) {

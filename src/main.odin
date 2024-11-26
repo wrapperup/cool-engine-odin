@@ -152,25 +152,12 @@ init_physics :: proc() {
 
 	game.phys.controller_manager = create_controller_manager(game.phys.scene, false)
 
-	// create a ground plane to the scene
-	ground_material := physics_create_material_mut(game.phys.physics, 0.5, 0.5, 0.3)
-	ground_plane := create_plane(game.phys.physics, plane_new_1(0.0, 1.0, 0.0, 0.0), ground_material)
-	scene_add_actor_mut(game.phys.scene, ground_plane, nil)
-
-	ground_wall := create_plane(
-		game.phys.physics,
-		plane_new_3(px.Vec3{-100, 0, 0}, transmute(px.Vec3)linalg.normalize([3]f32{1.0, 1.0, 0.0})),
-		ground_material,
-	)
-	ground_wall2 := create_plane(
-		game.phys.physics,
-		plane_new_3(px.Vec3{100, 0, 0}, transmute(px.Vec3)linalg.normalize([3]f32{-1.0, 4.0, 0.0})),
-		ground_material,
-	)
-	scene_add_actor_mut(game.phys.scene, ground_wall, nil)
-	scene_add_actor_mut(game.phys.scene, ground_wall2, nil)
-
 	scene_set_visualization_culling_box_mut(game.phys.scene, bounds3_new_1({-50, -50, -50}, {50, 50, 50}))
+
+// 	// create a ground plane to the scene
+// 	ground_material := physics_create_material_mut(game.phys.physics, 0.5, 0.5, 0.3)
+// 	ground_plane := create_plane(game.phys.physics, plane_new_1(0.0, 1.0, 0.0, 0.0), ground_material)
+// 	scene_add_actor_mut(game.phys.scene, ground_plane, nil)
 }
 
 init_game_state :: proc() {
@@ -207,6 +194,9 @@ init_game_state :: proc() {
 
 	test_mesh := new_entity(StaticMesh)
 	init_static_mesh(test_mesh, "assets/meshes/static/map_test.glb", 0)
+
+	test_mesh2 := new_entity(StaticMesh)
+	init_static_mesh(test_mesh2, "assets/meshes/static/materialball2.glb", 1)
 
 	game.state = GameState {
 		camera_id = entity_id_of(camera),
@@ -281,6 +271,4 @@ game_shutdown :: proc() {
 	foundation_release_mut(game.phys.foundation)
 
 	gfx.shutdown()
-
-	fmt.println("TEST VALUE: ", test)
 }
