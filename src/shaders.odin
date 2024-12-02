@@ -1,8 +1,9 @@
 package game
 
 import "core:fmt"
-import "core:os"
+import "core:os/os2"
 import "core:slice"
+import "core:strings"
 import "core:time"
 
 import vk "vendor:vulkan"
@@ -16,21 +17,27 @@ ShaderCreatePipelineCallback :: #type proc(shader_module: vk.ShaderModule) -> (v
 Shader :: struct {
 	pipeline:                 vk.Pipeline,
 	path:                     cstring,
+	extra_files:              []string,
 	entrypoints:              []cstring,
-	last_write_time:          os.File_Time,
+	last_compile_time:        time.Time,
+	needs_recompile:          bool,
 	pipeline_create_callback: ShaderCreatePipelineCallback,
 }
 
 init_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callback: ShaderCreatePipelineCallback) -> Shader {
-	assert(os.exists(string(path)))
+	assert(os2.exists(string(path)))
 
-	last_write_time, err := os.last_write_time_by_name(string(path))
-	assert(err == nil)
+	extra_files := get_dependency_file_paths(path)
+
+	for file in extra_files {
+		fmt.println(file)
+	}
 
 	shader := Shader {
 		path                     = path,
+		extra_files              = extra_files,
 		entrypoints              = slice.clone(entrypoints),
-		last_write_time          = last_write_time,
+		last_compile_time        = time.now(),
 		pipeline_create_callback = pipeline_create_callback,
 	}
 
@@ -111,12 +118,8 @@ diagnostics_check :: #force_inline proc(diagnostics: ^sp.IBlob, loc := #caller_l
 	}
 }
 
-compile_slang_to_spirv :: proc(shader: ^Shader) -> (compiled_code: []u8, ok: bool) {
-	start_compile_time := time.tick_now()
-
+init_slang_session :: proc() -> ^sp.ISession {
 	using sp
-	code, diagnostics: ^IBlob
-	r: Result
 
 	target_desc := TargetDesc {
 		structureSize = size_of(TargetDesc),
@@ -137,9 +140,43 @@ compile_slang_to_spirv :: proc(shader: ^Shader) -> (compiled_code: []u8, ok: boo
 		compilerOptionEntries    = &compiler_option_entries[0],
 		compilerOptionEntryCount = len(compiler_option_entries),
 	}
-
 	session: ^ISession
 	slang_check(game.render_state.global_session->createSession(session_desc, &session))
+	return session
+}
+
+get_dependency_file_paths :: proc(root_path: cstring, allocator := context.allocator) -> []string {
+	using sp
+
+	session := init_slang_session()
+	defer session->release()
+
+	diagnostics: ^IBlob
+	module: ^IModule = session->loadModule(root_path, &diagnostics)
+	diagnostics_check(diagnostics)
+	assert(module != nil)
+	defer module->release()
+
+	count := module->getDependencyFileCount()
+
+	file_paths := make([]string, count)
+
+	for i in 0 ..< module->getDependencyFileCount() {
+		str := module->getDependencyFilePath(i)
+		file_paths[i] = strings.clone_from_cstring(str)
+	}
+
+	return file_paths
+}
+
+compile_slang_to_spirv :: proc(shader: ^Shader) -> (compiled_code: []u8, ok: bool) {
+	start_compile_time := time.tick_now()
+
+	using sp
+	code, diagnostics: ^IBlob
+	r: Result
+
+	session := init_slang_session()
 	defer session->release()
 
 	blob: ^IBlob

@@ -38,7 +38,7 @@ float3 evaluate_ibl(float3 n, float3 v, float3 diffuse_color, float3 f0, float p
 
     float3 Lld = evaluate_specular_ibl(r, p_roughness);
     float2 Ldfg = sample_dfg(NoV, p_roughness).rg;
-    float3 Lr = (f0 * Ldfg.x + Ldfg.y) * Lld;
+    float3 Lr = (f0 * Ldfg.r + Ldfg.g) * Lld;
 
     float3 diffuse_irradiance = irradiance_sh(n, sh);
     float3 Ld = diffuse_color * diffuse_irradiance;

@@ -106,7 +106,7 @@ end_scope_stat_time :: proc(stat_type: FrameTimeStats) {
 
 GameState :: struct {
 	environment: Environment,
-	camera_id:   TypedEntityId(Camera),
+	player_id:   TypedEntityId(Player),
 }
 
 Environment :: struct {

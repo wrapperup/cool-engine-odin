@@ -307,10 +307,6 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 		assert(skin != nil)
 	}
 
-	for attribute in primitive.attributes {
-		fmt.println(attribute.name)
-	}
-
 	pos_idx := find_attribute(primitive, .position) or_return
 	norm_idx, norm_ok := find_attribute(primitive, .normal)
 	color_idx, color_ok := find_attribute(primitive, .color)
@@ -362,7 +358,7 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 		}
 	}
 
-	if false {
+	if tangent_ok {
 		data := primitive.attributes[tangent_idx].data
 		it := make_accessor_buf_iterator(data, hlsl.float4)
 		for val, i in accessor_buf_iterator(&it) {

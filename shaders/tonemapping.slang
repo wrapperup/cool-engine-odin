@@ -1,4 +1,23 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
 #include "./bindless.slang"
+
+
+
+
+
+
 
 float3 tony_mc_mapface(float3 stimulus) {
   // Apply a non-linear transform that the LUT is encoded with.
@@ -20,7 +39,7 @@ void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
   uint2 size;
   HDRImages[RESOLVED_IMAGE_ID].GetDimensions(size.x, size.y);
 
-  let exposure = 2.0f;
+  let exposure = 3.0f;
   if (texel_coord.x < size.x && texel_coord.y < size.y) {
     let hdr_color = HDRImages[RESOLVED_IMAGE_ID][texel_coord].rgb * exposure;
     let mapped = tony_mc_mapface(hdr_color);

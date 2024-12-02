@@ -31,7 +31,7 @@ game_init :: proc(window: glfw.WindowHandle) {
 	glfw.Init()
 
 	game.window = window
-	game.window_extent = {1920, 1080}
+	game.window_extent = {1600, 1080}
 
 	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = false, enable_logs = false})
 	if game.renderer == nil {
@@ -61,7 +61,7 @@ game_init_window :: proc() -> glfw.WindowHandle {
 	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
 	glfw.SwapInterval(1)
 
-	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
+	window := glfw.CreateWindow(1600, 1080, "Vulkan", nil, nil)
 
 	return window
 }
@@ -163,11 +163,11 @@ init_physics :: proc() {
 init_game_state :: proc() {
 	game.render_state.draw_skybox = true
 
-	camera := new_entity(Camera)
-	init_camera(camera)
-	camera.translation = {3, 3.7, 5}
-	camera.camera_rot = {-0.4, -0.6, 0}
-	camera.camera_fov_deg = 65
+	player := new_entity(Player)
+	init_player(player)
+	player.translation = {3, 3.7, 5}
+	player.camera_rot = {-0.4, -0.6, 0}
+	player.camera_fov_deg = 65
 
 	grid_size: f32 = 3.0
 
@@ -199,7 +199,7 @@ init_game_state :: proc() {
 	init_static_mesh(test_mesh2, "assets/meshes/static/materialball2.glb", 1)
 
 	game.state = GameState {
-		camera_id = entity_id_of(camera),
+		player_id = entity_id_of(player),
 		environment = Environment {
 			sun_pos = {12, 15, 10},
 			sun_target = 0.0,
@@ -251,13 +251,13 @@ update_physics :: proc(dt: f64) {
 update_game_state :: proc(delta_time: f64) {
 	scope_stat_time(.GameState)
 
-	camera := get_entity(game.state.camera_id)
+	player := get_entity(game.state.player_id)
 
 	for &ball in get_entities(Ball) {
 		update_ball_fixed(&ball)
 	}
 
-	update_camera(camera, delta_time)
+	update_player(player, delta_time)
 }
 
 @(export)

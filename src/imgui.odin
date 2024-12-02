@@ -156,9 +156,9 @@ update_imgui :: proc() {
 	green := im.GetColorU32ImVec4({0.0, 1.0, 0.0, 1.0})
 	blue := im.GetColorU32ImVec4({0.0, 0.0, 1.0, 1.0})
 
-	camera := get_entity(game.state.camera_id)
+	player := get_entity(game.state.player_id)
 	{
-		view_matrix := linalg.matrix4_from_quaternion(camera != nil ? camera.rotation : {})
+		view_matrix := linalg.matrix4_from_quaternion(player != nil ? player.rotation : {})
 
 		projection_matrix := gfx.matrix_ortho3d_z0_f32(-1, 1, -1, 1, 0.1, 1)
 		projection_matrix[1][1] *= -1.0
@@ -184,7 +184,7 @@ update_imgui :: proc() {
 
 	}
 
-	view_projection := get_projection_matrix(camera) * get_view_matrix(camera)
+	view_projection := get_projection_matrix(player) * get_view_matrix(player)
 
 	rb := px.scene_get_render_buffer_mut(game.phys.scene)
 	for i in 0 ..< px.render_buffer_get_nb_lines(rb) {
@@ -202,9 +202,9 @@ update_imgui :: proc() {
 
 		enabled := px.scene_get_visualization_parameter(game.phys.scene, .Scale) > 0.0
 		if im.Checkbox("Enable debug view", &enabled) {
-			camera := get_entity(Camera, game.state.camera_id)
-			min := camera.translation - 50
-			max := camera.translation + 50
+			player := get_entity(Player, game.state.player_id)
+			min := player.translation - 50
+			max := player.translation + 50
 			px.scene_set_visualization_culling_box_mut(game.phys.scene, px.bounds3_new_1(transmute(px.Vec3)min, transmute(px.Vec3)max))
 			px.scene_set_visualization_parameter_mut(game.phys.scene, .Scale, enabled ? 1.0 : 0.0)
 			px.scene_set_visualization_parameter_mut(game.phys.scene, .CollisionShapes, enabled ? 1.0 : 0.0)
@@ -310,12 +310,12 @@ update_imgui :: proc() {
 	}
 	im.End()
 
-	if camera != nil {
+	if player != nil {
 		if im.Begin("Camera") {
-			im.InputFloat3("pos", &camera.translation)
-			im.InputFloat3("vel", &camera.velocity)
-			im.InputFloat3("pitch yaw", &camera.camera_rot)
-			im.InputFloat("fov", cast(^f32)(&camera.camera_fov_deg))
+			im.InputFloat3("pos", &player.translation)
+			im.InputFloat3("vel", &player.velocity)
+			im.InputFloat3("pitch yaw", &player.camera_rot)
+			im.InputFloat("fov", cast(^f32)(&player.camera_fov_deg))
 			items := [len(ViewState)]cstring{"SceneColor", "SceneDepth", "ShadowDepth"}
 			im.ComboChar("view", cast(^i32)(&game.view_state), raw_data(&items), len(items))
 		}
@@ -376,10 +376,10 @@ update_imgui :: proc() {
 }
 
 debug_draw_line :: proc(pos0, pos1: [3]f32, thickness: f32 = 1.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}, dots: bool = false) {
-	camera := get_entity(game.state.camera_id)
+	player := get_entity(game.state.player_id)
 
 	// TODO: cache this
-	view_projection := get_projection_matrix(camera) * get_view_matrix(camera)
+	view_projection := get_projection_matrix(player) * get_view_matrix(player)
 
 	line0, ok := world_space_to_clip_space(view_projection, pos0)
 	line1, ok1 := world_space_to_clip_space(view_projection, pos1)
@@ -400,10 +400,10 @@ debug_draw_line :: proc(pos0, pos1: [3]f32, thickness: f32 = 1.0, color := im.Ve
 }
 
 debug_draw_dot :: proc(pos: [3]f32, half_size: f32 = 5.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}) {
-	camera := get_entity(game.state.camera_id)
+	player := get_entity(game.state.player_id)
 
 	// TODO: cache this
-	view_projection := get_projection_matrix(camera) * get_view_matrix(camera)
+	view_projection := get_projection_matrix(player) * get_view_matrix(player)
 
 	bl := im.GetBackgroundDrawList()
 	col_u32 := im.GetColorU32ImVec4(color)

@@ -5,7 +5,8 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/hlsl"
 import "core:mem"
-import "core:os"
+import "core:os/os2"
+import "core:time"
 
 import vk "vendor:vulkan"
 
@@ -463,10 +464,21 @@ add_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callba
 }
 
 check_shader_hotreload :: proc() -> (needs_reload: bool) {
-	// TODO: SPEED: Maybe defer this across frames?
+	// TODO: SPEED: Maybe iter this across frames?
 	for &shader in game.render_state.shaders {
-		last_write_time, ok := os.last_write_time_by_name(string(shader.path))
-		if shader.last_write_time != last_write_time {
+		max_last_write_time: i64
+		last_write_time, ok := os2.last_write_time_by_name(string(shader.path))
+		max_last_write_time = last_write_time._nsec
+
+		for path in shader.extra_files {
+			last, k := os2.last_write_time_by_name(string(path))
+			if last._nsec > max_last_write_time {
+				max_last_write_time = last._nsec
+			}
+		}
+
+		if shader.last_compile_time._nsec < max_last_write_time {
+			shader.needs_recompile = true
 			needs_reload = true
 		}
 	}
@@ -475,12 +487,14 @@ check_shader_hotreload :: proc() -> (needs_reload: bool) {
 }
 
 hotreload_modified_shaders :: proc() {
-	// TODO: SPEED: Maybe defer this across frames?
+	// TODO: SPEED: Maybe iter this across frames?
 	for &shader in game.render_state.shaders {
-		last_write_time, ok := os.last_write_time_by_name(string(shader.path))
-		if shader.last_write_time != last_write_time {
-			reload_shader_pipeline(&shader)
-			shader.last_write_time = last_write_time
+		if shader.needs_recompile {
+			if reload_shader_pipeline(&shader) {
+				shader.last_compile_time = time.now()
+				shader.needs_recompile = false
+			}
+			return
 		}
 	}
 
@@ -495,6 +509,7 @@ draw :: proc() {
 		if check_shader_hotreload() {
 			gfx.vk_check(vk.DeviceWaitIdle(gfx.renderer().device))
 			hotreload_modified_shaders()
+			fmt.println("Shaders hotreloaded!")
 		}
 	}
 
@@ -809,16 +824,16 @@ skybox_pass :: proc(cmd: vk.CommandBuffer) {
 	)
 	vk.CmdBindIndexBuffer(cmd, game.render_state.skybox_mesh.index_buffer.buffer, 0, .UINT32)
 
-	camera := get_entity(game.state.camera_id)
+	player := get_entity(game.state.player_id)
 
 	aspect_ratio := f32(game.window_extent.x) / f32(game.window_extent.y)
 
-	rotation := linalg.matrix4_from_quaternion(camera != nil ? camera.rotation : {})
+	rotation := linalg.matrix4_from_quaternion(player != nil ? player.rotation : {})
 
 	view_matrix := linalg.inverse(rotation)
 
 	projection_matrix := gfx.matrix4_infinite_perspective_z0_f32(
-		linalg.to_radians(camera != nil ? camera.camera_fov_deg : 0),
+		linalg.to_radians(player != nil ? player.camera_fov_deg : 0),
 		aspect_ratio,
 		0.1,
 	)
@@ -868,10 +883,10 @@ post_processing_pass :: proc(cmd: vk.CommandBuffer) {
 
 update_buffers :: proc() {
 	global_uniform_data := &game.render_state.global_uniform_data
-	camera := get_entity(game.state.camera_id)
+	player := get_entity(game.state.player_id)
 
 	// Camera matrices
-	global_uniform_data.view_projection_matrix = get_projection_matrix(camera) * get_view_matrix(camera)
+	global_uniform_data.view_projection_matrix = get_projection_matrix(player) * get_view_matrix(player)
 	global_uniform_data.view_projection_i_matrix = linalg.matrix4_inverse(global_uniform_data.view_projection_matrix)
 
 	// Global sun matrices
@@ -889,7 +904,7 @@ update_buffers :: proc() {
 	global_uniform_data.sky_color = game.state.environment.sky_color
 	global_uniform_data.bias = game.state.environment.bias
 
-	global_uniform_data.camera_pos = hlsl.float3(camera != nil ? camera.translation : [3]f32{0, 0, 0})
+	global_uniform_data.camera_pos = hlsl.float3(player != nil ? player.translation : [3]f32{0, 0, 0})
 	global_uniform_data.sun_pos = hlsl.float3(game.state.environment.sun_pos)
 
 	gfx.write_buffer(&current_frame_game().global_uniform_buffer, global_uniform_data)

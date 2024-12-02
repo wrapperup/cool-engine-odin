@@ -714,7 +714,7 @@ get_required_extensions :: proc(enable_validation_layers: bool) -> [dynamic]cstr
 	return extensions
 }
 
-// If the renderer is in a shared library, make sure to call this for hot reloading
+// If the renderer is in a shared library, make sure to call this after hot reloading
 load_vulkan_addresses :: proc() {
 	// Loads vulkan api functions needed to create an instance
 	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
@@ -762,7 +762,8 @@ create_instance :: proc(enable_validation_layers: bool) -> bool {
 	create_info.sType = .INSTANCE_CREATE_INFO
 	create_info.pApplicationInfo = &app_info
 
-	extensions := get_required_extensions(enable_validation_layers)
+	// extensions := get_required_extensions(enable_validation_layers)
+	extensions := glfw.GetRequiredInstanceExtensions()
 	defer delete(extensions)
 
 	create_info.ppEnabledExtensionNames = raw_data(extensions)

@@ -31,7 +31,6 @@ tasks:
       - pwsh ./scripts/build-shaders.ps1
 
   build-debug:
-    deps: [build-shaders]
     cmds:
       - pwsh ./scripts/build-debug.ps1
 
