@@ -1,4 +1,4 @@
-package gfx
+package game
 
 import "core:fmt"
 import "core:math"

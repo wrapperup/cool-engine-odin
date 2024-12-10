@@ -1,31 +1,33 @@
+import types;
+
 struct DrawIndirectCommand {
-  uint32_t vertexCount;
-  uint32_t instanceCount;
-  uint32_t firstVertex;
-  uint32_t firstInstance;
+  u32 vertexCount;
+  u32 instanceCount;
+  u32 firstVertex;
+  u32 firstInstance;
 }
 
 struct ComputeInput {
-  uint group_index : SV_GroupIndex;
+  u32 group_index : SV_GroupIndex;
 };
 
 struct VertexBuffer {
-  uint vertex_count;
+  u32 vertex_count;
   Vertex *vertices;
 }
 
 struct Vertex {
-  float3 position;
-  float uv_x;
-  float3 normal;
-  float uv_y;
-  float4 color;
+  Vec3 position;
+  f32 uv_x;
+  Vec3 normal;
+  f32 uv_y;
+  Vec4 color;
 };
 
 struct PushConstantData {
   DrawIndirectCommand *draw_commands;
   VertexBuffer *vertex_buffers;
-  uint entity_count;
+  u32 entity_count;
 };
 
 [vk_push_constant]

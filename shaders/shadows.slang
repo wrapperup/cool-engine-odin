@@ -1,4 +1,5 @@
 import bindless;
+import consts;
 
 // 9 imad (+ 6 iops with final shuffle) -- https://vkguide.dev
 uint3 pcg_3d(uint3 v) {
@@ -22,16 +23,18 @@ float shadow_calc(float4 shadow_coord, float2 offset = 0.0, float bias) {
   // perform perspective divide
   float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
 
-  let shadow = DepthTextures[SHADOW_ID].SampleCmpLevelZero(
-      DepthSamplers[SHADOW_SAMPLER_ID], proj_coords.xy + offset,
-      proj_coords.z - bias);
+  let shadow = SHADOW_ID.sample_cmp_level_zero(
+      SHADOW_SAMPLER_ID, 
+      proj_coords.xy + offset, 
+      proj_coords.z - bias
+   );
 
   return shadow;
 }
 
 float filter_pcf(float2 screen_pos, float4 shadow_coord, float bias) {
   int2 texDim;
-  DepthTextures[SHADOW_ID].GetDimensions(texDim.x, texDim.y);
+  SHADOW_ID.get_dimensions(texDim.x, texDim.y);
 
   float scale = 1.5;
   float dx = scale * 1.0 / float(texDim.x);

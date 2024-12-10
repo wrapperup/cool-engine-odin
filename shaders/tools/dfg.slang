@@ -51,10 +51,12 @@ float2 dfg(float NoV, float linear_roughness, int sample_count, bool multiscatte
 
 [vk_binding(0, 0)] RWTexture2D<float2> DfgTexture;
 
-[vk_push_constant] struct DfgPushConstant {
+struct DfgPushConstant {
     uint32_t sample_count;
     bool multiscatter;
-} pc;
+};
+
+[vk_push_constant] DfgPushConstant pc;
 
 // Integrates DFG into a f16 sequence that can be stored in a texture.
 // Recommended to store this in a R16G16_SFLOAT texture.

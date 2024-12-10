@@ -7,66 +7,6 @@ import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 import "vendor:glfw"
 
-init_imgui :: proc(window: glfw.WindowHandle) {
-	if window == nil do return
-
-	pool_sizes := []vk.DescriptorPoolSize {
-		{.SAMPLER, 1000},
-		{.COMBINED_IMAGE_SAMPLER, 1000},
-		{.SAMPLED_IMAGE, 1000},
-		{.STORAGE_IMAGE, 1000},
-		{.UNIFORM_TEXEL_BUFFER, 1000},
-		{.STORAGE_TEXEL_BUFFER, 1000},
-		{.UNIFORM_BUFFER, 1000},
-		{.STORAGE_BUFFER, 1000},
-		{.UNIFORM_BUFFER_DYNAMIC, 1000},
-		{.STORAGE_BUFFER_DYNAMIC, 1000},
-		{.INPUT_ATTACHMENT, 1000},
-	}
-
-	pool_info := vk.DescriptorPoolCreateInfo {
-		sType = .DESCRIPTOR_POOL_CREATE_INFO,
-	}
-	pool_info.flags = {.FREE_DESCRIPTOR_SET}
-	pool_info.maxSets = 1_000
-	pool_info.poolSizeCount = u32(len(pool_sizes))
-	pool_info.pPoolSizes = raw_data(pool_sizes)
-
-	vk_check(vk.CreateDescriptorPool(r_ctx.device, &pool_info, nil, &r_ctx.imgui_pool))
-
-	// 2: initialize imgui library
-
-	// this initializes the core structures of imgui
-	r_ctx.imgui_ctx = im.CreateContext()
-	im.SetCurrentContext(r_ctx.imgui_ctx)
-
-	// this initializes imgui for glfw
-	im_glfw.InitForVulkan(window, true)
-
-	// this initializes imgui for Vulkan
-	init_info := im_vk.InitInfo{}
-	init_info.Instance = r_ctx.instance
-	init_info.PhysicalDevice = r_ctx.physical_device
-	init_info.Device = r_ctx.device
-	init_info.Queue = r_ctx.graphics_queue
-	init_info.DescriptorPool = r_ctx.imgui_pool
-	init_info.MinImageCount = 3
-	init_info.ImageCount = 3
-	init_info.UseDynamicRendering = true
-	init_info.ColorAttachmentFormat = r_ctx.swapchain_image_format
-	init_info.MSAASamples = {._1}
-
-	// We've already loaded the funcs with Odin's built-in loader,
-	// imgui needs the addresses of those functions now.
-	im_vk.LoadFunctions(proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-			return vk.GetInstanceProcAddr((cast(^vk.Instance)user_data)^, function_name)
-		}, &r_ctx.instance)
-
-	im_vk.Init(&init_info, 0)
-
-	r_ctx.imgui_init = true
-}
-
 render_imgui :: proc() {
 	im.Render()
 }

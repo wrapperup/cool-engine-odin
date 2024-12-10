@@ -115,9 +115,9 @@ staging_write_buffer :: proc(buffer: ^GPUBuffer, in_data: ^$T, offset: vk.Device
 }
 
 // Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
-staging_write_buffer_slice :: proc(buffer: ^GPUBuffer, in_data: []$T, offset: vk.DeviceSize = 0) {
+staging_write_buffer_slice :: proc(buffer: ^GPUBuffer, in_data: []$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
 	size := size_of(T) * len(in_data)
-	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer")
+	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer", loc)
 
 	staging := create_buffer(vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer_slice(&staging, in_data)

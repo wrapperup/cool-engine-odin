@@ -26,14 +26,15 @@ float area_element(float x, float y) {
 
 [vk_binding(0, 0)] SamplerCube EnvironmentMap; // Use nearest sampling.
 
-[vk_push_constant] struct PushConstants {
+struct PushConstants {
     float3* sh;
-} pc;
+};
+
+[vk_push_constant] PushConstants pc;
 
 [numthreads(1, 1, 1)]
 [shader("compute")]
 void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
-
     uint2 size;
     uint levels;
     EnvironmentMap.GetDimensions(0, size.x, size.y, levels);

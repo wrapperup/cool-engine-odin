@@ -9,17 +9,17 @@ import "gfx"
 
 StaticMesh :: struct {
 	using entity: ^Entity,
-	mesh:         gfx.GPUMeshBuffers,
+	mesh:         GPUMeshBuffers,
 	material:     MaterialId,
 	body:         ^px.RigidStatic,
 }
 
 init_static_mesh :: proc(static_mesh: ^StaticMesh, mesh_file_name: cstring, material: MaterialId) {
-	mesh, ok := gfx.load_mesh_from_file(mesh_file_name)
+	mesh, ok := load_mesh_from_file(mesh_file_name)
 	assert(ok)
 
-	gpu_mesh := gfx.upload_mesh_to_gpu(mesh)
-	gfx.defer_destroy_gpu_mesh(&gfx.renderer().global_arena, gpu_mesh)
+	gpu_mesh := upload_mesh_to_gpu(mesh)
+	defer_destroy_gpu_mesh(&gfx.renderer().global_arena, gpu_mesh)
 
 	tolerances_scale := px.tolerances_scale_new(1, 10)
 	params := px.cooking_params_new(tolerances_scale)

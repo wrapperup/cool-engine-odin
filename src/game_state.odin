@@ -40,10 +40,10 @@ ViewState :: enum {
 SkeletalMeshInstance :: struct {
 	preskinned_vertex_buffers: [gfx.FRAME_OVERLAP]gfx.GPUBuffer,
 	joint_matrices_buffers:    [gfx.FRAME_OVERLAP]gfx.GPUBuffer,
-	skel:                      ^gfx.Skeleton,
+	skel:                      ^Skeleton,
 }
 
-init_skeletal_mesh_instance :: proc(skel: ^gfx.Skeleton, anim: ^gfx.SkeletalAnimation) -> SkeletalMeshInstance {
+init_skeletal_mesh_instance :: proc(skel: ^Skeleton, anim: ^SkeletalAnimation) -> SkeletalMeshInstance {
 	instance := SkeletalMeshInstance {
 		skel = skel,
 	}
@@ -55,7 +55,7 @@ init_skeletal_mesh_instance :: proc(skel: ^gfx.Skeleton, anim: ^gfx.SkeletalAnim
 			.CPU_TO_GPU,
 		)
 		instance.preskinned_vertex_buffers[i] = gfx.create_buffer(
-			vk.DeviceSize(instance.skel.buffers.vertex_count * size_of(gfx.Vertex)),
+			vk.DeviceSize(instance.skel.buffers.vertex_count * size_of(Vertex)),
 			{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 			.GPU_ONLY,
 		)

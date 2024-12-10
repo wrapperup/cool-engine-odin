@@ -1,43 +1,56 @@
+import bindless;
+import types;
+
 struct Vertex {
-  float3 position;
-  float uv_x;
-  float3 normal;
-  float uv_y;
-  float4 color;
-  float4 tangent;
+  Vec3 position;
+  f32 uv_x;
+  Vec3 normal;
+  f32 uv_y;
+  Vec4 color;
+  Vec4 tangent;
 };
 
+struct ShCoefficients {
+  Vec4 coeffs[9];
+}
+
+struct ShCoefficientVolume {
+  u32 sh_0_3_id;
+  u32 sh_4_7_id;
+  u32 sh_8_9_id;
+}
+
 struct Environment {
-  float4 sh_coeffs[9];
+	ShCoefficients *sh_volume;
 }
 
 struct GlobalData {
-  float4x4 view_projection_matrix;
-  float4x4 view_projection_i_matrix;
-  float4x4 sun_view_projection_matrix;
-  float4x4 sun_view_projection_i_matrix;
-  float3 sun_color;
-  float bias;
-  float3 sky_color;
-  float pad_0;
-  float3 camera_pos;
-  float pad_1;
-  float3 sun_pos;
-  float pad_2;
+  Mat4x4 view_projection_matrix;
+  Mat4x4 view_projection_i_matrix;
+  Mat4x4 sun_view_projection_matrix;
+  Mat4x4 sun_view_projection_i_matrix;
+  Vec3 sun_color;
+  f32 bias;
+  Vec3 sky_color;
+  f32 pad_0;
+  Vec3 camera_pos;
+  f32 pad_1;
+  Vec3 sun_pos;
+  f32 pad_2;
 	Environment environment;
 };
 
 struct PBRMaterial {
-  uint base_color_id;
-  uint normal_map_id;
-  uint ao_roughness_metallic;
+  Tex2D base_color_id;
+  Tex2D normal_map_id;
+  Tex2D ao_roughness_metallic;
 }
 
-float3 srgb_to_linear(float3 color) {
+Vec3 srgb_to_linear(Vec3 color) {
   return pow(color, 2.2);
 }
 
-float3 linear_to_srgb(float3 color) {
+Vec3 linear_to_srgb(Vec3 color) {
   return pow(color, 1.0 / 2.2);
 }
 

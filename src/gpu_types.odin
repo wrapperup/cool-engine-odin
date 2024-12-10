@@ -1,10 +1,12 @@
-package gfx
+package game
 
 import "core:math"
 import "core:math/linalg"
 import hlsl "core:math/linalg/hlsl"
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
+
+import "gfx"
 
 @(ShaderShared)
 Vertex :: struct {
@@ -23,9 +25,9 @@ SkeletonVertexAttribute :: struct {
 }
 
 GPUMeshBuffers :: struct {
-	index_buffer:  GPUBuffer,
+	index_buffer:  gfx.GPUBuffer,
 	index_count:   u32,
-	vertex_buffer: GPUBuffer,
+	vertex_buffer: gfx.GPUBuffer,
 	vertex_count:  u32,
 }
 
@@ -33,6 +35,6 @@ GPUSkelMeshBuffers :: struct {
 	using mesh_buffers:     GPUMeshBuffers,
 
 	// Array of SkeletonVertexAttribute
-	skel_vert_attrs_buffer: GPUBuffer,
+	skel_vert_attrs_buffer: gfx.GPUBuffer,
 	attrs_count:            u32,
 }

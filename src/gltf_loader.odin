@@ -1,4 +1,4 @@
-package gfx
+package game
 
 import "base:intrinsics"
 import "base:runtime"
@@ -14,6 +14,8 @@ import "vendor:cgltf"
 import vk "vendor:vulkan"
 
 import mikk "deps:odin-mikktspace"
+
+import "gfx"
 
 Accessor_Buffer_Iterator :: struct($T: typeid) {
 	accessor: ^cgltf.accessor,
@@ -186,7 +188,6 @@ try_cast_vec_type :: proc(
 	}
 
 	if !ty_ok {
-		log_normal("Bad type:", typeid_of(T), type)
 		ok = false
 		return
 	}
@@ -253,13 +254,13 @@ create_mesh_buffers :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffe
 	new_surface.index_count = index_count
 	new_surface.vertex_count = vertex_count
 
-	new_surface.vertex_buffer = create_buffer(
+	new_surface.vertex_buffer = gfx.create_buffer(
 		vertex_buffer_size,
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 		loc = loc,
 	)
-	new_surface.index_buffer = create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY, loc = loc)
+	new_surface.index_buffer = gfx.create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY, loc = loc)
 
 	return new_surface
 }
@@ -271,12 +272,12 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 	assert(buffers.index_count == u32(len(mesh.indices)))
 	assert(buffers.vertex_count == u32(len(mesh.vertices)))
 
-	staging := create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY, loc = loc)
+	staging := gfx.create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY, loc = loc)
 
-	write_buffer_slice(&staging, mesh.vertices)
-	write_buffer_slice(&staging, mesh.indices, vertex_buffer_size)
+	gfx.write_buffer_slice(&staging, mesh.vertices)
+	gfx.write_buffer_slice(&staging, mesh.indices, vertex_buffer_size)
 
-	if cmd, ok := immediate_submit(); ok {
+	if cmd, ok := gfx.immediate_submit(); ok {
 		vertex_copy := vk.BufferCopy {
 			dstOffset = 0,
 			srcOffset = 0,
@@ -293,7 +294,7 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 		vk.CmdCopyBuffer(cmd, staging.buffer, buffers.index_buffer.buffer, 1, &index_copy)
 	}
 
-	destroy_buffer(&staging)
+	gfx.destroy_buffer(&staging)
 }
 
 
@@ -343,9 +344,15 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 
 	if color_ok {
 		data := primitive.attributes[color_idx].data
-		it := make_accessor_buf_iterator(data, hlsl.float4)
+		it := make_accessor_buf_iterator(data, hlsl.float3)
 		for val, i in accessor_buf_iterator(&it) {
-			mesh.vertices[i].color = val
+			mesh.vertices[i].color.rgb = val
+			mesh.vertices[i].color.a = 1
+		}
+	} else {
+		// Default the color to 1
+		for &vertex in mesh.vertices {
+			vertex.color = 1
 		}
 	}
 
@@ -472,9 +479,9 @@ load_gpu_mesh_from_file :: proc(path: cstring, loc := #caller_location) -> (gpu_
 	return upload_mesh_to_gpu(mesh, loc = loc), true
 }
 
-defer_destroy_gpu_mesh :: proc(arena: ^VulkanArena, gpu_mesh: GPUMeshBuffers) {
-	defer_destroy_buffer(arena, gpu_mesh.vertex_buffer)
-	defer_destroy_buffer(arena, gpu_mesh.index_buffer)
+defer_destroy_gpu_mesh :: proc(arena: ^gfx.VulkanArena, gpu_mesh: GPUMeshBuffers) {
+	gfx.defer_destroy_buffer(arena, gpu_mesh.vertex_buffer)
+	gfx.defer_destroy_buffer(arena, gpu_mesh.index_buffer)
 }
 
 upload_mesh_to_gpu :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffers {
@@ -616,6 +623,7 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 					it := make_accessor_buf_iterator(channel.sampler.output, [4]f32)
 					for val, i in accessor_buf_iterator(&it) {
 						q := quaternion(w = val.w, x = val.x, y = val.y, z = val.z)
+						k: quaternion128 = 1 + 2i + 3j + 4k
 						append(&joint_anim.keyframes_rotation, q)
 					}
 				case .scale:
@@ -665,9 +673,9 @@ load_skel_mesh_from_file :: proc(path: cstring, loc := #caller_location) -> (ske
 	return
 }
 
-defer_destroy_gpu_skel_mesh :: proc(arena: ^VulkanArena, gpu_mesh: GPUSkelMeshBuffers) {
+defer_destroy_gpu_skel_mesh :: proc(arena: ^gfx.VulkanArena, gpu_mesh: GPUSkelMeshBuffers) {
 	defer_destroy_gpu_mesh(arena, gpu_mesh)
-	defer_destroy_buffer(arena, gpu_mesh.skel_vert_attrs_buffer)
+	gfx.defer_destroy_buffer(arena, gpu_mesh.skel_vert_attrs_buffer)
 }
 
 // Creates the buffers, but doesn't fill them.
@@ -679,7 +687,7 @@ create_skel_mesh_buffers :: proc(skel_mesh: SkeletalMesh, loc := #caller_locatio
 	new_surface.mesh_buffers = create_mesh_buffers(skel_mesh, loc = loc)
 	new_surface.attrs_count = u32(len(skel_mesh.attrs))
 
-	new_surface.skel_vert_attrs_buffer = create_buffer(
+	new_surface.skel_vert_attrs_buffer = gfx.create_buffer(
 		vk.DeviceSize(size_of(SkeletonVertexAttribute) * len(skel_mesh.attrs)),
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
@@ -697,5 +705,5 @@ staging_write_skel_mesh_buffers :: proc(buffers: ^GPUSkelMeshBuffers, skel_mesh:
 
 	attrs_buffer_size := vk.DeviceSize(size_of(SkeletonVertexAttribute) * len(skel_mesh.attrs))
 
-	staging_write_buffer_slice(&buffers.skel_vert_attrs_buffer, skel_mesh.attrs)
+	gfx.staging_write_buffer_slice(&buffers.skel_vert_attrs_buffer, skel_mesh.attrs)
 }

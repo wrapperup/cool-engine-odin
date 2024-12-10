@@ -19,17 +19,17 @@ Ball :: struct {
 
 	// Skeleton stuff
 	skel_mesh_instance: SkeletalMeshInstance,
-	skel_anim:          ^gfx.SkeletalAnimation,
-	skel_animator:      gfx.SkeletonAnimator,
+	skel_anim:          ^SkeletalAnimation,
+	skel_animator:      SkeletonAnimator,
 	use_game_time:      bool,
 	sample_time:        f32,
 }
 
-init_ball :: proc(ball: ^Ball, pos: [3]f32, vel: [3]f32 = 0, skeleton: ^gfx.Skeleton, anim: ^gfx.SkeletalAnimation) {
+init_ball :: proc(ball: ^Ball, pos: [3]f32, vel: [3]f32 = 0, skeleton: ^Skeleton, anim: ^SkeletalAnimation) {
 	ball.skel_mesh_instance = init_skeletal_mesh_instance(skeleton, anim)
 	ball.material = 0
 
-	gfx.init_skeleton_animator(&ball.skel_animator, skeleton, anim)
+	init_skeleton_animator(&ball.skel_animator, skeleton, anim)
 
 	using px
 
@@ -82,7 +82,7 @@ init_ball :: proc(ball: ^Ball, pos: [3]f32, vel: [3]f32 = 0, skeleton: ^gfx.Skel
 }
 
 update_ball_fixed :: proc(ball: ^Ball) {
-	gfx.sample_animation(&ball.skel_animator, ball.sample_time)
+	sample_animation(&ball.skel_animator, ball.sample_time)
 
 	using px
 

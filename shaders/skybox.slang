@@ -1,7 +1,8 @@
 import bindless;
 import common;
-import standard_brdf;
+import consts;
 import ibl;
+import standard_brdf;
 
 struct DrawPushConstants {
   float4x4 view_projection_matrix;
@@ -42,7 +43,7 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fragment_main(FragmentInput i) {
-  let color = pc.global_data_buffer.sky_color * sample_cubemap(ENVIRONMENT_MAP_ID, i.frag_pos, 0).xyz;
+  let color = pc.global_data_buffer.sky_color * ENVIRONMENT_MAP_ID.sample_level(ENVIRONMENT_SAMPLER_ID, i.frag_pos, 0).xyz;
 
   FragmentOutput output;
   output.frag_color = float4(color, 1.0);

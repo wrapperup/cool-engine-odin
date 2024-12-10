@@ -19,6 +19,9 @@ SHADOW_ID: u32 : 0
 TONY_MC_MAPFACE_ID: u32 : 1
 DFG_ID: u32 : 2
 ENVIRONMENT_MAP_ID: u32 : 3
+TEST_SH_0_3_3D_ID: u32 : 4
+TEST_SH_4_7_3D_ID: u32 : 5
+TEST_SH_8_9_3D_ID: u32 : 6
 
 DEFAULT_SAMPLER_ID: u32 : 0
 SHADOW_SAMPLER_ID: u32 : 1
@@ -27,6 +30,7 @@ ENVIRONMENT_SAMPLER_ID: u32 : 2
 RESOLVED_IMAGE_ID: u32 : 0
 
 MAX_BINDLESS_IMAGES :: 100
+RESERVED_BINDLESS_IMAGES_COUNT :: 10
 MAX_BINDLESS_SAMPLERS :: 32
 
 @(ShaderShared)
@@ -69,7 +73,11 @@ GPUMaterial :: struct {
 
 @(ShaderShared)
 GPUEnvironment :: struct {
-	sh_coeffs: [9]hlsl.float4,
+	// sh_volume_size:  [3]u32,
+	// pad_0:           u32,
+	// sh_volume_scale: [3]f32,
+	// pad_1:           u32,
+	sh_volume: vk.DeviceAddress, // []Sh_Coefficients
 }
 
 // 256 bytes is the maximum allowed in a push constant on a 3090Ti
@@ -139,7 +147,7 @@ RenderState :: struct {
 	// Skybox pipelines
 	skybox_pipeline_layout:     vk.PipelineLayout,
 	skybox_shader:              ShaderId,
-	skybox_mesh:                gfx.GPUMeshBuffers,
+	skybox_mesh:                GPUMeshBuffers,
 	draw_skybox:                bool,
 }
 
@@ -157,7 +165,7 @@ init_game_renderer :: proc() {
 }
 
 init_test_materials :: proc() {
-	game.render_state.scene_resources.bindless_texture_start_index = 10
+	game.render_state.scene_resources.bindless_texture_start_index = RESERVED_BINDLESS_IMAGES_COUNT
 	game.render_state.scene_resources.materials_buffer = gfx.create_buffer(
 		size_of(GPUMaterial) * 20,
 		{.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS},
@@ -416,9 +424,9 @@ init_tonemapper_pipelines :: proc() {
 init_buffers :: proc() {
 	// Skybox 
 	{
-		mesh, ok := gfx.load_gpu_mesh_from_file("assets/meshes/static/skybox.glb")
+		mesh, ok := load_gpu_mesh_from_file("assets/meshes/static/skybox.glb")
 		assert(ok)
-		gfx.defer_destroy_gpu_mesh(&gfx.renderer().global_arena, mesh)
+		defer_destroy_gpu_mesh(&gfx.renderer().global_arena, mesh)
 		game.render_state.skybox_mesh = mesh
 	}
 
@@ -436,15 +444,19 @@ init_buffers :: proc() {
 		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.model_matrices_buffer)
 	}
 
-	sh_coeffs: [9]hlsl.float4
-	comp_coeffs := process_sh_coefficients_from_file("assets/gen/test_cubemap_ld.ktx2")
+	comp_coeffs := process_sh_coefficients_from_equirectangular_file("assets/gen/test_equirectangular.ktx2")
 
-	for i in 0 ..< len(comp_coeffs) {
-		sh_coeffs[i].xyz = comp_coeffs[i]
-	}
+	environment := &game.render_state.global_uniform_data.environment
 
-	game.render_state.global_uniform_data.environment = GPUEnvironment {
-		sh_coeffs = sh_coeffs,
+	// TODO: TEMP: Remove this at some point. Just testing volumes!
+	ir_volume: Irradiance_Volume
+	init_irradiance_volume(&ir_volume)
+
+	environment^ = {
+		sh_volume = ir_volume.gpu_buffer.address,
+		// sh_coeffs       = comp_coeffs,
+		// sh_volume_size  = ir_volume.sh_volume_size,
+		// sh_volume_scale = ir_volume.sh_volume_scale,
 	}
 
 	reserve(&game.render_state.model_matrices, 16_000)
@@ -675,7 +687,7 @@ cmd_mesh_draw :: proc(cmd: vk.CommandBuffer, mesh_draw: MeshDraw) {
 	vk.CmdDrawIndexed(cmd, mesh_draw.index_count, 1, 0, 0, 0)
 }
 
-draw_mesh :: proc(mesh: gfx.GPUMeshBuffers, material: MaterialId, translation: [3]f32, rotation: quaternion128, scale: [3]f32) {
+draw_mesh :: proc(mesh: GPUMeshBuffers, material: MaterialId, translation: [3]f32, rotation: quaternion128, scale: [3]f32) {
 	model_index := len(game.render_state.model_matrices)
 
 	append(

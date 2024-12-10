@@ -2,19 +2,13 @@ package tools
 
 import "core:flags"
 import "core:fmt"
-import "core:math"
 import "core:mem"
 import "core:os"
-import "core:reflect"
 import "core:slice"
 import "core:sys/windows"
 import "core:time"
 
-import vk "vendor:vulkan"
-
-import "../src/gfx"
-import ktx "deps:odin-libktx"
-import vma "deps:odin-vma"
+import stbi "vendor:stb/image"
 
 import impl "../src"
 
@@ -51,6 +45,7 @@ main :: proc() {
 
 	command: ShCommand
 	error := flags.parse(&command, os.args[1:])
+
 	switch v in error {
 	case flags.Help_Request:
 		fmt.println("Usage:")
@@ -65,11 +60,15 @@ main :: proc() {
 
 	start_time := time.now()
 
-	coeffs := impl.process_sh_coefficients_from_file(fmt.ctprint(command.input))
+	buf, ok := os.read_entire_file(string(command.input))
+
+	w, h, channels: i32
+	img_ptr := stbi.loadf_from_memory(raw_data(buf), i32(len(buf)), &w, &h, &channels, 4)
+	img := slice.reinterpret([][4]f32, img_ptr[:w * h * 4])
+
+	coeffs := impl.process_sh_from_equirectangular(img, int(w))
 
 	fmt.println(coeffs)
-
-	fmt.println("Done in", time.since(start_time))
 
 	free_all()
 }

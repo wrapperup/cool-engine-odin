@@ -33,7 +33,7 @@ game_init :: proc(window: glfw.WindowHandle) {
 	game.window = window
 	game.window_extent = {1600, 1080}
 
-	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = false, enable_logs = false})
+	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = true, enable_logs = true})
 	if game.renderer == nil {
 		fmt.println("Graphics could not be initialized.")
 	}
@@ -161,7 +161,7 @@ init_physics :: proc() {
 }
 
 init_game_state :: proc() {
-	game.render_state.draw_skybox = true
+	game.render_state.draw_skybox = false
 
 	player := new_entity(Player)
 	init_player(player)
@@ -171,16 +171,16 @@ init_game_state :: proc() {
 
 	grid_size: f32 = 3.0
 
-	skeleton, anim, ok := gfx.load_skel_mesh_from_file("assets/meshes/skel/cube.glb")
+	skeleton, anim, ok := load_skel_mesh_from_file("assets/meshes/skel/cube.glb")
 	assert(ok)
-	gfx.defer_destroy_gpu_skel_mesh(&gfx.renderer().global_arena, skeleton.buffers)
+	defer_destroy_gpu_skel_mesh(&gfx.renderer().global_arena, skeleton.buffers)
 
 	// LEAK: Needs asset system.
-	skel_ptr := new(gfx.Skeleton)
+	skel_ptr := new(Skeleton)
 	skel_ptr^ = skeleton
 
 	// LEAK: Needs asset system.
-	anim_ptr := new(gfx.SkeletalAnimation)
+	anim_ptr := new(SkeletalAnimation)
 	anim_ptr^ = anim
 
 	// for i in 0 ..< grid_size / 2 {
@@ -193,7 +193,7 @@ init_game_state :: proc() {
 	// }
 
 	test_mesh := new_entity(StaticMesh)
-	init_static_mesh(test_mesh, "assets/meshes/static/map_test.glb", 0)
+	init_static_mesh(test_mesh, "assets/meshes/static/irradiance_volume_test.glb", 0)
 
 	test_mesh2 := new_entity(StaticMesh)
 	init_static_mesh(test_mesh2, "assets/meshes/static/materialball2.glb", 1)
