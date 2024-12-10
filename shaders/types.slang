@@ -1,5 +1,3 @@
-// Copyright Matthew Taylor. All Rights Reserved.
-
 #ifndef _TYPES_INCLUDED
 #define _TYPES_INCLUDED
 

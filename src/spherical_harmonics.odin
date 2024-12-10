@@ -33,8 +33,8 @@ process_sh_coefficients_from_cubemap_file :: proc(in_filename: cstring) -> Sh_Co
 	return coeffs
 }
 
-process_sh_coefficients_from_equirectangular_file :: proc(in_filename: cstring) -> Sh_Coefficients {
-	buffer, size := load_image_into_bytes(in_filename)
+process_sh_coefficients_from_equirectangular_file :: proc(in_filename: cstring, loc := #caller_location) -> Sh_Coefficients {
+	buffer, size := load_image_into_bytes(in_filename, loc)
 	coeffs := process_sh_from_equirectangular(buffer, size.x)
 
 	return coeffs
@@ -237,10 +237,10 @@ area_element :: proc(x, y: f32) -> f32 {
 	return math.atan2(x * y, math.sqrt(x * x + y * y + 1.0))
 }
 
-load_image_into_bytes :: proc(filename: cstring) -> ([][4]f32, [2]int) {
+load_image_into_bytes :: proc(filename: cstring, loc := #caller_location) -> ([][4]f32, [2]int) {
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
-	assert(ktx_result == .SUCCESS, "Failed to load image.")
+	assert(ktx_result == .SUCCESS, "Failed to load image.", loc)
 
 	is_compressed := ktx_texture.isCompressed
 	assert(!is_compressed)

@@ -8,8 +8,6 @@ public [vk_binding(2, 0)] __DynamicResource RWTextures[];
 
 public struct BindlessId {
     public u32 index;
-
-    __implicit_conversion(0) public __init(u32 a) { index = u32(a); }
 }
 
 public struct _Tex<T, Shape: __ITextureShape, let isArray:int, let isMS:int, let sampleCount:int, let access:int, let format:int> : BindlessId {

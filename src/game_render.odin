@@ -444,7 +444,8 @@ init_buffers :: proc() {
 		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.model_matrices_buffer)
 	}
 
-	comp_coeffs := process_sh_coefficients_from_equirectangular_file("assets/gen/test_equirectangular.ktx2")
+	comp_coeffs := process_sh_coefficients_from_cubemap_file("assets/gen/test_cubemap_ld.ktx2")
+	// comp_coeffs := process_sh_coefficients_from_equirectangular_file("assets/gen/test_equirectangular.ktx2")
 
 	environment := &game.render_state.global_uniform_data.environment
 

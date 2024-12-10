@@ -157,9 +157,9 @@ FragmentOutput fragment_main(FragmentInput i) {
                standard_brdf(diffuse, proughness, v, l, n, h, f0, NoL));
 
   // frag_color = evaluate_ibl(n, v, diffuse, f0, 1.0, roughness);
-  // frag_color += pc.global_data_buffer.sky_color * ao *
-  //               evaluate_ibl(n, v, diffuse, f0, proughness,
-  //                            pc.global_data_buffer.environment.sh_volume[0]);
+  frag_color += pc.global_data_buffer.sky_color * ao *
+                evaluate_ibl(n, v, diffuse, f0, proughness,
+                             pc.global_data_buffer.environment.sh_volume[0]);
 
   // DEBUG
   // let r = reflect(-v, n);
