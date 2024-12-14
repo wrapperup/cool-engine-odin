@@ -14,9 +14,9 @@ Player :: struct {
 	using entity:           ^Entity,
 	//
 	controller:             ^px.Controller,
-	camera_rot:             [3]f32,
+	camera_rot:             Vec3,
 	camera_fov_deg:         f32,
-	ground_contact_normals: [dynamic][3]f32,
+	ground_contact_normals: [dynamic]Vec3,
 	fire_time:              f64,
 	momentum:               f32,
 	is_grounded_last_frame: bool,
@@ -28,7 +28,7 @@ on_shape_hit_callback :: proc "c" (#by_ptr hit: px.ControllerShapeHit) {
 	id := entity_id_from_rawptr(px.controller_get_user_data(hit.controller))
 
 	if player := get_entity_subtype(Player, id); player != nil {
-		normal := transmute([3]f32)(hit.worldNormal)
+		normal := transmute(Vec3)(hit.worldNormal)
 
 		append(&player.ground_contact_normals, normal)
 	}
@@ -63,15 +63,15 @@ init_player :: proc(player: ^Player) {
 	assert(player.controller != nil)
 }
 
-update_player :: proc(player: ^Player, delta_time: f64) {
+update_player :: proc(player: ^Player, dt: f64) {
 	filter_data := px.filter_data_new_2(get_words_from_filter({}))
 	filters := px.controller_filters_new(&filter_data, nil, nil)
 
 	collision_flags := px.controller_move_mut(
 		player.controller,
-		transmute(px.Vec3)((player.velocity * f32(delta_time)) - {0, player.is_grounded_last_frame ? 0.1 : 0, 0}),
+		transmute(px.Vec3)((player.velocity * f32(dt)) - {0, player.is_grounded_last_frame ? 0.05 : 0, 0}),
 		0.001,
-		f32(delta_time),
+		f32(dt),
 		filters,
 		nil,
 	)
@@ -91,30 +91,32 @@ update_player :: proc(player: ^Player, delta_time: f64) {
 		pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.025
 
 		player.camera_rot += {f32(pitch_delta), f32(yaw_delta), 0}
+		player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI/2, math.PI/2)
+		player.camera_rot.y = math.wrap(player.camera_rot.y, math.PI * 2)
 	}
 
-	pitch := linalg.quaternion_angle_axis(player.camera_rot.x, [3]f32{1, 0, 0})
-	yaw := linalg.quaternion_angle_axis(player.camera_rot.y, [3]f32{0, -1, 0})
+	pitch := linalg.quaternion_angle_axis(player.camera_rot.x, Vec3{1, 0, 0})
+	yaw := linalg.quaternion_angle_axis(player.camera_rot.y, Vec3{0, -1, 0})
 
 	look := yaw * pitch
 
-	look_forward := linalg.quaternion_mul_vector3(player.rotation, [3]f32{0, 0, -1})
-	forward := linalg.quaternion_mul_vector3(yaw, [3]f32{0, 0, -1})
-	right := linalg.vector_cross3(forward, [3]f32{0, 1, 0})
+	look_forward := linalg.quaternion_mul_vector3(player.rotation, Vec3{0, 0, -1})
+	forward := linalg.quaternion_mul_vector3(yaw, Vec3{0, 0, -1})
+	right := linalg.vector_cross3(forward, Vec3{0, 1, 0})
 
-	tilt_angle := math.atan(linalg.dot(player.velocity / 100, right)) / 6
-	player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(delta_time))
-	tilt := linalg.quaternion_angle_axis(player.camera_rot.z, [3]f32{0, 0, -1})
+	// tilt_angle := math.atan(linalg.dot(player.velocity / 100, right)) / 6
+	// player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(delta_time))
+	// tilt := linalg.quaternion_angle_axis(player.camera_rot.z, Vec3{0, 0, -1})
 
-	player.rotation = look * tilt
+	player.rotation = look
 
 	is_sliding := false
 	is_grounded := false
 
-	acceleration: [3]f32
+	acceleration: Vec3
 
 	for normal in player.ground_contact_normals {
-		slope_angle := linalg.vector_angle_between(normal, [3]f32{0, 1, 0})
+		slope_angle := linalg.vector_angle_between(normal, Vec3{0, 1, 0})
 		is_grounded = is_grounded || slope_angle < math.PI / 4
 		is_sliding = !is_grounded
 
@@ -135,11 +137,11 @@ update_player :: proc(player: ^Player, delta_time: f64) {
 
 	// player.velocity += {0, -0.5, 0} * f32(delta_time)
 
-	player.fire_time += delta_time
+	player.fire_time += dt
 
 	max_move_acceleration: f32 = 50
 	max_air_acceleration: f32 = 25
-	braking_acceleration: f32 = 50
+	max_braking_acceleration: f32 = 50
 
 	momentum_speed: f32 = 5
 	max_speed: f32 = 10
@@ -150,55 +152,41 @@ update_player :: proc(player: ^Player, delta_time: f64) {
 	move_direction := move_forward * forward + move_right * right
 	move_direction_n := linalg.normalize0(move_forward * forward + move_right * right)
 
-	clamp_to_length :: proc(v: [3]$T, max_length: T) -> [3]T {
-		if (max_length < 0.001) {
-			return 0
+	// Returns the change in acceleration to apply to the player's current acceleration.
+	apply_acceleration :: proc(requested_dir: Vec3, max_speed: f32, max_acceleration: f32, current_velocity: Vec3, dt: f64) -> Vec3 {
+		requested_velocity := requested_dir * max_speed
+		requested_speed := linalg.length(requested_velocity)
+
+		new_acceleration := (requested_velocity - current_velocity) / f32(dt)
+
+		// Try to cancel out the requested acceleration component along the move direction.
+		if linalg.length2(requested_velocity) <= linalg.length2(current_velocity) {
+			new_acceleration = new_acceleration - linalg.dot(new_acceleration, requested_dir)
 		}
 
-		v_sq := linalg.length2(v)
-		if (v_sq > max_length * max_length) {
-			scale := max_length * linalg.inverse_sqrt(v_sq)
-			return v * scale
-		}
+		new_acceleration = linalg.clamp_length(new_acceleration, max_acceleration)
 
-		return v
+		return new_acceleration
 	}
 
 	if linalg.length(move_direction) > 0.01 {
-		y := acceleration.y
-		current_velocity := player.velocity
-		requested_velocity := move_direction_n * max_speed
-		requested_speed := linalg.length(requested_velocity)
-
-		max_acceleration := is_grounded ? max_move_acceleration : max_air_acceleration
-
-		new_acceleration := ((requested_velocity - current_velocity) / f32(delta_time))
-		new_acceleration = clamp_to_length(new_acceleration, max_acceleration)
-
-		acceleration += new_acceleration
+		acceleration += apply_acceleration(move_direction_n, max_speed, max_move_acceleration, player.velocity, dt)
 	} else if is_grounded {
-		y := acceleration.y
-		current_velocity := player.velocity
-
-		max_acceleration := braking_acceleration
-
-		new_acceleration := ((0 - current_velocity) / f32(delta_time))
-		new_acceleration = clamp_to_length(new_acceleration, max_acceleration)
-
-		acceleration += new_acceleration
+		acceleration += apply_acceleration(0, 0, max_move_acceleration, player.velocity, dt)
 	}
 
-	player.velocity += {0, -70, 0} * f32(delta_time)
+	player.velocity += {0, -70, 0} * f32(dt)
 
 	if action_is_pressed(.Fire) && player.fire_time > 0.05 {
 		player.fire_time = 0
+		player.velocity += {0, 1, 0} * 10
 		// ball := new_entity(Ball)
 		// init_ball(ball, player.translation + look_forward * 2 - {0, 1.5, 0}, player.velocity + look_forward * 100)
 	}
 
 	clear(&player.ground_contact_normals)
 
-	player.velocity += acceleration * f32(delta_time)
+	player.velocity += acceleration * f32(dt)
 	player.is_grounded_last_frame = is_grounded && !is_sliding
 
 	if action_is_pressed(.Jump) && is_grounded {
@@ -245,12 +233,12 @@ update_player :: proc(player: ^Player, delta_time: f64) {
 // 	}
 //
 // 	if player != nil {
-// 		pitch := linalg.quaternion_angle_axis(player.player_rot.x, [3]f32{1, 0, 0})
-// 		yaw := linalg.quaternion_angle_axis(player.player_rot.y, [3]f32{0, -1, 0})
+// 		pitch := linalg.quaternion_angle_axis(player.player_rot.x, Vec3{1, 0, 0})
+// 		yaw := linalg.quaternion_angle_axis(player.player_rot.y, Vec3{0, -1, 0})
 // 		player.rotation = yaw * pitch
 //
-// 		forward := linalg.quaternion_mul_vector3(player.rotation, [3]f32{0, 0, -1})
-// 		right := linalg.vector_cross3(forward, [3]f32{0, 1, 0})
+// 		forward := linalg.quaternion_mul_vector3(player.rotation, Vec3{0, 0, -1})
+// 		right := linalg.vector_cross3(forward, Vec3{0, 1, 0})
 //
 // 		key_w := glfw.GetKey(game.window, glfw.KEY_W) == glfw.PRESS
 // 		key_a := glfw.GetKey(game.window, glfw.KEY_A) == glfw.PRESS
@@ -267,7 +255,7 @@ update_player :: proc(player: ^Player, delta_time: f64) {
 // 			hit, ok := query_raycast_single(player.translation, forward, 50, {.Dynamic, .Static}, true)
 // 			if ok {
 // 				if ball := get_entity(Ball, entity_id_from_rawptr(hit.actor.userData)); ball != nil {
-// 					px.rigid_body_add_force_mut(ball.rigid, transmute(px.Vec3)(transmute([3]f32)hit.normal * -1 * 10), .Impulse, true)
+// 					px.rigid_body_add_force_mut(ball.rigid, transmute(px.Vec3)(transmute(Vec3)hit.normal * -1 * 10), .Impulse, true)
 // 				}
 // 			}
 // 		}
@@ -323,7 +311,7 @@ get_projection_matrix :: proc(player: ^Player) -> matrix[4, 4]f32 {
 	return projection_matrix
 }
 
-world_space_to_clip_space :: proc(view_projection: matrix[4, 4]f32, vec: [3]f32) -> ([2]f32, bool) {
+world_space_to_clip_space :: proc(view_projection: matrix[4, 4]f32, vec: Vec3) -> ([2]f32, bool) {
 	vec_p := view_projection * [4]f32{vec.x, vec.y, vec.z, 1.0}
 	clip_vec := vec_p.xyz / vec_p.w
 

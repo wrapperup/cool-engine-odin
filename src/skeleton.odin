@@ -29,8 +29,8 @@ Skeleton :: struct {
 }
 
 JointTrack :: struct {
-	keyframes_translation: [dynamic][3]f32,
-	keyframes_scale:       [dynamic][3]f32,
+	keyframes_translation: [dynamic]Vec3,
+	keyframes_scale:       [dynamic]Vec3,
 	keyframes_rotation:    [dynamic]quaternion128,
 }
 

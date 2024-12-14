@@ -73,6 +73,7 @@ Game :: struct {
 	state:              GameState,
 	renderer:           ^gfx.Renderer,
 	input_manager:      ^InputManager,
+	audio_manager:      ^AudioManager,
 	view_state:         ViewState,
 	render_state:       RenderState,
 
@@ -113,8 +114,8 @@ Environment :: struct {
 	sun_color:  hlsl.float3,
 	sky_color:  hlsl.float3,
 	bias:       f32,
-	sun_pos:    [3]f32,
-	sun_target: [3]f32,
+	sun_pos:    Vec3,
+	sun_target: Vec3,
 }
 
 PlayerController :: struct {

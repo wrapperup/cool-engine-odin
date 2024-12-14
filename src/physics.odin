@@ -21,7 +21,7 @@ get_words_from_filter :: proc(filter_set: GamePhysicsFilterSet) -> (word0, word1
 RAYCAST_BUFFER_BASE_STRUCT := px.create_raycast_buffer()
 
 matrix_from_transform :: proc(transform: px.Transform) -> matrix[4, 4]f32 {
-	translation := linalg.matrix4_translate_f32(transmute([3]f32)transform.p)
+	translation := linalg.matrix4_translate_f32(transmute(Vec3)transform.p)
 	rotation := linalg.matrix4_from_quaternion(transmute(quaternion128)transform.q)
 
 	return translation * rotation
@@ -33,8 +33,8 @@ init_raycast_buffer :: proc() -> px.RaycastCallback {
 }
 
 query_raycast_single :: proc(
-	origin: [3]f32,
-	unit_dir: [3]f32,
+	origin: Vec3,
+	unit_dir: Vec3,
 	distance: f32,
 	filter: GamePhysicsFilterSet = {},
 	query_flags: px.QueryFlags_Set = {.Static},
@@ -61,8 +61,8 @@ query_raycast_single :: proc(
 	)
 
 	if debug {
-		pos := transmute([3]f32)hit.block.position
-		normal := transmute([3]f32)hit.block.normal
+		pos := transmute(Vec3)hit.block.position
+		normal := transmute(Vec3)hit.block.normal
 
 		debug_draw_line(origin, pos, dots = true)
 		debug_draw_line(pos, pos + normal, dots = false)

@@ -365,7 +365,7 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 		}
 	}
 
-	if tangent_ok {
+	if false {
 		data := primitive.attributes[tangent_idx].data
 		it := make_accessor_buf_iterator(data, hlsl.float4)
 		for val, i in accessor_buf_iterator(&it) {
@@ -391,12 +391,12 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 			return 3
 		}
 
-		get_position :: proc(pContext: ^mikk.Context, iFace: int, iVert: int) -> [3]f32 {
+		get_position :: proc(pContext: ^mikk.Context, iFace: int, iVert: int) -> Vec3 {
 			gltf_mesh := cast(^Mesh)pContext.user_data
 			return gltf_mesh.vertices[get_vertex_index(pContext, iFace, iVert)].position
 		}
 
-		get_normal :: proc(pContext: ^mikk.Context, iFace: int, iVert: int) -> [3]f32 {
+		get_normal :: proc(pContext: ^mikk.Context, iFace: int, iVert: int) -> Vec3 {
 			gltf_mesh := cast(^Mesh)pContext.user_data
 			return gltf_mesh.vertices[get_vertex_index(pContext, iFace, iVert)].normal
 		}
@@ -407,7 +407,7 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 			return {vertex.uv_x, vertex.uv_y}
 		}
 
-		set_t_space_basic :: proc(pContext: ^mikk.Context, fvTangent: [3]f32, fSign: f32, iFace: int, iVert: int) {
+		set_t_space_basic :: proc(pContext: ^mikk.Context, fvTangent: Vec3, fSign: f32, iFace: int, iVert: int) {
 			gltf_mesh := cast(^Mesh)pContext.user_data
 			tangent := &gltf_mesh.vertices[get_vertex_index(pContext, iFace, iVert)].tangent
 
@@ -615,7 +615,7 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 
 				#partial switch channel.target_path {
 				case .translation:
-					it := make_accessor_buf_iterator(channel.sampler.output, [3]f32)
+					it := make_accessor_buf_iterator(channel.sampler.output, Vec3)
 					for val, i in accessor_buf_iterator(&it) {
 						append(&joint_anim.keyframes_translation, val)
 					}
@@ -627,7 +627,7 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 						append(&joint_anim.keyframes_rotation, q)
 					}
 				case .scale:
-					it := make_accessor_buf_iterator(channel.sampler.output, [3]f32)
+					it := make_accessor_buf_iterator(channel.sampler.output, Vec3)
 					for val, i in accessor_buf_iterator(&it) {
 						append(&joint_anim.keyframes_scale, val)
 					}

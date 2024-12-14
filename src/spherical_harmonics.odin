@@ -19,7 +19,7 @@ import vma "deps:odin-vma"
 
 import impl "../src"
 
-Sh_Coefficients :: [9][4]f32
+Sh_Coefficients :: [9]Vec4
 
 process_sh_coefficients_from_cubemap_file :: proc(in_filename: cstring) -> Sh_Coefficients {
 	buffer, size := load_image_into_bytes(in_filename)
@@ -40,7 +40,7 @@ process_sh_coefficients_from_equirectangular_file :: proc(in_filename: cstring, 
 	return coeffs
 }
 
-CUBEMAP_FACE_NORMALS_TABLE: [6][3][3]f32 = {
+CUBEMAP_FACE_NORMALS_TABLE: [6][3]Vec3 = {
 	{
 		// +x
 		{0.0, 0.0, -1.0},
@@ -80,7 +80,7 @@ CUBEMAP_FACE_NORMALS_TABLE: [6][3][3]f32 = {
 }
 
 
-process_sh_from_cubemap :: proc(faces: [][4]f32, size: int) -> Sh_Coefficients {
+process_sh_from_cubemap :: proc(faces: []Vec4, size: int) -> Sh_Coefficients {
 	// Forsyth's weights
 	weight1: f32 = 4.0 / 17.0
 	weight2: f32 = 8.0 / 17.0
@@ -92,11 +92,11 @@ process_sh_from_cubemap :: proc(faces: [][4]f32, size: int) -> Sh_Coefficients {
 
 	weight_accum: f32 = 0.0
 
-	cubemap_face_dirs: [dynamic][dynamic][3]f32
+	cubemap_face_dirs: [dynamic][dynamic]Vec3
 	reserve(&cubemap_face_dirs, 6)
 
 	for i in 0 ..< 6 {
-		face_dirs: [dynamic][3]f32
+		face_dirs: [dynamic]Vec3
 		reserve(&face_dirs, size * size)
 
 		for v in 0 ..< size {
@@ -150,7 +150,7 @@ process_sh_from_cubemap :: proc(faces: [][4]f32, size: int) -> Sh_Coefficients {
 	return sh
 }
 
-process_sh_from_equirectangular :: proc(equirectangular: [][4]f32, width: int) -> Sh_Coefficients {
+process_sh_from_equirectangular :: proc(equirectangular: []Vec4, width: int) -> Sh_Coefficients {
 	// Forsyth's weights
 	weight1: f32 = 4.0 / 17.0
 	weight2: f32 = 8.0 / 17.0
@@ -176,7 +176,7 @@ process_sh_from_equirectangular :: proc(equirectangular: [][4]f32, width: int) -
 			y := -math.sin(latitude)
 			z := -math.cos(latitude) * math.sin(longitude)
 
-			tex_v := linalg.normalize([3]f32{x, y, z})
+			tex_v := linalg.normalize(Vec3{x, y, z})
 
 			color := equirectangular[u + (v * width)].rgba
 
@@ -237,7 +237,7 @@ area_element :: proc(x, y: f32) -> f32 {
 	return math.atan2(x * y, math.sqrt(x * x + y * y + 1.0))
 }
 
-load_image_into_bytes :: proc(filename: cstring, loc := #caller_location) -> ([][4]f32, [2]int) {
+load_image_into_bytes :: proc(filename: cstring, loc := #caller_location) -> ([]Vec4, [2]int) {
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 	assert(ktx_result == .SUCCESS, "Failed to load image.", loc)
@@ -256,5 +256,5 @@ load_image_into_bytes :: proc(filename: cstring, loc := #caller_location) -> ([]
 
 	mem.copy(&buffer[0], data, int(size))
 
-	return slice.reinterpret([][4]f32, buffer), {int(ktx_texture.baseWidth), int(ktx_texture.baseHeight)}
+	return slice.reinterpret([]Vec4, buffer), {int(ktx_texture.baseWidth), int(ktx_texture.baseHeight)}
 }

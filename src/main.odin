@@ -40,6 +40,10 @@ game_init :: proc(window: glfw.WindowHandle) {
 
 	game.entity_storage = init_entity_storage()
 	game.input_manager = init_input_manager()
+	game.audio_manager = init_audio_manager()
+
+	// TODO: test
+	play_sound("assets/audio/test.wav")
 
 	game_hot_reloaded(game)
 
@@ -171,7 +175,7 @@ init_game_state :: proc() {
 
 	grid_size: f32 = 3.0
 
-	skeleton, anim, ok := load_skel_mesh_from_file("assets/meshes/skel/cube.glb")
+	skeleton, anim, ok := load_skel_mesh_from_file("assets/meshes/skel/skeltest2.glb")
 	assert(ok)
 	defer_destroy_gpu_skel_mesh(&gfx.renderer().global_arena, skeleton.buffers)
 
@@ -183,20 +187,20 @@ init_game_state :: proc() {
 	anim_ptr := new(SkeletalAnimation)
 	anim_ptr^ = anim
 
-	// for i in 0 ..< grid_size / 2 {
-	// 	for j in 0 ..< grid_size * 4 {
-	// 		for k in 0 ..< grid_size / 2 {
-	// 			ball := new_entity(Ball)
-	// 			init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
-	// 		}
-	// 	}
-	// }
+	for i in 0 ..< grid_size / 2 {
+		for j in 0 ..< grid_size * 4 {
+			for k in 0 ..< grid_size / 2 {
+				ball := new_entity(Ball)
+				init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
+			}
+		}
+	}
 
 	test_mesh := new_entity(StaticMesh)
-	init_static_mesh(test_mesh, "assets/meshes/static/irradiance_volume_test.glb", 0)
+	init_static_mesh(test_mesh, "assets/meshes/static/map_test.glb", 0)
 
 	test_mesh2 := new_entity(StaticMesh)
-	init_static_mesh(test_mesh2, "assets/meshes/static/materialball2.glb", 1)
+	init_static_mesh(test_mesh2, "assets/meshes/static/materialball2.glb", 2)
 
 	game.state = GameState {
 		player_id = entity_id_of(player),

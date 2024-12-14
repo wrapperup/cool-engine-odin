@@ -108,9 +108,9 @@ TypedEntityId :: struct($T: typeid) {
 Entity :: struct {
 	id:          EntityId,
 	subtype:     typeid,
-	translation: [3]f32,
-	velocity:    [3]f32,
-	rotation:    linalg.Quaternionf32,
+	translation: Vec3,
+	velocity:    Vec3,
+	rotation:    Quat,
 }
 
 MAX_ENTITY_STORAGE :: 16_777_216

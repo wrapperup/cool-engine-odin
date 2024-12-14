@@ -769,7 +769,7 @@ init :: proc(config := InitConfig{}) -> ^Renderer {
 }
 
 choose_swap_present_mode :: proc(available_present_modes: []vk.PresentModeKHR) -> vk.PresentModeKHR {
-	return .FIFO
+	return .IMMEDIATE
 }
 
 choose_swap_extent :: proc(window: glfw.WindowHandle, capabilities: ^vk.SurfaceCapabilitiesKHR) -> vk.Extent2D {

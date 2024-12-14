@@ -190,8 +190,8 @@ update_imgui :: proc() {
 	for i in 0 ..< px.render_buffer_get_nb_lines(rb) {
 		line := px.render_buffer_get_lines(rb)[i]
 
-		line0, ok := world_space_to_clip_space(view_projection, transmute([3]f32)line.pos0)
-		line1, ok2 := world_space_to_clip_space(view_projection, transmute([3]f32)line.pos1)
+		line0, ok := world_space_to_clip_space(view_projection, transmute(Vec3)line.pos0)
+		line1, ok2 := world_space_to_clip_space(view_projection, transmute(Vec3)line.pos1)
 
 		if !ok && !ok2 do continue
 
@@ -324,10 +324,10 @@ update_imgui :: proc() {
 
 	if im.Begin("Environment") {
 		im.Checkbox("Draw skybox", &game.render_state.draw_skybox)
-		im.InputFloat3("pos", cast(^[3]f32)(&game.state.environment.sun_pos))
-		im.InputFloat3("target", cast(^[3]f32)(&game.state.environment.sun_target))
-		im.ColorEdit3("sun_color", cast(^[3]f32)(&game.state.environment.sun_color))
-		im.ColorEdit3("sky_color", cast(^[3]f32)(&game.state.environment.sky_color))
+		im.InputFloat3("pos", cast(^Vec3)(&game.state.environment.sun_pos))
+		im.InputFloat3("target", cast(^Vec3)(&game.state.environment.sun_target))
+		im.ColorEdit3("sun_color", cast(^Vec3)(&game.state.environment.sun_color))
+		im.ColorEdit3("sky_color", cast(^Vec3)(&game.state.environment.sky_color))
 		im.InputFloat("bias", cast(^f32)(&game.state.environment.bias))
 	}
 	im.End()
@@ -375,7 +375,7 @@ update_imgui :: proc() {
 	// im.End()
 }
 
-debug_draw_line :: proc(pos0, pos1: [3]f32, thickness: f32 = 1.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}, dots: bool = false) {
+debug_draw_line :: proc(pos0, pos1: Vec3, thickness: f32 = 1.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}, dots: bool = false) {
 	player := get_entity(game.state.player_id)
 
 	// TODO: cache this
@@ -399,7 +399,7 @@ debug_draw_line :: proc(pos0, pos1: [3]f32, thickness: f32 = 1.0, color := im.Ve
 	}
 }
 
-debug_draw_dot :: proc(pos: [3]f32, half_size: f32 = 5.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}) {
+debug_draw_dot :: proc(pos: Vec3, half_size: f32 = 5.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}) {
 	player := get_entity(game.state.player_id)
 
 	// TODO: cache this

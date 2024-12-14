@@ -9,7 +9,7 @@ import vma "deps:odin-vma"
 
 import "gfx"
 
-ShCoefficients :: [9][3]f32
+ShCoefficients :: [9]Vec3
 
 SHCubeMapPushConstants :: struct {
 	sh: gfx.GPUPointer(ShCoefficients),

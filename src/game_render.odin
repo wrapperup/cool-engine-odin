@@ -75,7 +75,7 @@ GPUMaterial :: struct {
 GPUEnvironment :: struct {
 	// sh_volume_size:  [3]u32,
 	// pad_0:           u32,
-	// sh_volume_scale: [3]f32,
+	// sh_volume_scale: Vec3,
 	// pad_1:           u32,
 	sh_volume: vk.DeviceAddress, // []Sh_Coefficients
 }
@@ -177,6 +177,7 @@ init_test_materials :: proc() {
 	normal_map_id := add_texture(gfx.load_image_from_file("assets/textures/test_normalmap.ktx2"))
 	proughness_metallic_ao_id := add_texture(gfx.load_image_from_file("assets/textures/test_rma.ktx2"))
 
+	add_material({base_color_id = base_color_id, normal_map_id = normal_map_id, ao_roughness_metallic_id = proughness_metallic_ao_id})
 	add_material({base_color_id = base_color_id, normal_map_id = normal_map_id, ao_roughness_metallic_id = proughness_metallic_ao_id})
 
 	base_color_id = add_texture(gfx.load_image_from_file("assets/textures/materialball2/basecolor.ktx2"))
@@ -499,19 +500,19 @@ check_shader_hotreload :: proc() -> (needs_reload: bool) {
 	return
 }
 
-hotreload_modified_shaders :: proc() {
+hotreload_modified_shaders :: proc() -> bool {
 	// TODO: SPEED: Maybe iter this across frames?
 	for &shader in game.render_state.shaders {
 		if shader.needs_recompile {
-			if reload_shader_pipeline(&shader) {
-				shader.last_compile_time = time.now()
-				shader.needs_recompile = false
-			}
-			return
+			ok := reload_shader_pipeline(&shader)
+
+			shader.last_compile_time = time.now()
+			shader.needs_recompile = false
+			return ok;
 		}
 	}
 
-	return
+	return false
 }
 
 //// RENDERING
@@ -521,8 +522,12 @@ draw :: proc() {
 	when ODIN_DEBUG {
 		if check_shader_hotreload() {
 			gfx.vk_check(vk.DeviceWaitIdle(gfx.renderer().device))
-			hotreload_modified_shaders()
-			fmt.println("Shaders hotreloaded!")
+			hotreload_start := time.now()
+			if hotreload_modified_shaders() {
+				fmt.println("Shaders hotreloaded in", time.since(hotreload_start))
+			} else {
+				fmt.println("Shaders failed to load!")
+			}
 		}
 	}
 
@@ -688,7 +693,7 @@ cmd_mesh_draw :: proc(cmd: vk.CommandBuffer, mesh_draw: MeshDraw) {
 	vk.CmdDrawIndexed(cmd, mesh_draw.index_count, 1, 0, 0, 0)
 }
 
-draw_mesh :: proc(mesh: GPUMeshBuffers, material: MaterialId, translation: [3]f32, rotation: quaternion128, scale: [3]f32) {
+draw_mesh :: proc(mesh: GPUMeshBuffers, material: MaterialId, translation: Vec3, rotation: quaternion128, scale: [3]f32) {
 	model_index := len(game.render_state.model_matrices)
 
 	append(
@@ -709,9 +714,9 @@ draw_mesh :: proc(mesh: GPUMeshBuffers, material: MaterialId, translation: [3]f3
 draw_skeletal_mesh :: proc(
 	instance: ^SkeletalMeshInstance,
 	material: MaterialId,
-	translation: [3]f32,
+	translation: Vec3,
 	rotation: quaternion128,
-	scale: [3]f32,
+	scale: Vec3,
 ) {
 	model_index := len(game.render_state.model_matrices)
 
@@ -917,7 +922,7 @@ update_buffers :: proc() {
 	global_uniform_data.sky_color = game.state.environment.sky_color
 	global_uniform_data.bias = game.state.environment.bias
 
-	global_uniform_data.camera_pos = hlsl.float3(player != nil ? player.translation : [3]f32{0, 0, 0})
+	global_uniform_data.camera_pos = hlsl.float3(player != nil ? player.translation : Vec3{0, 0, 0})
 	global_uniform_data.sun_pos = hlsl.float3(game.state.environment.sun_pos)
 
 	gfx.write_buffer(&current_frame_game().global_uniform_buffer, global_uniform_data)

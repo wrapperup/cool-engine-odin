@@ -8,7 +8,7 @@ Irradiance_Volume :: struct {
 	using entity:    ^Entity,
 	sh_volume:       []Sh_Coefficients,
 	sh_volume_size:  [3]u32,
-	sh_volume_scale: [3]f32,
+	sh_volume_scale: Vec3,
 	gpu_buffer:      gfx.GPUBuffer,
 }
 
