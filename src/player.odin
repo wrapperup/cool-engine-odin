@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:math/rand"
 import "vendor:glfw"
 
 import px "deps:physx-odin"
@@ -11,15 +12,17 @@ import px "deps:physx-odin"
 import "gfx"
 
 Player :: struct {
-	using entity:           ^Entity,
+	using entity:               ^Entity,
 	//
-	controller:             ^px.Controller,
-	camera_rot:             Vec3,
-	camera_fov_deg:         f32,
-	ground_contact_normals: [dynamic]Vec3,
-	fire_time:              f64,
-	momentum:               f32,
-	is_grounded_last_frame: bool,
+	controller:                 ^px.Controller,
+	camera_rot:                 Vec3,
+	camera_fov_deg:             f32,
+	ground_contact_normals:     [dynamic]Vec3,
+	fire_time:                  f64,
+	momentum:                   f32,
+	is_grounded_last_frame:     bool,
+	footstep_distance_traveled: f32,
+	footstep:                   u32,
 }
 
 on_shape_hit_callback :: proc "c" (#by_ptr hit: px.ControllerShapeHit) {
@@ -91,7 +94,7 @@ update_player :: proc(player: ^Player, dt: f64) {
 		pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.025
 
 		player.camera_rot += {f32(pitch_delta), f32(yaw_delta), 0}
-		player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI/2, math.PI/2)
+		player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI / 2, math.PI / 2)
 		player.camera_rot.y = math.wrap(player.camera_rot.y, math.PI * 2)
 	}
 
@@ -104,11 +107,11 @@ update_player :: proc(player: ^Player, dt: f64) {
 	forward := linalg.quaternion_mul_vector3(yaw, Vec3{0, 0, -1})
 	right := linalg.vector_cross3(forward, Vec3{0, 1, 0})
 
-	// tilt_angle := math.atan(linalg.dot(player.velocity / 100, right)) / 6
-	// player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(delta_time))
-	// tilt := linalg.quaternion_angle_axis(player.camera_rot.z, Vec3{0, 0, -1})
+	tilt_angle := math.atan(linalg.dot(player.velocity / 100, right)) / 5
+	player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(dt))
+	tilt := linalg.quaternion_angle_axis(player.camera_rot.z, Vec3{0, 0, -1})
 
-	player.rotation = look
+	player.rotation = look * tilt
 
 	is_sliding := false
 	is_grounded := false
@@ -133,9 +136,8 @@ update_player :: proc(player: ^Player, dt: f64) {
 	}
 
 	pos := px.controller_get_position(player.controller)
+	last_player_translation := player.translation
 	player.translation = {f32(pos.x), f32(pos.y), f32(pos.z)}
-
-	// player.velocity += {0, -0.5, 0} * f32(delta_time)
 
 	player.fire_time += dt
 
@@ -143,7 +145,6 @@ update_player :: proc(player: ^Player, dt: f64) {
 	max_air_acceleration: f32 = 25
 	max_braking_acceleration: f32 = 50
 
-	momentum_speed: f32 = 5
 	max_speed: f32 = 10
 
 	f, r := axis_get_2d_normalized(.MoveForward, .MoveRight)
@@ -160,9 +161,9 @@ update_player :: proc(player: ^Player, dt: f64) {
 		new_acceleration := (requested_velocity - current_velocity) / f32(dt)
 
 		// Try to cancel out the requested acceleration component along the move direction.
-		if linalg.length2(requested_velocity) <= linalg.length2(current_velocity) {
-			new_acceleration = new_acceleration - linalg.dot(new_acceleration, requested_dir)
-		}
+		// if linalg.length2(requested_velocity) <= linalg.length2(current_velocity) {
+		// 	new_acceleration = new_acceleration - linalg.dot(new_acceleration, requested_dir)
+		// }
 
 		new_acceleration = linalg.clamp_length(new_acceleration, max_acceleration)
 
@@ -170,9 +171,10 @@ update_player :: proc(player: ^Player, dt: f64) {
 	}
 
 	if linalg.length(move_direction) > 0.01 {
-		acceleration += apply_acceleration(move_direction_n, max_speed, max_move_acceleration, player.velocity, dt)
+		max_acceleration := is_grounded ? max_move_acceleration : max_air_acceleration
+		acceleration.xz += apply_acceleration(move_direction_n, max_speed, max_move_acceleration, player.velocity, dt).xz
 	} else if is_grounded {
-		acceleration += apply_acceleration(0, 0, max_move_acceleration, player.velocity, dt)
+		acceleration.xz += apply_acceleration(0, 0, max_move_acceleration, player.velocity, dt).xz
 	}
 
 	player.velocity += {0, -70, 0} * f32(dt)
@@ -192,6 +194,20 @@ update_player :: proc(player: ^Player, dt: f64) {
 	if action_is_pressed(.Jump) && is_grounded {
 		player.velocity.y = 20
 		player.is_grounded_last_frame = false
+	}
+
+	if is_grounded {
+		if player.footstep_distance_traveled > 3.5 {
+			player.footstep_distance_traveled = 0
+
+			play_sound(fmt.ctprintf("assets/audio/footsteps/step%v.wav", player.footstep + 2))
+			player.footstep += 1
+			player.footstep = player.footstep % 9
+		}
+
+		player.footstep_distance_traveled += linalg.length(last_player_translation.xz - player.translation.xz)
+	} else if !is_grounded {
+		player.footstep_distance_traveled = 3.7
 	}
 }
 

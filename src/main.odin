@@ -42,9 +42,6 @@ game_init :: proc(window: glfw.WindowHandle) {
 	game.input_manager = init_input_manager()
 	game.audio_manager = init_audio_manager()
 
-	// TODO: test
-	play_sound("assets/audio/test.wav")
-
 	game_hot_reloaded(game)
 
 	configure_im()
@@ -90,6 +87,7 @@ game_hot_reloaded :: proc(mem: rawptr) {
 	set_entity_storage(game.entity_storage)
 	set_input_manager(game.input_manager)
 	lock_mouse(game.input_manager.mouse_locked)
+	set_audio_manager(game.audio_manager)
 
 	gfx.load_vulkan_addresses()
 
@@ -165,7 +163,7 @@ init_physics :: proc() {
 }
 
 init_game_state :: proc() {
-	game.render_state.draw_skybox = false
+	game.render_state.draw_skybox = true
 
 	player := new_entity(Player)
 	init_player(player)
