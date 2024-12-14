@@ -31,7 +31,7 @@ Vec3 irradiance_sh(Vec3 n, ShCoefficients sh) {
 
 /**
 Vec3 irradiance_sh_volume(Vec3 position, Vec3 n, ShCoefficients *volume, Mat4x4 world_to_volume, uint3 size) {    
-    let pos = mul(world_to_volume, Vec4(position, 0.f));
+    let pos = world_to_volume * Vec4(position, 0.f);
         
     let Ld = irradiance_sh(n, volume[clamp(index, 0, 242)]);
 

@@ -25,7 +25,7 @@ FragmentInput vertex_main(VertexInput input) {
   let vert_pos = float4(vertex.position, 1.0);
 
   FragmentInput output;
-  output.pos = mul(view_projection_matrix, vert_pos);
+  output.pos = view_projection_matrix * vert_pos;
   output.frag_pos = vert_pos.xyz;
 
   return output;

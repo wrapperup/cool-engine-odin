@@ -1,6 +1,3 @@
-#ifndef _TYPES_INCLUDED
-#define _TYPES_INCLUDED
-
 #define TYPEDEF_VECTORS(T) \
 typedef vector<T,4> Vec4 ## T; \
 typedef vector<T,3> Vec3 ## T; \
@@ -18,10 +15,10 @@ typedef matrix<T, R, 2> Mat ## R ## x2 ## T;
     TYPEDEF_MATRICES_FOR_ROW(T, 2)
 
 // Basic types
-typedef uint8_t u8
-typedef uint16_t u16
+typedef uint8_t u8;
+typedef uint16_t u16;
 typedef uint32_t u32;
-typedef uint64_t u64
+typedef uint64_t u64;
 
 typedef int8_t i8;
 typedef int16_t i16;
@@ -56,6 +53,7 @@ TYPEDEF_MATRICES_FOR_SCALAR(f16);
 TYPEDEF_MATRICES_FOR_SCALAR(f32);
 TYPEDEF_MATRICES_FOR_SCALAR(f64);
 
+// f32
 typedef Vec2f32 Vec2;
 typedef Vec3f32 Vec3;
 typedef Vec4f32 Vec4;
@@ -63,11 +61,28 @@ typedef Vec4f32 Vec4;
 typedef Mat4x4f32 Mat4x4;
 typedef Mat4x3f32 Mat4x3;
 typedef Mat4x2f32 Mat4x2;
+
 typedef Mat3x4f32 Mat3x4;
 typedef Mat3x3f32 Mat3x3;
 typedef Mat3x2f32 Mat3x2;
+
 typedef Mat2x4f32 Mat2x4;
 typedef Mat2x3f32 Mat2x3;
 typedef Mat2x2f32 Mat2x2;
 
-#endif
+// f64
+typedef Vec2f64 DVec2;
+typedef Vec3f64 DVec3;
+typedef Vec4f64 DVec4;
+
+typedef Mat4x4f64 DMat4x4;
+typedef Mat4x3f64 DMat4x3;
+typedef Mat4x2f64 DMat4x2;
+
+typedef Mat3x4f64 DMat3x4;
+typedef Mat3x3f64 DMat3x3;
+typedef Mat3x2f64 DMat3x2;
+
+typedef Mat2x4f64 DMat2x4;
+typedef Mat2x3f64 DMat2x3;
+typedef Mat2x2f64 DMat2x2;

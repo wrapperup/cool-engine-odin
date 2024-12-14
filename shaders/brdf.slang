@@ -8,8 +8,8 @@ f32 D_ggx(f32 NoH, f32 a) {
     return a2 / (PI * f * f);
 }
 
-Vec3 F_schlick(f32 VoH, Vec3 f0) {
-    return f0 + (Vec3(1.0) - f0) * pow(1.0 - VoH, 5.0);
+Vec3 F_schlick(const Vec3 f0, Vec3 f90, f32 VoH) {
+    return f0 + (f90 - f0) * pow(1.0 - VoH, 5.0);
 }
 
 f32 V_smith_ggx_correlated(f32 NoV, f32 NoL, f32 a) {

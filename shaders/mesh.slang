@@ -8,7 +8,7 @@ import standard_brdf;
 import types;
 import world_space;
 
-static const Mat4x4 biasMat = {
+static const Mat4x4 BIAS_MAT = {
   0.5, 0.0, 0.0, 0.5, //
   0.0, 0.5, 0.0, 0.5, //
   0.0, 0.0, 1.0, 0.0, //
@@ -52,8 +52,7 @@ V2PShadow vertex_shadow_main(VertexInput input) {
   let view_projection_matrix = pc.global_data_buffer.sun_view_projection_matrix;
 
   V2PShadow output;
-  output.pos = mul(view_projection_matrix,
-                   mul(model_to_world, Vec4(vertex.position, 1.0)));
+  output.pos = view_projection_matrix * (model_to_world * Vec4(vertex.position, 1.0));
 
   return output;
 }
@@ -68,25 +67,25 @@ FragmentInput vertex_main(VertexInput input) {
 
   let model_to_world = pc.model_matrices[pc.model_index];
 
-  let pos = mul(model_to_world, Vec4(vertex.position, 1.0));
+  let pos = model_to_world * Vec4(vertex.position, 1.0);
   let uv = Vec2(vertex.uv_x, vertex.uv_y);
 
-  let N = normalize(mul((Mat3x3)model_to_world, -vertex.normal));
+  let N = normalize((Mat3x3)model_to_world * -vertex.normal);
   var tangent = vertex.tangent;
   if (pc.material_index == 0) {
     tangent = get_world_space_tangent(N);
   }
 
-  let T = normalize(mul((Mat3x3)model_to_world, tangent.xyz));
+  let T = normalize((Mat3x3)model_to_world * tangent.xyz);
   let B = cross(N, T) * tangent.w;
 
   FragmentInput output;
   output.color = vertex.color.rgb;
-  output.pos = mul(view_projection_matrix, pos);
+  output.pos = view_projection_matrix * pos;
   output.uv = uv;
   output.world_pos = pos.xyz;
   output.tbn = Mat3x3(T, B, N);
-  output.sun_space_pos = mul(biasMat, mul(sun_view_projection_matrix, pos));
+  output.sun_space_pos = BIAS_MAT * (sun_view_projection_matrix * pos);
 
   return output;
 }
@@ -121,7 +120,7 @@ FragmentOutput fragment_main(FragmentInput i) {
 
   Vec3 normal = material.normal_map_id.sample(DEFAULT_SAMPLER_ID, uv).rgb * 2.0 - 1.0;
   normal.y *= -1;
-  normal = mul(normal, i.tbn);
+  normal = normal * i.tbn;
   normal = normalize(normal);
 
   let shadow =
@@ -142,6 +141,7 @@ FragmentOutput fragment_main(FragmentInput i) {
 
   Vec3 f0 = 0.16 * reflectance * reflectance * (1.0 - metallic) +
               base_color * metallic;
+  Vec3 f90 = saturate(dot(f0, Vec3(50.0 * 0.33)));
 
   Vec3 diffuse = (1.0 - metallic) * base_color.rgb;
 
@@ -154,7 +154,7 @@ FragmentOutput fragment_main(FragmentInput i) {
   Vec3 frag_color = 0;
   frag_color =
       saturate((NoL * ao * shadow * pc.global_data_buffer.sun_color) *
-               standard_brdf(diffuse, proughness, v, l, n, h, f0, NoL));
+               standard_brdf(diffuse, proughness, v, l, n, h, f0, f90, NoL));
 
   // frag_color = evaluate_ibl(n, v, diffuse, f0, 1.0, roughness);
   frag_color += pc.global_data_buffer.sky_color * ao *
@@ -166,7 +166,7 @@ FragmentOutput fragment_main(FragmentInput i) {
   // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, r, 0).rgb;
   // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, n, 0).rgb;
   // frag_color = evaluate_specular_ibl(r, proughness);
-  // frag_color = irradiance_sh_volume(world_pos, n, pc.global_data_buffer.environment.sh_volume, u323(9, 9, 3));
+  // frag_color = irradiance_sh(n, pc.global_data_buffer.environment.sh_volume[0]);
   // frag_color = saturate(n);
   // frag_color = saturate(i.tbn[0]); // Tangent
   // frag_color = saturate(i.tbn[1]); // Bitangent

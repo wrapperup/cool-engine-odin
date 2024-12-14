@@ -35,15 +35,12 @@ void compute_main(uint3 dispatch_thread_id: SV_DispatchThreadID) {
 
   Vertex v;
 
-  v.position = mul(skin_mat, float4(in_vertex.position, 1.0)).xyz;
-  v.normal = mul(skin_mat, float4(in_vertex.normal, 0.0)).xyz;
-  let normal = mul(skin_mat, float4(in_vertex.normal, 0.0)).xyz;
-  v.color = in_vertex.color;
-  let tangent = mul(skin_mat, float4(in_vertex.tangent.xyz, 0.0)).xyz;
-  v.tangent.xyz = tangent;
-  v.tangent.w = in_vertex.tangent.w;
-  v.uv_x = in_vertex.uv_x;
-  v.uv_y = in_vertex.uv_y;
+  v.position =    (skin_mat * float4(in_vertex.position, 1.0)).xyz;
+  v.normal =      (skin_mat * float4(in_vertex.normal, 0.0)).xyz;
+  v.color =       in_vertex.color;
+  v.tangent =     skin_mat * float4(in_vertex.tangent.xyz, 0.0);
+  v.uv_x =        in_vertex.uv_x;
+  v.uv_y =        in_vertex.uv_y;
 
   pc.output_vertex_buffer[vertex_index] = v;
 }
