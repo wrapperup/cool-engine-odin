@@ -122,7 +122,7 @@ RenderState :: struct {
 		bindless_texture_start_index: u32, // 0-10 is for reserved internal textures
 		materials:                    [dynamic]GPUMaterial,
 		materials_buffer:             gfx.GPUBuffer,
-		point_lights:                 [1]GPU_Point_Light, // TODO: Make this dynamic?
+		point_lights:                 [256]GPU_Point_Light,
 		point_light_buffer:           gfx.GPUBuffer,
 	},
 	shaders:                    [dynamic]Shader,
@@ -460,13 +460,6 @@ init_buffers :: proc() {
 		{.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER},
 		.GPU_ONLY,
 	)
-
-	game.render_state.scene_resources.point_lights[0] = GPU_Point_Light {
-		world_pos = {0, 2, 0},
-		lumens    = 2,
-		radius    = 10,
-		color     = {1, 0, 0},
-	}
 
 	environment^ = {
 		sh_volume        = ir_volume.gpu_buffer.address,
@@ -941,6 +934,8 @@ update_buffers :: proc() {
 	global_uniform_data.camera_pos = hlsl.float3(player != nil ? player.translation : Vec3{0, 0, 0})
 	global_uniform_data.sun_pos = hlsl.float3(game.state.environment.sun_pos)
 
+	global_uniform_data.environment.num_point_lights = auto_cast len_entities(Point_Light)
+
 	gfx.write_buffer(&current_frame_game().global_uniform_buffer, global_uniform_data)
 
 	gfx.write_buffer_slice(&current_frame_game().model_matrices_buffer, game.render_state.model_matrices[:])
@@ -951,4 +946,11 @@ update_buffers :: proc() {
 			ball.skel_animator.calc_joints[:],
 		)
 	}
+
+	for &point_light, i in get_entities(Point_Light) {
+		if i >= len(game.render_state.scene_resources.point_lights) do break
+		game.render_state.scene_resources.point_lights[i] = point_light_to_gpu(point_light)
+	}
+
+	gfx.staging_write_buffer_slice(&game.render_state.scene_resources.point_light_buffer, game.render_state.scene_resources.point_lights[:])
 }

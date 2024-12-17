@@ -136,44 +136,30 @@ FragmentOutput fragment_main(FragmentInput in) {
   let ao_roughness_metallic_srgb = linear_to_srgb(ao_roughness_metallic);
 
   let ao = ao_roughness_metallic.r;
-  // let proughness = ao_roughness_metallic.g;
   let proughness = ao_roughness_metallic_srgb.g;
   let metallic = ao_roughness_metallic_srgb.b;
 
   Vec3 f0 = 0.16 * reflectance * reflectance * (1.0 - metallic) +
               base_color * metallic;
-  Vec3 f90 = saturate(dot(f0, Vec3(50.0 * 0.33)));
 
   Vec3 diffuse = (1.0 - metallic) * base_color.rgb;
 
   Vec3 n = normal;
   Vec3 v = normalize(view_pos - world_pos);
   Vec3 l = normalize(pc.global_data_buffer.sun_pos); // Directional light
-  Vec3 h = normalize(v + l);
-
 
   f32 sun_NoL = clamp(dot(n, l), 0.0, 1.0);
 
   Vec3 frag_color = 0;
-  frag_color =
-      saturate((sun_NoL * ao * shadow * pc.global_data_buffer.sun_color) *
-               standard_bsdf(diffuse, proughness, v, l, n, h, f0, f90, sun_NoL));
+  frag_color = saturate((sun_NoL * ao * shadow * pc.global_data_buffer.sun_color) * standard_bsdf(diffuse, proughness, v, l, n, f0, sun_NoL));
 
   for (uint i = 0; i < pc.global_data_buffer.environment.num_point_lights; i++) {
       let point_light = pc.global_data_buffer.environment.point_lights[i];
       
-      Vec3 light_pos = point_light.world_pos;
-      light_pos = Vec3(0, 4, 4);
-
-      f32 radius = point_light.radius;
-      radius = 20;
-
-      f32 lumens = point_light.lumens;
-      lumens = 1000;
-
-      Vec3 color = normalize(point_light.color);
-      color = normalize(Vec3(1, 0, 0));
-
+      let light_pos = point_light.world_pos;
+      let radius = point_light.radius;
+      let lumens = point_light.lumens;
+      let color = normalize(point_light.color);
       let dist = distance(world_pos, light_pos);
 
       if (dist <= radius) {
@@ -182,22 +168,19 @@ FragmentOutput fragment_main(FragmentInput in) {
         let point_light_h = normalize(v + point_light_l);
         let point_light_NoL = clamp(dot(n, point_light_l), 0.0, 1.0);
 
-        let bsdf = standard_bsdf(diffuse, proughness, v, point_light_l, n, point_light_l, f0, f90, point_light_NoL);
+        let bsdf = standard_bsdf(diffuse, proughness, v, point_light_l, n, f0, point_light_NoL);
         let attenuation = get_square_falloff_attenuation(pos_to_light, 1.f / radius);
 
         frag_color += (bsdf * lumens * attenuation * point_light_NoL) * color * ao;
       }
   }
 
-  // frag_color = evaluate_ibl(n, v, diffuse, f0, 1.0, roughness);
-  frag_color += pc.global_data_buffer.sky_color * ao *
-                evaluate_ibl(n, v, diffuse, f0, proughness,
-                             pc.global_data_buffer.environment.sh_volume[0]);
+  frag_color += pc.global_data_buffer.sky_color * ao * evaluate_ibl(n, v, diffuse, f0, proughness, pc.global_data_buffer.environment.sh_volume[0]);
 
   // DEBUG
   // let r = reflect(-v, n);
-  // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, r, 0).rgb;
-  // frag_color = sample_cubemap(ENVIRONMENT_MAP_ID, n, 0).rgb;
+  // frag_color = ENVIRONMENT_MAP_ID.sample_level(ENVIRONMENT_SAMPLER_ID, r, 0).rgb;
+  // frag_color = ENVIRONMENT_MAP_ID.sample_level(ENVIRONMENT_SAMPLER_ID, n, 0).rgb;
   // frag_color = evaluate_specular_ibl(r, proughness);
   // frag_color = irradiance_sh(n, pc.global_data_buffer.environment.sh_volume[0]);
   // frag_color = saturate(n);

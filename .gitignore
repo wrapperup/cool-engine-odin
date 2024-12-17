@@ -5,4 +5,5 @@ shaders/.cache
 imgui.ini
 .vs/
 *.pdb
+*.lib
 *.exe

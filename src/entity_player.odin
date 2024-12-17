@@ -31,6 +31,7 @@ Player :: struct {
 	footstep_time:              f64,
 	footstep:                   u32,
 	camera_shake_time:          f64,
+	temp_cycler:                u32,
 }
 
 on_shape_hit_callback :: proc "c" (#by_ptr hit: px.ControllerShapeHit) {
@@ -209,21 +210,35 @@ update_player :: proc(player: ^Player, dt: f64) {
 			max_acceleration := is_grounded ? max_ground_acceleration : max_air_acceleration
 			max_speed := is_grounded ? max_ground_speed : max_air_speed
 			acceleration.xz += apply_acceleration(move_direction_n, max_speed, max_acceleration, player.velocity, is_grounded, dt).xz
-		} else if is_grounded && linalg.length(player.velocity.xz) >= (10 * f32(dt)) {
+		} else if is_grounded && linalg.length(player.velocity.xz) >= 1 {
 			acceleration.xz +=
 				apply_acceleration(-linalg.normalize0(player.velocity), 10, max_braking_acceleration, player.velocity, is_grounded, dt).xz
-		} else if is_grounded && linalg.length(player.velocity.xz) < (10 * f32(dt)) {
+		} else if is_grounded && linalg.length(player.velocity.xz) < 1 {
 			acceleration.xz = 0
 			player.velocity.xz = 0
 		}
 
 		player.velocity += {0, -70, 0} * f32(dt)
 
-		if action_just_pressed(.Fire) {
-			play_sound_3d(fmt.ctprintf("assets/audio/footsteps/step%v.wav", player.footstep + 1), player.translation)
+		if action_is_pressed(.Fire) && player.fire_time > 0.1 {
+			point_light := new_entity(Point_Light)
+			color: Vec3 = 0
+			switch player.temp_cycler {
+			case 0:
+				color = {1, 0, 0}
+			case 1:
+				color = {0, 1, 0}
+			case 2:
+				color = {0, 0, 1}
+			}
+
+			init_point_light(point_light, player.translation, color, 10, 10)
+
+			player.temp_cycler = (player.temp_cycler + 1) % 3
+
 			player.fire_time = 0
-			player.velocity.xz = move_direction_n.xz * 15
-			player.velocity += {0, 1, 0} * 10
+			// player.velocity.xz = move_direction_n.xz * 15
+			// player.velocity += {0, 1, 0} * 10
 			// ball := new_entity(Ball)
 			// init_ball(ball, player.translation + look_forward * 2 - {0, 1.5, 0}, player.velocity + look_forward * 100)
 		}
@@ -256,7 +271,11 @@ update_player :: proc(player: ^Player, dt: f64) {
 		player.footstep_time += dt
 
 	case .Noclip:
-		max_noclip_speed: f32 = 50
+		max_noclip_speed: f32 = 15
+
+		if action_is_pressed(.Fire) {
+			max_noclip_speed = 50
+		}
 
 		player.velocity = move_direction_n * max_noclip_speed
 

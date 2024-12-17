@@ -83,7 +83,7 @@ run_dfg_generate_pass :: proc(pass: ^DfgGeneratePass, cmd: vk.CommandBuffer) {
 	vk.CmdBindDescriptorSets(cmd, .COMPUTE, pass.pipeline_layout, 0, 1, &pass.descriptor_set, 0, nil)
 
 	consts := DfgGeneratePassPC {
-		sample_count = 1024,
+		sample_count = 4096,
 		multiscatter = false,
 	}
 

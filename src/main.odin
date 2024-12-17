@@ -13,6 +13,7 @@ import "core:sys/windows"
 import "core:time"
 
 import glfw "vendor:glfw"
+import ma "vendor:miniaudio"
 
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
@@ -124,10 +125,10 @@ init_physics :: proc() {
 	PX_PHYSICS_VERSION_MINOR :: 1
 	PX_PHYSICS_VERSION_BUGFIX :: 3
 
-	PX_PHYSICS_VERSION :: ((PX_PHYSICS_VERSION_MAJOR<<24) + (PX_PHYSICS_VERSION_MINOR<<16) + (PX_PHYSICS_VERSION_BUGFIX<<8) + 0)
+	PX_PHYSICS_VERSION :: ((PX_PHYSICS_VERSION_MAJOR << 24) + (PX_PHYSICS_VERSION_MINOR << 16) + (PX_PHYSICS_VERSION_BUGFIX << 8) + 0)
 
 	game.phys.foundation = px.create_foundation(PX_PHYSICS_VERSION, px.get_default_allocator(), g_physx_error_callback)
-	
+
 	assert(game.phys.foundation != nil)
 
 	game.phys.dispatcher = default_cpu_dispatcher_create(1, nil, px.DefaultCpuDispatcherWaitForWorkMode.WaitForWork, 0)
@@ -160,10 +161,10 @@ init_physics :: proc() {
 
 	scene_set_visualization_culling_box_mut(game.phys.scene, bounds3_new_1({-50, -50, -50}, {50, 50, 50}))
 
-// 	// create a ground plane to the scene
-// 	ground_material := physics_create_material_mut(game.phys.physics, 0.5, 0.5, 0.3)
-// 	ground_plane := create_plane(game.phys.physics, plane_new_1(0.0, 1.0, 0.0, 0.0), ground_material)
-// 	scene_add_actor_mut(game.phys.scene, ground_plane, nil)
+	// 	// create a ground plane to the scene
+	// 	ground_material := physics_create_material_mut(game.phys.physics, 0.5, 0.5, 0.3)
+	// 	ground_plane := create_plane(game.phys.physics, plane_new_1(0.0, 1.0, 0.0, 0.0), ground_material)
+	// 	scene_add_actor_mut(game.phys.scene, ground_plane, nil)
 }
 
 init_scene :: proc() {
@@ -204,21 +205,27 @@ init_scene :: proc() {
 	test_mesh2 := new_entity(StaticMesh)
 	init_static_mesh(test_mesh2, "assets/meshes/static/materialball2.glb", 2)
 
+	sound_source := new_entity(SoundSource)
+	init_sound_source(sound_source, "assets/audio/ambient/outdoors_birds.wav", true, 0.1, false, 0.5)
+
+	point_light := new_entity(Point_Light)
+	init_point_light(point_light, {0, 4, 2}, {1, 0, 0}, 20, 100)
+
 	game.state = GameState {
 		player_id = entity_id_of(player),
-		environment = Environment {
-			sun_pos = {12, 15, 10},
-			sun_target = 0.0,
-			sun_color = 2.0,
-			sky_color = 1.0,
-			bias = 0.001,
-		},
+		environment = Environment{sun_pos = {12, 15, 10}, sun_target = 0.0, sun_color = 2.0, sky_color = 1.0, bias = 0.001},
 	}
 }
 
 @(export)
 game_update :: proc() -> bool {
 	scope_stat_time(.Total)
+
+	if glfw.GetWindowAttrib(game.window, glfw.FOCUSED) > 0 {
+		ma.engine_set_volume(&sound_manager.sound_engine, 1.0)
+	} else {
+		ma.engine_set_volume(&sound_manager.sound_engine, 0.0)
+	}
 
 	game.live_time = f64(time.tick_since(start_live_time)) / f64(time.Second)
 

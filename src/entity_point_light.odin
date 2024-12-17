@@ -27,4 +27,9 @@ point_light_to_gpu :: proc(light: Point_Light) -> GPU_Point_Light {
     // odinfmt: enable
 }
 
-init_point_light :: proc(light: ^Point_Light)
+init_point_light :: proc(light: ^Point_Light, position: Vec3, color: Vec3, radius: f32, lumens: f32) {
+    light.translation = position
+    light.color = color
+    light.radius = radius
+    light.lumens = lumens
+}

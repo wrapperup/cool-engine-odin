@@ -148,7 +148,7 @@ configure_im :: proc() {
 
 update_imgui :: proc() {
 	scope_stat_time(.Imgui)
-	// if input_manager.mouse_locked do return
+	if input_manager.mouse_locked do return
 
 	dl := im.GetForegroundDrawList()
 	bl := im.GetBackgroundDrawList()
@@ -291,6 +291,11 @@ update_imgui :: proc() {
 		for key, subtype_ptr in entity_storage.subtype_storage {
 			storage_raw := cast(^RawSparseSet)subtype_ptr.ptr
 			size_t := subtype_ptr.type_info.size
+
+			if im.SmallButton("Clear All") {
+			}
+
+			im.SameLine()
 
 			if im.TreeNode(
 				fmt.ctprintf("%s Entities (num: %d)", subtype_ptr.type_info.variant.(runtime.Type_Info_Named).name, storage_raw.dense.len),

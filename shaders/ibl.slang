@@ -45,15 +45,22 @@ Vec3 sample_dfg(f32 NoV, f32 p_roughness) {
 }
 
 Vec3 evaluate_ibl(Vec3 n, Vec3 v, Vec3 diffuse_color, Vec3 f0, f32 p_roughness, ShCoefficients sh) {
+    let f90 = saturate(dot(f0, Vec3(50.0 * 0.33)));
+
     let NoV = max(dot(n, v), 0.0);
     let r = reflect(-v, n);
 
     let Lld = evaluate_specular_ibl(r, p_roughness);
     let Ldfg = sample_dfg(NoV, p_roughness).rg;
-    let Lr = (f0 * Ldfg.r + Ldfg.g) * Lld;
+
+#ifdef MULTISCATTERING
+    let Lr = lerp(Ldfg.xxx, Ldfg.yyy, f0);
+#else
+    let Lr = (f0 * Ldfg.r + f90/20.f * Ldfg.g) * Lld;
+#endif
 
     let diffuse_irradiance = irradiance_sh(n, sh);
     let Ld = diffuse_color * diffuse_irradiance;
 
-    return Ld + Lr;
+    return Lr + Ld;
 }

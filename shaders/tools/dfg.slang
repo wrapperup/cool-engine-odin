@@ -17,11 +17,11 @@ float G_dfg(float NoV, float NoL, float a) {
 float2 dfg(float NoV, float linear_roughness, int sample_count, bool multiscatter = false) {
 	// Construct `v` term from NoV for the approximation
 	float3 V;
-	V.x = sqrt(1.0 - NoV * NoV);
-	V.y = 0.0;
+	V.x = sqrt(1.0f - (NoV * NoV));
+	V.y = 0.0f;
 	V.z = NoV;
 
-	float2 r = 0;
+	float2 r = 0.0f;
 	for (uint i = 0; i < sample_count; i++) {
 		float2 Xi = hammersley(i, float(sample_count));
 		float3 H = hemisphere_importance_sample_ggx(Xi, linear_roughness);
@@ -31,7 +31,7 @@ float2 dfg(float NoV, float linear_roughness, int sample_count, bool multiscatte
 		float NoL = saturate(L.z);
 		float NoH = saturate(H.z);
 
-		if (NoL > 0.0) {
+		if (NoL > 0.0f) {
 			float G = G_dfg(NoV, NoL, linear_roughness);
 			float Gv = G * VoH / NoH;
 			float Fc = pow(1 - VoH, 5.0);
@@ -46,7 +46,7 @@ float2 dfg(float NoV, float linear_roughness, int sample_count, bool multiscatte
 		}
 	}
 
-	return r * (1.0 / float(sample_count));
+	return r / float(sample_count);
 }
 
 [vk_binding(0, 0)] RWTexture2D<float2> DfgTexture;
