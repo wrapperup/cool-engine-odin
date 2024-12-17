@@ -10,6 +10,13 @@ struct Vertex {
   Vec4 tangent;
 };
 
+struct PointLight {
+	Vec3 color;
+	f32 radius;
+  Vec3 world_pos;
+	f32 lumens;
+}
+
 struct ShCoefficients {
   Vec4 coeffs[9];
 }
@@ -22,6 +29,8 @@ struct ShCoefficientVolume {
 
 struct Environment {
 	ShCoefficients *sh_volume;
+  PointLight *point_lights;
+  u32 num_point_lights;
 }
 
 struct GlobalData {

@@ -11,9 +11,15 @@ import px "deps:physx-odin"
 
 import "gfx"
 
+Move_Mode :: enum {
+	Ground,
+	Noclip,
+}
+
 Player :: struct {
 	using entity:               ^Entity,
 	//
+	move_mode:                  Move_Mode,
 	controller:                 ^px.Controller,
 	camera_rot:                 Vec3,
 	camera_fov_deg:             f32,
@@ -22,7 +28,9 @@ Player :: struct {
 	momentum:                   f32,
 	is_grounded_last_frame:     bool,
 	footstep_distance_traveled: f32,
+	footstep_time:              f64,
 	footstep:                   u32,
+	camera_shake_time:          f64,
 }
 
 on_shape_hit_callback :: proc "c" (#by_ptr hit: px.ControllerShapeHit) {
@@ -67,6 +75,7 @@ init_player :: proc(player: ^Player) {
 }
 
 update_player :: proc(player: ^Player, dt: f64) {
+
 	filter_data := px.filter_data_new_2(get_words_from_filter({}))
 	filters := px.controller_filters_new(&filter_data, nil, nil)
 
@@ -79,24 +88,23 @@ update_player :: proc(player: ^Player, dt: f64) {
 		nil,
 	)
 
-	{
-		yaw_delta: f32
-		pitch_delta: f32
+	// Look scheme
+	yaw_delta: f32
+	pitch_delta: f32
 
-		mouse_x := axis_get_value(.LookRight)
-		mouse_y := axis_get_value(.LookUp)
+	mouse_x := axis_get_value(.LookRight)
+	mouse_y := axis_get_value(.LookUp)
 
-		if action_just_pressed(.LockCamera) {
-			toggle_lock_mouse()
-		}
-
-		yaw_delta = linalg.to_radians(f32(mouse_x)) * 0.025
-		pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.025
-
-		player.camera_rot += {f32(pitch_delta), f32(yaw_delta), 0}
-		player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI / 2, math.PI / 2)
-		player.camera_rot.y = math.wrap(player.camera_rot.y, math.PI * 2)
+	if action_just_pressed(.LockCamera) {
+		toggle_lock_mouse()
 	}
+
+	yaw_delta = linalg.to_radians(f32(mouse_x)) * 0.025
+	pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.025
+
+	player.camera_rot += {f32(pitch_delta), f32(yaw_delta), 0}
+	player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI / 2, math.PI / 2)
+	player.camera_rot.y = math.wrap(player.camera_rot.y, math.PI * 2)
 
 	pitch := linalg.quaternion_angle_axis(player.camera_rot.x, Vec3{1, 0, 0})
 	yaw := linalg.quaternion_angle_axis(player.camera_rot.y, Vec3{0, -1, 0})
@@ -111,41 +119,9 @@ update_player :: proc(player: ^Player, dt: f64) {
 	player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(dt))
 	tilt := linalg.quaternion_angle_axis(player.camera_rot.z, Vec3{0, 0, -1})
 
+	// General Movement
+
 	player.rotation = look * tilt
-
-	is_sliding := false
-	is_grounded := false
-
-	acceleration: Vec3
-
-	for normal in player.ground_contact_normals {
-		slope_angle := linalg.vector_angle_between(normal, Vec3{0, 1, 0})
-		is_grounded = is_grounded || slope_angle < math.PI / 4
-		is_sliding = !is_grounded
-
-		if is_grounded || is_sliding {
-			test_normal := normal
-			new_velocity := linalg.normalize(test_normal) * linalg.max((linalg.dot(-test_normal, player.velocity * 1)), 0)
-
-			if is_grounded {
-				player.velocity.y += new_velocity.y
-			} else {
-				player.velocity += new_velocity
-			}
-		}
-	}
-
-	pos := px.controller_get_position(player.controller)
-	last_player_translation := player.translation
-	player.translation = {f32(pos.x), f32(pos.y), f32(pos.z)}
-
-	player.fire_time += dt
-
-	max_move_acceleration: f32 = 50
-	max_air_acceleration: f32 = 25
-	max_braking_acceleration: f32 = 50
-
-	max_speed: f32 = 10
 
 	f, r := axis_get_2d_normalized(.MoveForward, .MoveRight)
 	move_forward, move_right := cast(f32)f, cast(f32)r
@@ -153,61 +129,148 @@ update_player :: proc(player: ^Player, dt: f64) {
 	move_direction := move_forward * forward + move_right * right
 	move_direction_n := linalg.normalize0(move_forward * forward + move_right * right)
 
-	// Returns the change in acceleration to apply to the player's current acceleration.
-	apply_acceleration :: proc(requested_dir: Vec3, max_speed: f32, max_acceleration: f32, current_velocity: Vec3, dt: f64) -> Vec3 {
-		requested_velocity := requested_dir * max_speed
-		requested_speed := linalg.length(requested_velocity)
-
-		new_acceleration := (requested_velocity - current_velocity) / f32(dt)
-
-		// Try to cancel out the requested acceleration component along the move direction.
-		// if linalg.length2(requested_velocity) <= linalg.length2(current_velocity) {
-		// 	new_acceleration = new_acceleration - linalg.dot(new_acceleration, requested_dir)
-		// }
-
-		new_acceleration = linalg.clamp_length(new_acceleration, max_acceleration)
-
-		return new_acceleration
+	if action_just_pressed(.ToggleNoclip) {
+		player.move_mode += Move_Mode(1)
+		player.move_mode = Move_Mode(int(player.move_mode) % len(Move_Mode))
 	}
 
-	if linalg.length(move_direction) > 0.01 {
-		max_acceleration := is_grounded ? max_move_acceleration : max_air_acceleration
-		acceleration.xz += apply_acceleration(move_direction_n, max_speed, max_move_acceleration, player.velocity, dt).xz
-	} else if is_grounded {
-		acceleration.xz += apply_acceleration(0, 0, max_move_acceleration, player.velocity, dt).xz
-	}
+	set_listener_position(player.translation, look_forward)
 
-	player.velocity += {0, -70, 0} * f32(dt)
+	switch player.move_mode {
+	case .Ground:
+		is_sliding := false
+		is_grounded := false
 
-	if action_is_pressed(.Fire) && player.fire_time > 0.05 {
-		player.fire_time = 0
-		player.velocity += {0, 1, 0} * 10
-		// ball := new_entity(Ball)
-		// init_ball(ball, player.translation + look_forward * 2 - {0, 1.5, 0}, player.velocity + look_forward * 100)
-	}
+		acceleration: Vec3
 
-	clear(&player.ground_contact_normals)
+		for normal in player.ground_contact_normals {
+			slope_angle := linalg.vector_angle_between(normal, Vec3{0, 1, 0})
+			is_grounded = is_grounded || slope_angle < math.PI / 4
+			is_sliding = !is_grounded
 
-	player.velocity += acceleration * f32(dt)
-	player.is_grounded_last_frame = is_grounded && !is_sliding
+			if is_grounded || is_sliding {
+				test_normal := normal
+				new_velocity := linalg.normalize(test_normal) * linalg.max((linalg.dot(-test_normal, player.velocity * 1)), 0)
 
-	if action_is_pressed(.Jump) && is_grounded {
-		player.velocity.y = 20
-		player.is_grounded_last_frame = false
-	}
-
-	if is_grounded {
-		if player.footstep_distance_traveled > 3.5 {
-			player.footstep_distance_traveled = 0
-
-			play_sound(fmt.ctprintf("assets/audio/footsteps/step%v.wav", player.footstep + 2))
-			player.footstep += 1
-			player.footstep = player.footstep % 9
+				if is_grounded {
+					player.velocity.y += new_velocity.y
+				} else {
+					player.velocity += new_velocity
+				}
+			}
 		}
 
-		player.footstep_distance_traveled += linalg.length(last_player_translation.xz - player.translation.xz)
-	} else if !is_grounded {
-		player.footstep_distance_traveled = 3.7
+		pos := px.controller_get_position(player.controller)
+		last_player_translation := player.translation
+		player.translation = {f32(pos.x), f32(pos.y), f32(pos.z)}
+
+		player.fire_time += dt
+
+		max_ground_acceleration: f32 = 50
+		max_air_acceleration: f32 = 15
+		max_braking_acceleration: f32 = 80
+
+		max_ground_speed: f32 = 10
+		max_air_speed: f32 = 10
+
+		if action_is_pressed(.Sprint) {
+			max_ground_speed = 15
+		}
+
+		// Returns the change in acceleration to apply to the player's current acceleration.
+		apply_acceleration :: proc(
+			requested_dir: Vec3,
+			max_speed: f32,
+			max_acceleration: f32,
+			current_velocity: Vec3,
+			has_traction: bool,
+			dt: f64,
+		) -> Vec3 {
+			current_speed := linalg.dot(current_velocity, requested_dir)
+			add_speed := max_speed - current_speed
+
+			if add_speed < 0 && !has_traction {
+				return 0
+			}
+
+			when false {
+				// Quake
+				acceleration_change := (max_acceleration * max_speed * f32(dt)) * requested_dir
+			} else {
+				// Unreal
+				acceleration_change := ((max_speed * requested_dir) - current_velocity) / f32(dt)
+				acceleration_change = linalg.clamp_length(acceleration_change, max_acceleration)
+			}
+
+			return acceleration_change
+		}
+
+		if linalg.length(move_direction) > 0.01 {
+			max_acceleration := is_grounded ? max_ground_acceleration : max_air_acceleration
+			max_speed := is_grounded ? max_ground_speed : max_air_speed
+			acceleration.xz += apply_acceleration(move_direction_n, max_speed, max_acceleration, player.velocity, is_grounded, dt).xz
+		} else if is_grounded && linalg.length(player.velocity.xz) >= (10 * f32(dt)) {
+			acceleration.xz +=
+				apply_acceleration(-linalg.normalize0(player.velocity), 10, max_braking_acceleration, player.velocity, is_grounded, dt).xz
+		} else if is_grounded && linalg.length(player.velocity.xz) < (10 * f32(dt)) {
+			acceleration.xz = 0
+			player.velocity.xz = 0
+		}
+
+		player.velocity += {0, -70, 0} * f32(dt)
+
+		if action_just_pressed(.Fire) {
+			play_sound_3d(fmt.ctprintf("assets/audio/footsteps/step%v.wav", player.footstep + 1), player.translation)
+			player.fire_time = 0
+			player.velocity.xz = move_direction_n.xz * 15
+			player.velocity += {0, 1, 0} * 10
+			// ball := new_entity(Ball)
+			// init_ball(ball, player.translation + look_forward * 2 - {0, 1.5, 0}, player.velocity + look_forward * 100)
+		}
+
+		clear(&player.ground_contact_normals)
+
+		player.velocity += acceleration * f32(dt)
+		player.is_grounded_last_frame = is_grounded && !is_sliding
+
+		if action_is_pressed(.Jump) && is_grounded {
+			player.velocity.y = 20
+			player.is_grounded_last_frame = false
+		}
+
+		if is_grounded {
+			if player.footstep_distance_traveled > 3.5 && player.footstep_time > 0.15 {
+				player.footstep_distance_traveled = 0
+				player.footstep_time = 0
+
+				play_sound(fmt.ctprintf("assets/audio/footsteps/step%v.wav", player.footstep + 1))
+				player.footstep += 1
+				player.footstep = player.footstep % 20
+			}
+
+			player.footstep_distance_traveled += linalg.length(last_player_translation.xz - player.translation.xz)
+		} else {
+			player.footstep_distance_traveled = 2
+		}
+
+		player.footstep_time += dt
+
+	case .Noclip:
+		max_noclip_speed: f32 = 50
+
+		player.velocity = move_direction_n * max_noclip_speed
+
+		if action_is_pressed(.Jump) {
+			player.velocity.y = max_noclip_speed
+		}
+		if action_is_pressed(.Sprint) {
+			player.velocity.y = -max_noclip_speed
+		}
+
+		player.translation += player.velocity * f32(dt)
+
+		// Force capsule to move.
+		px.controller_set_position_mut(player.controller, transmute(px.ExtendedVec3)linalg.array_cast(player.translation, f64))
 	}
 }
 
@@ -334,12 +397,12 @@ world_space_to_clip_space :: proc(view_projection: matrix[4, 4]f32, vec: Vec3) -
 	ok := true
 
 	// TODO: uhh.... is there a better way?
-	// if clip_vec.x > 1 do ok = false
-	// if clip_vec.y > 1 do ok = false
-	// if clip_vec.z > 1 do ok = false
-	// if clip_vec.x < -1 do ok = false
-	// if clip_vec.y < -1 do ok = false
-	// if clip_vec.z < -1 do ok = false
+	if clip_vec.x > 1 do ok = false
+	if clip_vec.y > 1 do ok = false
+	if clip_vec.z > 1 do ok = false
+	if clip_vec.x < -1 do ok = false
+	if clip_vec.y < -1 do ok = false
+	if clip_vec.z < -1 do ok = false
 
 	return (clip_vec.xy * 0.5 + 0.5) * [2]f32{f32(game.window_extent.x), f32(game.window_extent.y)}, ok
 }

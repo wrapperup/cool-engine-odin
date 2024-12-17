@@ -23,12 +23,7 @@ Sh_Coefficients :: [9]Vec4
 
 process_sh_coefficients_from_cubemap_file :: proc(in_filename: cstring) -> Sh_Coefficients {
 	buffer, size := load_image_into_bytes(in_filename)
-
-	start := time.tick_now()
-
 	coeffs := process_sh_from_cubemap(buffer, size.x)
-
-	fmt.println("Sh time:", time.tick_since(start))
 
 	return coeffs
 }

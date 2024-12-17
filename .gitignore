@@ -1,5 +1,7 @@
 build/
 .task/
+.cache/
+shaders/.cache
 imgui.ini
 .vs/
 *.pdb

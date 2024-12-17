@@ -1,5 +1,6 @@
 package game
 
+import sm "core:container/small_array"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
@@ -73,11 +74,9 @@ GPUMaterial :: struct {
 
 @(ShaderShared)
 GPUEnvironment :: struct {
-	// sh_volume_size:  [3]u32,
-	// pad_0:           u32,
-	// sh_volume_scale: Vec3,
-	// pad_1:           u32,
-	sh_volume: vk.DeviceAddress, // []Sh_Coefficients
+	sh_volume:        vk.DeviceAddress, // []Sh_Coefficients
+	point_lights:     vk.DeviceAddress, // []GPU_Point_Light
+	num_point_lights: u32,
 }
 
 // 256 bytes is the maximum allowed in a push constant on a 3090Ti
@@ -123,6 +122,8 @@ RenderState :: struct {
 		bindless_texture_start_index: u32, // 0-10 is for reserved internal textures
 		materials:                    [dynamic]GPUMaterial,
 		materials_buffer:             gfx.GPUBuffer,
+		point_lights:                 [1]GPU_Point_Light, // TODO: Make this dynamic?
+		point_light_buffer:           gfx.GPUBuffer,
 	},
 	shaders:                    [dynamic]Shader,
 	global_session:             ^sp.IGlobalSession,
@@ -454,11 +455,26 @@ init_buffers :: proc() {
 	ir_volume: Irradiance_Volume
 	init_irradiance_volume(&ir_volume)
 
+	game.render_state.scene_resources.point_light_buffer = gfx.create_buffer(
+		size_of(GPU_Point_Light) * len(game.render_state.scene_resources.point_lights),
+		{.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER},
+		.GPU_ONLY,
+	)
+
+	game.render_state.scene_resources.point_lights[0] = GPU_Point_Light {
+		world_pos = {0, 2, 0},
+		lumens    = 2,
+		radius    = 10,
+		color     = {1, 0, 0},
+	}
+
 	environment^ = {
-		sh_volume = ir_volume.gpu_buffer.address,
+		sh_volume        = ir_volume.gpu_buffer.address,
 		// sh_coeffs       = comp_coeffs,
 		// sh_volume_size  = ir_volume.sh_volume_size,
 		// sh_volume_scale = ir_volume.sh_volume_scale,
+		point_lights     = game.render_state.scene_resources.point_light_buffer.address,
+		num_point_lights = u32(len(game.render_state.scene_resources.point_lights)),
 	}
 
 	reserve(&game.render_state.model_matrices, 16_000)
@@ -508,7 +524,7 @@ hotreload_modified_shaders :: proc() -> bool {
 
 			shader.last_compile_time = time.now()
 			shader.needs_recompile = false
-			return ok;
+			return ok
 		}
 	}
 

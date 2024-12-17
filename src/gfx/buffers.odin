@@ -16,7 +16,7 @@ GPUBuffer :: struct {
 
 // This allocates on the GPU, make sure to call `destroy_buffer` or add to deletion queue when you are finished with the buffer.
 create_buffer :: proc(
-	alloc_size: vk.DeviceSize,
+	#any_int alloc_size: vk.DeviceSize, // TODO: Possible footgun? Idk, every other time it's annoying.
 	usage: vk.BufferUsageFlags,
 	memory_usage: vma.MemoryUsage,
 	alloc_flags: vma.AllocationCreateFlags = {.MAPPED},

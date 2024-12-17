@@ -73,7 +73,8 @@ Game :: struct {
 	state:              GameState,
 	renderer:           ^gfx.Renderer,
 	input_manager:      ^InputManager,
-	audio_manager:      ^AudioManager,
+	sound_manager:      ^SoundManager,
+	asset_manager:      ^AssetManager,
 	view_state:         ViewState,
 	render_state:       RenderState,
 

@@ -148,7 +148,7 @@ configure_im :: proc() {
 
 update_imgui :: proc() {
 	scope_stat_time(.Imgui)
-	if input_manager.mouse_locked do return
+	// if input_manager.mouse_locked do return
 
 	dl := im.GetForegroundDrawList()
 	bl := im.GetBackgroundDrawList()

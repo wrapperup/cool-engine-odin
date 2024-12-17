@@ -31,7 +31,7 @@ game_init :: proc(window: glfw.WindowHandle) {
 	glfw.Init()
 
 	game.window = window
-	game.window_extent = {1600, 1080}
+	game.window_extent = {1920, 1080}
 
 	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = true, enable_logs = true})
 	if game.renderer == nil {
@@ -40,7 +40,8 @@ game_init :: proc(window: glfw.WindowHandle) {
 
 	game.entity_storage = init_entity_storage()
 	game.input_manager = init_input_manager()
-	game.audio_manager = init_audio_manager()
+	game.sound_manager = init_sound_manager()
+	game.asset_manager = init_asset_manager()
 
 	game_hot_reloaded(game)
 
@@ -49,7 +50,7 @@ game_init :: proc(window: glfw.WindowHandle) {
 	init_physics()
 	init_game_renderer()
 	init_input()
-	init_game_state()
+	init_scene()
 
 	game.frame_time_start = time.tick_now()
 }
@@ -62,7 +63,7 @@ game_init_window :: proc() -> glfw.WindowHandle {
 	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
 	glfw.SwapInterval(1)
 
-	window := glfw.CreateWindow(1600, 1080, "Vulkan", nil, nil)
+	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
 
 	return window
 }
@@ -87,7 +88,7 @@ game_hot_reloaded :: proc(mem: rawptr) {
 	set_entity_storage(game.entity_storage)
 	set_input_manager(game.input_manager)
 	lock_mouse(game.input_manager.mouse_locked)
-	set_audio_manager(game.audio_manager)
+	set_sound_manager(game.sound_manager)
 
 	gfx.load_vulkan_addresses()
 
@@ -98,9 +99,12 @@ game_hot_reloaded :: proc(mem: rawptr) {
 
 init_input :: proc() {
 	add_action_key_mapping(.Jump, glfw.KEY_SPACE)
-	add_action_mouse_mapping(.Fire, glfw.MOUSE_BUTTON_LEFT)
+	add_action_key_mapping(.Sprint, glfw.KEY_LEFT_SHIFT)
+	add_action_key_mapping(.ToggleNoclip, glfw.KEY_V)
 	add_action_key_mapping(.LockCamera, glfw.KEY_M)
 	add_action_key_mapping(.ExitGame, glfw.KEY_ESCAPE)
+
+	add_action_mouse_mapping(.Fire, glfw.MOUSE_BUTTON_LEFT)
 
 	add_axis_key_mapping(.MoveForward, glfw.KEY_W, 1.0)
 	add_axis_key_mapping(.MoveForward, glfw.KEY_S, -1.0)
@@ -162,7 +166,7 @@ init_physics :: proc() {
 // 	scene_add_actor_mut(game.phys.scene, ground_plane, nil)
 }
 
-init_game_state :: proc() {
+init_scene :: proc() {
 	game.render_state.draw_skybox = true
 
 	player := new_entity(Player)
@@ -185,14 +189,14 @@ init_game_state :: proc() {
 	anim_ptr := new(SkeletalAnimation)
 	anim_ptr^ = anim
 
-	for i in 0 ..< grid_size / 2 {
-		for j in 0 ..< grid_size * 4 {
-			for k in 0 ..< grid_size / 2 {
-				ball := new_entity(Ball)
-				init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
-			}
-		}
-	}
+	// for i in 0 ..< grid_size / 2 {
+	// 	for j in 0 ..< grid_size * 4 {
+	// 		for k in 0 ..< grid_size / 2 {
+	// 			ball := new_entity(Ball)
+	// 			init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
+	// 		}
+	// 	}
+	// }
 
 	test_mesh := new_entity(StaticMesh)
 	init_static_mesh(test_mesh, "assets/meshes/static/map_test.glb", 0)

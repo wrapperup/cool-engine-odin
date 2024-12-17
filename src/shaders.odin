@@ -2,6 +2,7 @@ package game
 
 import "core:fmt"
 import "core:os/os2"
+import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 import "core:time"
@@ -29,10 +30,6 @@ init_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callb
 
 	extra_files := get_dependency_file_paths(path)
 
-	for file in extra_files {
-		fmt.println(file)
-	}
-
 	shader := Shader {
 		path                     = path,
 		extra_files              = extra_files,
@@ -48,13 +45,60 @@ init_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callb
 	return shader
 }
 
+get_cached_shader_path :: proc(path: string) -> string {
+	return filepath.join({"shaders", ".cache", filepath.base(path)})
+}
+
+get_last_write_time :: proc(shader: ^Shader) -> time.Time {
+	max_last_write_time: i64
+	last_write_time, ok := os2.last_write_time_by_name(string(shader.path))
+	max_last_write_time = last_write_time._nsec
+
+	for path in shader.extra_files {
+		last, k := os2.last_write_time_by_name(string(path))
+		if last._nsec > max_last_write_time {
+			max_last_write_time = last._nsec
+		}
+	}
+
+	return time.Time{max_last_write_time}
+}
+
 reload_shader_pipeline :: proc(shader: ^Shader) -> bool {
-	code := compile_slang_to_spirv(shader) or_return
+	cached_path := get_cached_shader_path(string(shader.path))
+
+	use_cached_spirv := false
+
+	if os2.exists(cached_path) {
+		shader_last_time := get_last_write_time(shader)
+		cache_time, time_ok := os2.last_write_time_by_name(cached_path)
+		assert(time_ok == nil, "This shouldn't be hit...?")
+
+		if shader_last_time._nsec < cache_time._nsec {
+			use_cached_spirv = true
+		}
+	}
+
+	code: []u8
+
+	if use_cached_spirv {
+		spirv_code, err := os2.read_entire_file_from_path(string(cached_path), context.allocator)
+		if err != nil {
+			return false
+		}
+
+		code = spirv_code
+	} else {
+		code = compile_slang_to_spirv(shader) or_return
+		err := os2.write_entire_file(string(cached_path), code)
+		if err != nil {
+			fmt.println("Warning: Shader couldn't be cached.", err, cached_path)
+		}
+	}
 
 	shader_module, f_ok := gfx.load_shader_module_from_bytes(code)
 	assert(f_ok, "Failed to load shaders.")
 
-	// TODO: Make this async? Currently not a bottleneck.
 	pipeline := shader.pipeline_create_callback(shader_module) or_return
 
 	if shader.pipeline != 0 {

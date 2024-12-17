@@ -1,6 +1,6 @@
 import types;
 
-#define PI 3.14159265359
+static const f32 PI = 3.14159265359;
 
 f32 D_ggx(f32 NoH, f32 a) {
     let a2 = a * a;

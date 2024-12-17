@@ -5,7 +5,7 @@ import brdf;
 import ibl;
 import types;
 
-Vec3 standard_brdf(Vec3 diffuse, float perceptual_roughness, Vec3 v, Vec3 l, Vec3 n, Vec3 h, Vec3 f0, Vec3 f90, f32 NoL) {
+Vec3 standard_bsdf(Vec3 diffuse, float perceptual_roughness, Vec3 v, Vec3 l, Vec3 n, Vec3 h, Vec3 f0, Vec3 f90, f32 NoL) {
     float NoV = abs(dot(n, v)) + 1e-5;
     float NoH = clamp(dot(n, h), 0.0, 1.0);
     float LoH = clamp(dot(l, h), 0.0, 1.0);
