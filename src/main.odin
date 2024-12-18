@@ -213,7 +213,7 @@ init_scene :: proc() {
 
 	game.state = GameState {
 		player_id = entity_id_of(player),
-		environment = Environment{sun_pos = {12, 15, 10}, sun_target = 0.0, sun_color = 2.0, sky_color = 1.0, bias = 0.001},
+		environment = Environment{sun_pos = {12, 15, 10}, sun_target = 0.0, sun_color = 2.0, sky_color = 1.0, bias = 0.0004},
 	}
 }
 
