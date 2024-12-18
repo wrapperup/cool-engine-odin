@@ -1,5 +1,12 @@
 # Things to do
 
+## Usability
+- [ ] Window resizing / minimizing
+
+## Cleanup
+- [ ] Cleanup renderer
+- - [ ] Combine init functions (it's fragmented to like 100 functions bruh)
+
 ## General
 - [ ] Asset system (UUID based)
 - - [ ] Sounds
@@ -24,3 +31,5 @@
 - - [x] Bake from Blender
 - - [ ] Implement with IBL/Mesh shading
 - - [ ] Trilinear Interpolation
+- [ ] Render Pass Abstraction
+- [ ] Render Graph
