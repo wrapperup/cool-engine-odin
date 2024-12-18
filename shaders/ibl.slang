@@ -57,7 +57,7 @@ Vec3 evaluate_ibl(Vec3 n, Vec3 v, Vec3 diffuse_color, Vec3 f0, f32 p_roughness, 
     let Lr = lerp(Ldfg.xxx, Ldfg.yyy, f0);
 #else
     // TODO: FIX: This is absolutety wrong, but the DFG2 term seems way too harsh...
-    let Lr = (f0 * Ldfg.r + f90/20.f * Ldfg.g) * Lld;
+    let Lr = (f0 * Ldfg.r + f90 * Ldfg.g) * Lld;
 #endif
 
     let diffuse_irradiance = irradiance_sh(n, sh);

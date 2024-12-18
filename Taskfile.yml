@@ -24,6 +24,12 @@ tasks:
       - task build-debug
       - powershell ./scripts/debug-rad.ps1
 
+  build-shaders-tools:
+    sources:
+      - shaders/**/*.slang
+    cmds:
+      - pwsh ./scripts/build-shaders-tools.ps1
+
   build-shaders:
     sources:
       - shaders/**/*.slang
@@ -56,7 +62,7 @@ tasks:
     sources:
       - src/**/*.odin
       - tools/**/*.odin
-    deps: [build-shaders]
+    deps: [build-shaders-tools]
     cmds:
       - odin build ./tools/dfg.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -linker:lld
 
@@ -64,7 +70,7 @@ tasks:
     sources:
       - src/**/*.odin
       - tools/**/*.odin
-    deps: [build-shaders]
+    deps: [build-shaders-tools]
     cmds:
       - odin build ./tools/prefilter.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -linker:lld
 
@@ -72,7 +78,7 @@ tasks:
     sources:
       - src/**/*.odin
       - tools/**/*.odin
-    deps: [build-shaders]
+    deps: [build-shaders-tools]
     cmds:
       - odin build ./tools/sh.odin -file --collection:deps=./deps --ignore-unknown-attributes -o:aggressive -linker:lld
 

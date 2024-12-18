@@ -22,7 +22,7 @@ void compute_main(uint3 dispatchThreadID: SV_DispatchThreadID) {
   uint2 size;
   RESOLVED_IMAGE_ID.get_dimensions(size.x, size.y);
 
-  let exposure = 3.0f;
+  let exposure = 4.0f;
   if (texel_coord.x < size.x && texel_coord.y < size.y) {
     let hdr_color = RESOLVED_IMAGE_ID.load(texel_coord).rgb * exposure;
     let mapped = tony_mc_mapface(hdr_color);
