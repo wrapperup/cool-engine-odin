@@ -262,7 +262,7 @@ init_bindless_descriptors :: proc() {
 	env := gfx.load_image_from_file("assets/gen/test_cubemap_ld.ktx2", .D2, .CUBE)
 
 	// Default Texture Sampler
-	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .REPEAT)
+	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .REPEAT, max_lod = 10.0)
 	gfx.defer_destroy(&gfx.renderer().global_arena, TEMP_mesh_image_sampler)
 
 	// Shadow Depth Texture Sampler
