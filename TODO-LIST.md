@@ -21,6 +21,6 @@
 - [ ] Make shadow map follow camera
 - [ ] Shadow Cascades
 - [ ] Irradiance Volumes
-- - [ ] Bake from Blender
+- - [x] Bake from Blender
 - - [ ] Implement with IBL/Mesh shading
 - - [ ] Trilinear Interpolation
