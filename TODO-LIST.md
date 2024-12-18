@@ -2,6 +2,7 @@
 
 ## Usability
 - [x] Window resizing / minimizing
+- [x] Full screen toggle
 
 ## Cleanup
 - [ ] Cleanup renderer

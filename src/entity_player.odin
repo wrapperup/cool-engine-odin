@@ -194,14 +194,8 @@ update_player :: proc(player: ^Player, dt: f64) {
 				return 0
 			}
 
-			when false {
-				// Quake
-				acceleration_change := (max_acceleration * max_speed * f32(dt)) * requested_dir
-			} else {
-				// Unreal
-				acceleration_change := ((max_speed * requested_dir) - current_velocity) / f32(dt)
-				acceleration_change = linalg.clamp_length(acceleration_change, max_acceleration)
-			}
+			acceleration_change := ((max_speed * requested_dir) - current_velocity) / f32(dt)
+			acceleration_change = linalg.clamp_length(acceleration_change, max_acceleration)
 
 			return acceleration_change
 		}

@@ -12,6 +12,7 @@ Action :: enum {
 	Sprint,
 	ToggleNoclip,
 	LockCamera,
+	Fullscreen,
 	ExitGame,
 }
 

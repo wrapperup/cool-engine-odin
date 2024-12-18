@@ -60,8 +60,9 @@ game_init_window :: proc() -> glfw.WindowHandle {
 	glfw.Init()
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	// glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
+	glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
 	glfw.SwapInterval(1)
+
 
 	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
 
@@ -102,6 +103,7 @@ init_input :: proc() {
 	add_action_key_mapping(.Sprint, glfw.KEY_LEFT_SHIFT)
 	add_action_key_mapping(.ToggleNoclip, glfw.KEY_V)
 	add_action_key_mapping(.LockCamera, glfw.KEY_M)
+	add_action_key_mapping(.Fullscreen, glfw.KEY_F11)
 	add_action_key_mapping(.ExitGame, glfw.KEY_ESCAPE)
 
 	add_action_mouse_mapping(.Fire, glfw.MOUSE_BUTTON_LEFT)
@@ -249,6 +251,34 @@ game_update :: proc() -> bool {
 	if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
 		update_imgui()
 		draw()
+	}
+
+	if action_just_pressed(.Fullscreen) {
+		// 
+		game.window_state.is_fullscreen = !game.window_state.is_fullscreen
+
+		monitor := glfw.GetPrimaryMonitor()
+		mode := glfw.GetVideoMode(monitor)
+
+		if game.window_state.is_fullscreen {
+			x, y := glfw.GetWindowPos(game.window)
+			w, h := glfw.GetWindowSize(game.window)
+
+			game.window_state.windowed_pos = {x, y}
+			game.window_state.windowed_size = {w, h}
+
+			glfw.SetWindowMonitor(game.window, monitor, 0, 0, mode.width, mode.height, mode.refresh_rate)
+		} else {
+			glfw.SetWindowMonitor(
+				game.window,
+				nil,
+				game.window_state.windowed_pos.x,
+				game.window_state.windowed_pos.y,
+				game.window_state.windowed_size.x,
+				game.window_state.windowed_size.y,
+				mode.refresh_rate,
+			)
+		}
 	}
 
 	return true
