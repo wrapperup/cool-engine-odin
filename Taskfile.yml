@@ -31,6 +31,9 @@ tasks:
       - pwsh ./scripts/build-shaders.ps1
 
   build-debug:
+    sources:
+      - src/**/*.odin
+      - main_hotreload/**/*.odin
     cmds:
       - pwsh ./scripts/build-debug.ps1
 
@@ -40,6 +43,8 @@ tasks:
       - pwsh ./scripts/build-release.ps1
 
   build-hotreload:
+    sources:
+      - src/**/*.odin
     cmds:
       - pwsh ./scripts/build-hotreload.ps1
 
