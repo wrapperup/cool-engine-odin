@@ -194,8 +194,6 @@ add_texture :: proc(image: gfx.GPUImage) -> TextureId {
 
 	append(&scene_resources.bindless_textures, image)
 
-	fmt.println("id:", texture_id)
-
 	gfx.write_descriptor_set(
 		game.render_state.bindless_descriptor_set,
 		{
