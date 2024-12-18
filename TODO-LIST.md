@@ -5,6 +5,7 @@
 
 ## Cleanup
 - [ ] Cleanup renderer
+- - [ ] Window should just be handled by the renderer? messy...
 - - [ ] Combine init functions (it's fragmented to like 100 functions bruh)
 
 ## General

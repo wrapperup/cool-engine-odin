@@ -9,6 +9,7 @@ import "core:mem"
 import "core:os/os2"
 import "core:time"
 
+import "vendor:glfw"
 import vk "vendor:vulkan"
 
 import sp "deps:odin-slang/slang"
@@ -124,6 +125,14 @@ RenderState :: struct {
 		materials_buffer:             gfx.GPUBuffer,
 		point_lights:                 [256]GPU_Point_Light,
 		point_light_buffer:           gfx.GPUBuffer,
+	},
+	temp_resources:             struct {
+		tony_mc_mapface:      gfx.GPUImage,
+		dfg:                  gfx.GPUImage,
+		env:                  gfx.GPUImage,
+		mesh_image_sampler:   vk.Sampler,
+		shadow_depth_sampler: vk.Sampler,
+		env_sampler:          vk.Sampler,
 	},
 	shaders:                    [dynamic]Shader,
 	global_session:             ^sp.IGlobalSession,
@@ -272,6 +281,24 @@ init_bindless_descriptors :: proc() {
 	env_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE, max_lod = 8.0)
 	gfx.defer_destroy(&gfx.renderer().global_arena, env_sampler)
 
+	game.render_state.temp_resources.tony_mc_mapface = tony_mc_mapface
+	game.render_state.temp_resources.dfg = dfg
+	game.render_state.temp_resources.env = env
+	game.render_state.temp_resources.mesh_image_sampler = TEMP_mesh_image_sampler
+	game.render_state.temp_resources.shadow_depth_sampler = shadow_depth_sampler
+	game.render_state.temp_resources.env_sampler = env_sampler
+
+	write_bindless_descriptors()
+}
+
+write_bindless_descriptors :: proc() {
+	tony_mc_mapface := game.render_state.temp_resources.tony_mc_mapface
+	dfg := game.render_state.temp_resources.dfg
+	env := game.render_state.temp_resources.env
+	mesh_image_sampler := game.render_state.temp_resources.mesh_image_sampler
+	shadow_depth_sampler := game.render_state.temp_resources.shadow_depth_sampler
+	env_sampler := game.render_state.temp_resources.env_sampler
+
 	gfx.write_descriptor_set(
 		game.render_state.bindless_descriptor_set,
 		{
@@ -300,7 +327,7 @@ init_bindless_descriptors :: proc() {
 			{
 				binding = 1,
 				type = .SAMPLER,
-				sampler = TEMP_mesh_image_sampler,
+				sampler = mesh_image_sampler,
 				image_layout = .READ_ONLY_OPTIMAL,
 				array_index = DEFAULT_SAMPLER_ID,
 			},
@@ -550,6 +577,9 @@ draw :: proc() {
 	cmd := gfx.begin_command_buffer()
 
 	update_buffers()
+
+	// TODO: This updates every frame... probably bad?
+	write_bindless_descriptors()
 
 	// Begin Skinning pass
 	for instance in current_frame_game().skel_instances {
@@ -851,7 +881,7 @@ skybox_pass :: proc(cmd: vk.CommandBuffer) {
 
 	player := get_entity(game.state.player_id)
 
-	aspect_ratio := f32(game.window_extent.x) / f32(game.window_extent.y)
+	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
 
 	rotation := linalg.matrix4_from_quaternion(player != nil ? player.rotation : {})
 
@@ -950,5 +980,8 @@ update_buffers :: proc() {
 		game.render_state.scene_resources.point_lights[i] = point_light_to_gpu(point_light)
 	}
 
-	gfx.staging_write_buffer_slice(&game.render_state.scene_resources.point_light_buffer, game.render_state.scene_resources.point_lights[:])
+	gfx.staging_write_buffer_slice(
+		&game.render_state.scene_resources.point_light_buffer,
+		game.render_state.scene_resources.point_lights[:],
+	)
 }

@@ -388,7 +388,7 @@ update_player :: proc(player: ^Player, dt: f64) {
 // }
 
 get_view_matrix :: proc(player: ^Player) -> matrix[4, 4]f32 {
-	aspect_ratio := f32(game.window_extent.x) / f32(game.window_extent.y)
+	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
 
 	translation := linalg.matrix4_translate(player != nil ? player.translation : {})
 	rotation := linalg.matrix4_from_quaternion(player != nil ? player.rotation : {})
@@ -397,7 +397,7 @@ get_view_matrix :: proc(player: ^Player) -> matrix[4, 4]f32 {
 }
 
 get_projection_matrix :: proc(player: ^Player) -> matrix[4, 4]f32 {
-	aspect_ratio := f32(game.window_extent.x) / f32(game.window_extent.y)
+	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
 
 	projection_matrix := gfx.matrix4_infinite_perspective_z0_f32(
 		linalg.to_radians(player != nil ? player.camera_fov_deg : 0),
@@ -423,5 +423,5 @@ world_space_to_clip_space :: proc(view_projection: matrix[4, 4]f32, vec: Vec3) -
 	if clip_vec.y < -1 do ok = false
 	if clip_vec.z < -1 do ok = false
 
-	return (clip_vec.xy * 0.5 + 0.5) * [2]f32{f32(game.window_extent.x), f32(game.window_extent.y)}, ok
+	return (clip_vec.xy * 0.5 + 0.5) * [2]f32{f32(gfx.renderer().draw_extent.width), f32(gfx.renderer().draw_extent.height)}, ok
 }

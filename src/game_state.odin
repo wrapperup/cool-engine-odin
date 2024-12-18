@@ -69,7 +69,6 @@ init_skeletal_mesh_instance :: proc(skel: ^Skeleton, anim: ^SkeletalAnimation) -
 
 Game :: struct {
 	window:             glfw.WindowHandle,
-	window_extent:      [2]u32,
 	state:              GameState,
 	renderer:           ^gfx.Renderer,
 	input_manager:      ^InputManager,

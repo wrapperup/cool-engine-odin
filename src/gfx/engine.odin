@@ -54,6 +54,7 @@ Renderer :: struct {
 	instance:                    vk.Instance,
 	physical_device:             vk.PhysicalDevice,
 	device:                      vk.Device,
+	window:                      glfw.WindowHandle,
 
 	// Queues
 	graphics_queue:              vk.Queue,
@@ -61,12 +62,7 @@ Renderer :: struct {
 	surface:                     vk.SurfaceKHR,
 
 	// Swapchain
-	swapchain:                   vk.SwapchainKHR,
-	swapchain_images:            []vk.Image,
-	swapchain_image_index:       u32,
-	swapchain_image_views:       []vk.ImageView,
-	swapchain_image_format:      vk.Format,
-	swapchain_extent:            vk.Extent2D,
+	swapchain:                   Swapchain,
 
 	// Command Pool/Buffer
 	frames:                      [FRAME_OVERLAP]FrameData,
@@ -93,6 +89,145 @@ Renderer :: struct {
 	imgui_ctx:                   ^im.Context,
 	imgui_init:                  bool,
 	imgui_pool:                  vk.DescriptorPool,
+}
+
+Swapchain :: struct {
+	swapchain:              vk.SwapchainKHR,
+	swapchain_images:       []vk.Image,
+	swapchain_image_index:  u32,
+	swapchain_image_views:  []vk.ImageView,
+	swapchain_image_format: vk.Format,
+	swapchain_extent:       vk.Extent2D,
+}
+
+create_swapchain :: proc() {
+	capabilities: vk.SurfaceCapabilitiesKHR
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(r_ctx.physical_device, r_ctx.surface, &capabilities)
+
+	format_count: u32
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(r_ctx.physical_device, r_ctx.surface, &format_count, nil)
+
+	formats := make([]vk.SurfaceFormatKHR, format_count)
+	defer delete(formats)
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(r_ctx.physical_device, r_ctx.surface, &format_count, raw_data(formats))
+
+
+	present_mode_count: u32
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(r_ctx.physical_device, r_ctx.surface, &present_mode_count, nil)
+
+	present_modes := make([]vk.PresentModeKHR, present_mode_count)
+	defer delete(present_modes)
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(r_ctx.physical_device, r_ctx.surface, &present_mode_count, raw_data(present_modes))
+
+	surface_format := formats[0]
+
+	for format in formats {
+		if format.format == .B8G8R8A8_UNORM && format.colorSpace == .SRGB_NONLINEAR {
+			surface_format = format
+		}
+	}
+
+	present_mode := choose_swap_present_mode(present_modes)
+	extent := choose_swap_extent(r_ctx.window, &capabilities)
+
+	image_count := capabilities.minImageCount + 1
+
+	if capabilities.maxImageCount > 0 && image_count > capabilities.maxImageCount {
+		image_count = capabilities.maxImageCount
+	}
+
+	old_swapchain := r_ctx.swapchain.swapchain
+
+	create_info := vk.SwapchainCreateInfoKHR {
+		sType                 = .SWAPCHAIN_CREATE_INFO_KHR,
+		surface               = r_ctx.surface,
+		minImageCount         = image_count,
+		imageFormat           = surface_format.format,
+		imageColorSpace       = surface_format.colorSpace,
+		imageExtent           = extent,
+		imageArrayLayers      = 1,
+		imageUsage            = {.COLOR_ATTACHMENT, .TRANSFER_DST},
+
+		// TODO: Support multiple queues?
+		imageSharingMode      = .EXCLUSIVE,
+		queueFamilyIndexCount = 0, // Optional
+		pQueueFamilyIndices   = nil, // Optional
+		preTransform          = capabilities.currentTransform,
+		compositeAlpha        = {.OPAQUE},
+		presentMode           = present_mode,
+		clipped               = true,
+		oldSwapchain          = old_swapchain,
+	}
+
+	swapchain := &r_ctx.swapchain
+
+	vk_check(vk.CreateSwapchainKHR(r_ctx.device, &create_info, nil, &swapchain.swapchain))
+
+	vk.GetSwapchainImagesKHR(r_ctx.device, swapchain.swapchain, &image_count, nil)
+	swapchain.swapchain_images = make([]vk.Image, image_count)
+	vk.GetSwapchainImagesKHR(r_ctx.device, swapchain.swapchain, &image_count, raw_data(swapchain.swapchain_images))
+
+	swapchain.swapchain_image_format = surface_format.format
+	swapchain.swapchain_extent = extent
+
+	swapchain.swapchain_image_views = make([]vk.ImageView, len(swapchain.swapchain_images))
+
+	for i in 0 ..< len(swapchain.swapchain_images) {
+		create_info := vk.ImageViewCreateInfo {
+			sType = .IMAGE_VIEW_CREATE_INFO,
+			image = swapchain.swapchain_images[i],
+			viewType = .D2,
+			format = swapchain.swapchain_image_format,
+			components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
+			subresourceRange = {aspectMask = {.COLOR}, baseMipLevel = 0, levelCount = 1, baseArrayLayer = 0, layerCount = 1},
+		}
+
+		vk_check(vk.CreateImageView(r_ctx.device, &create_info, nil, &swapchain.swapchain_image_views[i]))
+	}
+
+	x, y := glfw.GetWindowSize(r_ctx.window)
+
+	draw_image_format: vk.Format = .R32G32B32A32_SFLOAT
+	draw_image_extent := vk.Extent3D{u32(x), u32(y), 1}
+	draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
+
+	r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = r_ctx.msaa_samples)
+	create_image_view(&r_ctx.draw_image, {.COLOR})
+	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
+	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image_view)
+
+	// Used for MSAA resolution
+	r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
+	create_image_view(&r_ctx.resolve_image, {.COLOR})
+	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image, r_ctx.resolve_image.allocation)
+	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image_view)
+
+	r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = r_ctx.msaa_samples)
+	create_image_view(&r_ctx.depth_image, {.DEPTH})
+	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image, r_ctx.depth_image.allocation)
+	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image_view)
+
+	r_ctx.draw_extent.width = r_ctx.draw_image.extent.width
+	r_ctx.draw_extent.height = r_ctx.draw_image.extent.height
+}
+
+destroy_swapchain_resources :: proc() {
+
+	// We don't need to delete the images, it was created by the driver
+	// However, we did create the views, so we will destroy those now.
+	for image_view in r_ctx.swapchain.swapchain_image_views {
+		vk.DestroyImageView(r_ctx.device, image_view, nil)
+	}
+
+	delete(r_ctx.swapchain.swapchain_image_views)
+	delete(r_ctx.swapchain.swapchain_images)
+}
+
+resize_swapchain :: proc() {
+	vk.DeviceWaitIdle(r_ctx.device)
+
+	destroy_swapchain_resources()
+	create_swapchain()
 }
 
 FrameData :: struct {
@@ -162,6 +297,7 @@ set_renderer :: proc(r: ^Renderer) {
 
 init_vulkan :: proc(config: InitConfig) -> bool {
 	r_ctx.enable_logs = config.enable_logs
+	r_ctx.window = config.window
 
 	{
 		// Loads vulkan api functions needed to create an instance
@@ -262,8 +398,8 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		}
 	}
 
-	if config.window != nil {
-		vk_check(glfw.CreateWindowSurface(r_ctx.instance, config.window, nil, &r_ctx.surface))
+	if r_ctx.window != nil {
+		vk_check(glfw.CreateWindowSurface(r_ctx.instance, r_ctx.window, nil, &r_ctx.surface))
 	}
 
 	{
@@ -348,115 +484,10 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		vma.CreateAllocator(&allocator_info, &r_ctx.allocator)
 	}
 
-	if config.window != nil {
-		capabilities: vk.SurfaceCapabilitiesKHR
-		vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(r_ctx.physical_device, r_ctx.surface, &capabilities)
+	r_ctx.msaa_samples = config.msaa_samples
 
-		format_count: u32
-		vk.GetPhysicalDeviceSurfaceFormatsKHR(r_ctx.physical_device, r_ctx.surface, &format_count, nil)
-
-		formats := make([]vk.SurfaceFormatKHR, format_count)
-		defer delete(formats)
-		vk.GetPhysicalDeviceSurfaceFormatsKHR(r_ctx.physical_device, r_ctx.surface, &format_count, raw_data(formats))
-
-
-		present_mode_count: u32
-		vk.GetPhysicalDeviceSurfacePresentModesKHR(r_ctx.physical_device, r_ctx.surface, &present_mode_count, nil)
-
-		present_modes := make([]vk.PresentModeKHR, present_mode_count)
-		defer delete(present_modes)
-		vk.GetPhysicalDeviceSurfacePresentModesKHR(r_ctx.physical_device, r_ctx.surface, &present_mode_count, raw_data(present_modes))
-
-		surface_format := formats[0]
-
-		for format in formats {
-			if format.format == .B8G8R8A8_UNORM && format.colorSpace == .SRGB_NONLINEAR {
-				surface_format = format
-			}
-		}
-
-		present_mode := choose_swap_present_mode(present_modes)
-		extent := choose_swap_extent(config.window, &capabilities)
-
-		image_count := capabilities.minImageCount + 1
-
-		if capabilities.maxImageCount > 0 && image_count > capabilities.maxImageCount {
-			image_count = capabilities.maxImageCount
-		}
-
-		create_info := vk.SwapchainCreateInfoKHR {
-			sType                 = .SWAPCHAIN_CREATE_INFO_KHR,
-			surface               = r_ctx.surface,
-			minImageCount         = image_count,
-			imageFormat           = surface_format.format,
-			imageColorSpace       = surface_format.colorSpace,
-			imageExtent           = extent,
-			imageArrayLayers      = 1,
-			imageUsage            = {.COLOR_ATTACHMENT, .TRANSFER_DST},
-
-			// TODO: Support multiple queues?
-			imageSharingMode      = .EXCLUSIVE,
-			queueFamilyIndexCount = 0, // Optional
-			pQueueFamilyIndices   = nil, // Optional
-			preTransform          = capabilities.currentTransform,
-			compositeAlpha        = {.OPAQUE},
-			presentMode           = present_mode,
-			clipped               = true,
-			oldSwapchain          = {},
-		}
-
-		vk_check(vk.CreateSwapchainKHR(r_ctx.device, &create_info, nil, &r_ctx.swapchain))
-
-		vk.GetSwapchainImagesKHR(r_ctx.device, r_ctx.swapchain, &image_count, nil)
-		r_ctx.swapchain_images = make([]vk.Image, image_count)
-		vk.GetSwapchainImagesKHR(r_ctx.device, r_ctx.swapchain, &image_count, raw_data(r_ctx.swapchain_images))
-
-		r_ctx.swapchain_image_format = surface_format.format
-		r_ctx.swapchain_extent = extent
-
-		r_ctx.swapchain_image_views = make([]vk.ImageView, len(r_ctx.swapchain_images))
-
-		for i in 0 ..< len(r_ctx.swapchain_images) {
-			create_info := vk.ImageViewCreateInfo {
-				sType = .IMAGE_VIEW_CREATE_INFO,
-				image = r_ctx.swapchain_images[i],
-				viewType = .D2,
-				format = r_ctx.swapchain_image_format,
-				components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
-				subresourceRange = {aspectMask = {.COLOR}, baseMipLevel = 0, levelCount = 1, baseArrayLayer = 0, layerCount = 1},
-			}
-
-			vk_check(vk.CreateImageView(r_ctx.device, &create_info, nil, &r_ctx.swapchain_image_views[i]))
-		}
-	}
-
-	if config.window != nil {
-		x, y := glfw.GetWindowSize(config.window)
-
-		r_ctx.msaa_samples = config.msaa_samples
-
-		draw_image_format: vk.Format = .R32G32B32A32_SFLOAT
-		draw_image_extent := vk.Extent3D{u32(x), u32(y), 1}
-		draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
-
-		r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = config.msaa_samples)
-		create_image_view(&r_ctx.draw_image, {.COLOR})
-
-		// Used for MSAA resolution
-		r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
-		create_image_view(&r_ctx.resolve_image, {.COLOR})
-
-		r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = config.msaa_samples)
-		create_image_view(&r_ctx.depth_image, {.DEPTH})
-
-		defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image_view)
-		defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image, r_ctx.depth_image.allocation)
-
-		defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image_view)
-		defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image, r_ctx.resolve_image.allocation)
-
-		defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image_view)
-		defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
+	if r_ctx.window != nil {
+		create_swapchain()
 	}
 
 	{
@@ -505,7 +536,7 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		defer_destroy(&r_ctx.global_arena, r_ctx.imm_fence)
 	}
 
-	if config.window != nil {
+	if r_ctx.window != nil {
 		pool_sizes := []vk.DescriptorPoolSize {
 			{.SAMPLER, 1000},
 			{.COMBINED_IMAGE_SAMPLER, 1000},
@@ -533,7 +564,7 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		r_ctx.imgui_ctx = im.CreateContext()
 		im.SetCurrentContext(r_ctx.imgui_ctx)
 
-		im_glfw.InitForVulkan(config.window, true)
+		im_glfw.InitForVulkan(r_ctx.window, true)
 
 		// this initializes imgui for Vulkan
 		init_info := im_vk.InitInfo {
@@ -545,7 +576,7 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 			MinImageCount         = 3,
 			ImageCount            = 3,
 			UseDynamicRendering   = true,
-			ColorAttachmentFormat = r_ctx.swapchain_image_format,
+			ColorAttachmentFormat = r_ctx.swapchain.swapchain_image_format,
 			MSAASamples           = {._1},
 		}
 
@@ -596,16 +627,10 @@ cleanup_vulkan :: proc() {
 		delete_vk_arena(frame.arena)
 	}
 
-	vk.DestroySwapchainKHR(r_ctx.device, r_ctx.swapchain, nil)
-
-	// We don't need to delete the images, it was created by the driver
-	// However, we did create the views, so we will destroy those now.
-	for &image_view in &r_ctx.swapchain_image_views {
-		vk.DestroyImageView(r_ctx.device, image_view, nil)
+	if r_ctx.swapchain.swapchain != 0 {
+		vk.DestroySwapchainKHR(r_ctx.device, r_ctx.swapchain.swapchain, nil)
+		destroy_swapchain_resources()
 	}
-
-	delete(r_ctx.swapchain_image_views)
-	delete(r_ctx.swapchain_images)
 
 	// Headless mode
 	if r_ctx.surface != 0 {
@@ -667,6 +692,8 @@ is_shaders_updated :: proc() -> bool {
 }
 
 // Called by the user before they start drawing to the screen.
+// This command can fail if the window changes size, if `ok` returns false, then don't
+// draw anything to the screen. Wait for the window to finish polling.
 begin_command_buffer :: proc() -> vk.CommandBuffer {
 	render_imgui()
 
@@ -675,16 +702,21 @@ begin_command_buffer :: proc() -> vk.CommandBuffer {
 	// Delete resources for the current frame
 	flush_vk_arena(&current_frame().arena)
 
-	vk_check(
-		vk.AcquireNextImageKHR(
-			r_ctx.device,
-			r_ctx.swapchain,
-			1_000_000_000,
-			current_frame().swapchain_semaphore,
-			vk.Fence(0), // null
-			&r_ctx.swapchain_image_index,
-		),
+	acquire_image_result := vk.AcquireNextImageKHR(
+		r_ctx.device,
+		r_ctx.swapchain.swapchain,
+		1_000_000_000,
+		current_frame().swapchain_semaphore,
+		0,
+		&r_ctx.swapchain.swapchain_image_index,
 	)
+
+	if acquire_image_result == .ERROR_OUT_OF_DATE_KHR {
+		resize_swapchain()
+		return nil
+	} else {
+		vk_check(acquire_image_result)
+	}
 
 	r_ctx.draw_extent.width = r_ctx.draw_image.extent.width
 	r_ctx.draw_extent.height = r_ctx.draw_image.extent.height
@@ -707,21 +739,37 @@ begin_command_buffer :: proc() -> vk.CommandBuffer {
 }
 
 copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_size: vk.Extent2D) {
-	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+	transition_image(cmd, r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
-	copy_image_to_image(cmd, source, r_ctx.swapchain_images[r_ctx.swapchain_image_index], src_size, r_ctx.swapchain_extent)
+	copy_image_to_image(
+		cmd,
+		source,
+		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
+		src_size,
+		r_ctx.swapchain.swapchain_extent,
+	)
 }
 
 // Called by the user when they end drawing to the screen.
 submit :: proc(cmd: vk.CommandBuffer) {
 	// set swapchain image layout to Attachment Optimal so we can draw it
-	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .TRANSFER_DST_OPTIMAL, .COLOR_ATTACHMENT_OPTIMAL)
+	transition_image(
+		cmd,
+		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
+		.TRANSFER_DST_OPTIMAL,
+		.COLOR_ATTACHMENT_OPTIMAL,
+	)
 
 	//draw imgui into the swapchain image
-	draw_imgui(cmd, r_ctx.swapchain_image_views[r_ctx.swapchain_image_index])
+	draw_imgui(cmd, r_ctx.swapchain.swapchain_image_views[r_ctx.swapchain.swapchain_image_index])
 
 	// set swapchain image layout to Present so we can show it on the screen
-	transition_image(cmd, r_ctx.swapchain_images[r_ctx.swapchain_image_index], .COLOR_ATTACHMENT_OPTIMAL, .PRESENT_SRC_KHR)
+	transition_image(
+		cmd,
+		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
+		.COLOR_ATTACHMENT_OPTIMAL,
+		.PRESENT_SRC_KHR,
+	)
 
 	//finalize the command buffer (we can no longer add commands, but it can now be executed)
 	vk_check(vk.EndCommandBuffer(cmd))
@@ -733,20 +781,25 @@ submit :: proc(cmd: vk.CommandBuffer) {
 
 	submit := init_submit_info(&cmd_info, &signal_info, &wait_info)
 
-	x := r_ctx.swapchain_image_index
-
 	vk_check(vk.QueueSubmit2(r_ctx.graphics_queue, 1, &submit, current_frame().render_fence))
 
 	present_info := vk.PresentInfoKHR {
 		sType              = .PRESENT_INFO_KHR,
-		pSwapchains        = &r_ctx.swapchain,
+		pSwapchains        = &r_ctx.swapchain.swapchain,
 		swapchainCount     = 1,
 		pWaitSemaphores    = &current_frame().render_semaphore,
 		waitSemaphoreCount = 1,
-		pImageIndices      = &r_ctx.swapchain_image_index,
+		pImageIndices      = &r_ctx.swapchain.swapchain_image_index,
 	}
 
-	vk_check(vk.QueuePresentKHR(r_ctx.graphics_queue, &present_info))
+	queue_present_result := vk.QueuePresentKHR(r_ctx.graphics_queue, &present_info)
+
+	if queue_present_result == .ERROR_OUT_OF_DATE_KHR {
+		resize_swapchain()
+	} else {
+		// TODO: Do normal assert check, maybe other cases though?
+		vk_check(queue_present_result)
+	}
 
 	r_ctx.frame_number += 1
 }
@@ -875,7 +928,7 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 	extensions_supported := check_device_extension_support(device)
 
 	// Headless mode
-	if r_ctx.swapchain == 0 {
+	if r_ctx.swapchain.swapchain == 0 {
 		return extensions_supported && properties.deviceType == .DISCRETE_GPU && supports_features
 	}
 

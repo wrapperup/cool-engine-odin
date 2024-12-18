@@ -32,7 +32,6 @@ game_init :: proc(window: glfw.WindowHandle) {
 	glfw.Init()
 
 	game.window = window
-	game.window_extent = {1920, 1080}
 
 	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = true, enable_logs = true})
 	if game.renderer == nil {
@@ -61,7 +60,7 @@ game_init_window :: proc() -> glfw.WindowHandle {
 	glfw.Init()
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
+	// glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
 	glfw.SwapInterval(1)
 
 	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
@@ -237,16 +236,20 @@ game_update :: proc() -> bool {
 
 	glfw.PollEvents()
 
-	im_vk.NewFrame()
-	im_glfw.NewFrame()
-	im.NewFrame()
+	if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
+		im_vk.NewFrame()
+		im_glfw.NewFrame()
+		im.NewFrame()
+	}
 
 	simulate_input()
 	update_physics(game.delta_time)
 	update_game_state(game.delta_time)
-	update_imgui()
 
-	draw()
+	if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
+		update_imgui()
+		draw()
+	}
 
 	return true
 }
