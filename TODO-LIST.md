@@ -22,3 +22,5 @@
 - [ ] Shadow Cascades
 - [ ] Irradiance Volumes
 - - [ ] Bake from Blender
+- - [ ] Implement with IBL/Mesh shading
+- - [ ] Trilinear Interpolation
