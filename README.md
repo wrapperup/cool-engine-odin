@@ -10,7 +10,7 @@
 - IBL
 - Love!
 - Dear ImGui integration (is this a feature?)
-- There was jolt but I removed it and haven't added it back yet.
+- Physics (with Physx 5.1)
 
 ## Dependencies
 
