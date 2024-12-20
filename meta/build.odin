@@ -10,6 +10,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:reflect"
 import "core:strings"
+import "core:time"
 
 supported_type_map := map[string]string {
 	"f32" = "float",
@@ -19,22 +20,25 @@ supported_type_map := map[string]string {
 	"u8"  = "uint8_t",
 }
 
-FileCollectionContext :: struct {
-	parser: ^parser.Parser,
-	files:  ^[dynamic]^ast.File,
-}
-
-collect_files :: proc(path: string) -> (files: [dynamic]^ast.File, success: bool) {
-	p := parser.default_parser()
-
+collect_files :: proc(path: string) -> (ast_files: [dynamic]^ast.File, success: bool) {
 	NO_POS :: tokenizer.Pos{}
 
 	pkg_path, pkg_path_ok := filepath.abs(path)
 	assert(pkg_path_ok)
 
-	ctx := FileCollectionContext {
-		parser = &p,
-		files  = &files,
+	files: [dynamic]string
+	fullpaths: [dynamic]string
+
+	FileParseContext :: struct {
+		files:     ^[dynamic]string,
+		ast_files: ^[dynamic]^ast.File,
+		fullpaths: ^[dynamic]string,
+	}
+
+	parse_ctx := FileParseContext {
+		files     = &files,
+		fullpaths = &fullpaths,
+		ast_files = &ast_files,
 	}
 
 	filepath.walk(pkg_path, proc(info: os.File_Info, in_err: os.Error, user_data: rawptr) -> (err: os.Error, skip_dir: bool) {
@@ -42,14 +46,14 @@ collect_files :: proc(path: string) -> (files: [dynamic]^ast.File, success: bool
 
 			assert(user_data != nil)
 
-			ctx := cast(^FileCollectionContext)user_data
+			ctx := cast(^FileParseContext)user_data
 
-			fullpath := info.fullpath
+			fullpath := strings.clone(info.fullpath)
 			src, ok := os.read_entire_file(fullpath)
 			if !ok {
 				delete(fullpath)
 				fmt.eprintln("Couldn't read file:", fullpath)
-				assert(false)
+				assert(false, "YAY")
 			}
 
 			if strings.trim_space(string(src)) == "" {
@@ -58,15 +62,28 @@ collect_files :: proc(path: string) -> (files: [dynamic]^ast.File, success: bool
 				return
 			}
 
+			append(ctx.fullpaths, string(fullpath))
+			append(ctx.files, string(src))
+			return
+		}, &parse_ctx)
+
+	resize(&ast_files, len(files))
+
+	parallel_for(len(files), proc(i: int, data: rawptr) {
+			p := parser.default_parser()
+			ctx := cast(^FileParseContext)data
+
+			src_file := ctx.files[i]
+			fullpath := ctx.fullpaths[i]
+
 			file := ast.new(ast.File, NO_POS, NO_POS)
-			file.src = string(src)
+			file.src = string(src_file)
 			file.fullpath = fullpath
 
-			assert(parser.parse_file(ctx.parser, file))
-			append(ctx.files, file)
+			assert(parser.parse_file(&p, file))
 
-			return
-		}, &ctx)
+			ctx.ast_files[i] = file
+		}, &parse_ctx)
 
 	success = true
 	return
@@ -93,10 +110,19 @@ get_type_string :: proc(node: ^ast.Any_Node) -> (type_name: string, is_pointer: 
 }
 
 main :: proc() {
+	start_time := time.now()
+
+	init_parallel_for_thread_pool(12)
+
 	files, ok := collect_files("./src")
 	assert(ok)
 
+	generate_shader_bindings(files[:])
 
+	fmt.println("Finished in", time.since(start_time))
+}
+
+generate_shader_bindings :: proc(files: []^ast.File) {
 	// bind_structs: map[string]ShaderStruct
 	bind_structs: [dynamic]ShaderStruct
 
@@ -150,7 +176,11 @@ main :: proc() {
 				write_type: string
 
 				field_type, is_pointer, is_array, num_elems, ty_ok := get_type_string(&field.type.derived)
-				assert(ty_ok, "Type in struct field not supported.")
+
+				if !ty_ok {
+					fmt.eprintln("Type in struct field is not supported:", field.type)
+					continue
+				}
 
 				field_name := field.names[0].derived_expr.(^ast.Ident).name
 
@@ -165,6 +195,7 @@ main :: proc() {
 
 					if len(field_type) < 2 {
 						fmt.eprintln("vk.DeviceAddress field is not tagged.")
+						continue
 					}
 
 					field_type = field_type[1:len(field_type) - 1]

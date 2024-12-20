@@ -1,4 +1,5 @@
 import common;
+import types;
 
 struct SkelVertexAttribute {
   uint8_t joints[4];
@@ -8,7 +9,7 @@ struct SkelVertexAttribute {
 struct SkinningPushConstants {
   Vertex *input_vertex_buffer;
   Vertex *output_vertex_buffer;
-  float4x4 *joint_matrices;
+  Mat4x4 *joint_matrices;
   SkelVertexAttribute *attrs;
 	uint vertex_count;
 };

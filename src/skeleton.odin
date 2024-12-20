@@ -6,7 +6,7 @@ import "core:math/linalg"
 import "core:math/linalg/hlsl"
 
 JointId :: u32
-JointMatrix :: hlsl.float4x4
+JointMatrix :: Mat4x4
 
 // Coordinate Systems:
 // Local (ls) - Parent is at origin

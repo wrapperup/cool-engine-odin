@@ -24,27 +24,22 @@ Axis :: enum {
 	MoveUp,
 }
 
-InputManager :: struct {
+InputSystem :: struct {
+	initialized:  bool,
 	actions:      [Action]ActionState,
 	axes:         [Axis]AxisState, // Yes, I looked it up. Plural of axis is axes. Yargh!!!!
 	mouse_locked: bool,
 }
 
-input_manager: ^InputManager
-
-init_input_manager :: proc(mouse_locked := false) -> ^InputManager {
-	input_manager = new(InputManager)
+init_input_system :: proc(mouse_locked := false) {
+	game.input_system.initialized = true
 	lock_mouse(mouse_locked)
-
-	return input_manager
-}
-
-set_input_manager :: proc(manager: ^InputManager) {
-	input_manager = manager
 }
 
 lock_mouse :: proc(lock: bool) {
-	input_manager.mouse_locked = lock
+	assert(game.input_system.initialized)
+
+	game.input_system.mouse_locked = lock
 	if lock {
 		glfw.SetCursorPos(game.window, 0, 0)
 
@@ -57,7 +52,8 @@ lock_mouse :: proc(lock: bool) {
 }
 
 toggle_lock_mouse :: proc() {
-	lock_mouse(!input_manager.mouse_locked)
+	assert(game.input_system.initialized)
+	lock_mouse(!game.input_system.mouse_locked)
 }
 
 MAX_ACTION_STATE_KEYS :: 2
@@ -72,25 +68,29 @@ ActionState :: struct {
 }
 
 add_action_key_mapping :: proc(action: Action, glfw_key_code: i32) {
-	sm.append(&input_manager.actions[action].key_codes, glfw_key_code)
+	assert(game.input_system.initialized)
+	sm.append(&game.input_system.actions[action].key_codes, glfw_key_code)
 }
 
 add_action_mouse_mapping :: proc(action: Action, glfw_key_code: i32) {
-	sm.append(&input_manager.actions[action].mouse_codes, glfw_key_code)
+	assert(game.input_system.initialized)
+	sm.append(&game.input_system.actions[action].mouse_codes, glfw_key_code)
 }
 
 // Returns true if the action is pressed, false if released.
 // If you want to detect when an input is pressed and released in an immediate-mode style,
 // use action_just_pressed and action_just_released.
 action_is_pressed :: proc(action: Action) -> bool {
-	state := input_manager.actions[action]
+	assert(game.input_system.initialized)
+	state := game.input_system.actions[action]
 	return state.current_state
 }
 
 // This is an immediate-mode style interface, this returns true if the
 // action state from the previous frame doesn't match, and if the action is pressed.
 action_just_pressed :: proc(action: Action) -> bool {
-	state := input_manager.actions[action]
+	assert(game.input_system.initialized)
+	state := game.input_system.actions[action]
 
 	return state.current_state && (state.current_state != state.previous_state)
 }
@@ -98,7 +98,8 @@ action_just_pressed :: proc(action: Action) -> bool {
 // This is an immediate-mode style interface, this returns true if the
 // action state from the previous frame doesn't match, and if the action is released.
 action_just_released :: proc(action: Action) -> bool {
-	state := input_manager.actions[action]
+	assert(game.input_system.initialized)
+	state := game.input_system.actions[action]
 
 	return !state.current_state && (state.current_state != state.previous_state)
 }
@@ -121,35 +122,40 @@ AxisState :: struct {
 }
 
 add_axis_key_mapping :: proc(axis: Axis, glfw_key_code: i32, value: f64) {
+	assert(game.input_system.initialized)
 	code_value := AxisCodeValue {
 		key_code = glfw_key_code,
 		value    = value,
 	}
 
-	sm.append(&input_manager.axes[axis].keys, code_value)
+	sm.append(&game.input_system.axes[axis].keys, code_value)
 }
 
 add_axis_mouse_axis :: proc(axis: Axis, mouse_x: bool = false, mouse_y: bool = false) {
-	input_manager.axes[axis].read_mouse_x = mouse_x
-	input_manager.axes[axis].read_mouse_y = mouse_y
+	assert(game.input_system.initialized)
+	game.input_system.axes[axis].read_mouse_x = mouse_x
+	game.input_system.axes[axis].read_mouse_y = mouse_y
 }
 
 axis_get_value :: proc(axis: Axis) -> f64 {
-	return input_manager.axes[axis].value
+	assert(game.input_system.initialized)
+	return game.input_system.axes[axis].value
 }
 
 axis_get_2d_normalized :: proc(axis_x, axis_y: Axis) -> (f64, f64) {
-	a := input_manager.axes[axis_x].value
-	b := input_manager.axes[axis_y].value
+	assert(game.input_system.initialized)
+	a := game.input_system.axes[axis_x].value
+	b := game.input_system.axes[axis_y].value
 
 	normalized := linalg.normalize0([2]f64{a, b})
 	return normalized[0], normalized[1]
 }
 
 simulate_input :: proc() {
+	assert(game.input_system.initialized)
 	mouse_x, mouse_y := glfw.GetCursorPos(game.window)
 
-	for &action_state in input_manager.actions {
+	for &action_state in game.input_system.actions {
 		pressed := false
 
 		for i in 0 ..< action_state.key_codes.len {
@@ -157,7 +163,7 @@ simulate_input :: proc() {
 			pressed = pressed || glfw.PRESS == glfw.GetKey(game.window, code)
 		}
 
-		if input_manager.mouse_locked {
+		if game.input_system.mouse_locked {
 			for i in 0 ..< action_state.mouse_codes.len {
 				code := action_state.mouse_codes.data[i]
 				pressed = pressed || glfw.PRESS == glfw.GetMouseButton(game.window, code)
@@ -168,7 +174,7 @@ simulate_input :: proc() {
 		action_state.current_state = pressed
 	}
 
-	for &axis_state in input_manager.axes {
+	for &axis_state in game.input_system.axes {
 		value: f64 = 0.0
 
 		for i in 0 ..< axis_state.keys.len {
@@ -182,7 +188,7 @@ simulate_input :: proc() {
 		}
 
 		// Only read input if the mouse is locked, for reasons...
-		if input_manager.mouse_locked {
+		if game.input_system.mouse_locked {
 			if axis_state.read_mouse_x {
 				value += mouse_x
 			}
@@ -196,7 +202,7 @@ simulate_input :: proc() {
 	}
 
 	// Reset mouse position for next frame.
-	if input_manager.mouse_locked {
+	if game.input_system.mouse_locked {
 		glfw.SetCursorPos(game.window, 0, 0)
 	}
 }

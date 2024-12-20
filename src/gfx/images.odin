@@ -83,8 +83,25 @@ create_sampler :: proc(
 	compare_op: vk.CompareOp = .NEVER,
 	border_color: vk.BorderColor = .FLOAT_TRANSPARENT_BLACK,
 	max_lod: f32 = 1.0,
+	max_anisotropy: f32 = 1.0,
 ) -> vk.Sampler {
-	sampler_create_info := init_sampler_create_info(filter, address_mode, compare_op, border_color, max_lod)
+	sampler_create_info := vk.SamplerCreateInfo {
+		sType            = .SAMPLER_CREATE_INFO,
+		magFilter        = filter,
+		minFilter        = filter,
+		mipmapMode       = .LINEAR,
+		addressModeU     = address_mode,
+		addressModeV     = address_mode,
+		addressModeW     = address_mode,
+		mipLodBias       = 0.0,
+		anisotropyEnable = max_anisotropy > 1.0 ? true : false,
+		maxAnisotropy    = max_anisotropy,
+		minLod           = 0.0,
+		maxLod           = max_lod,
+		borderColor      = border_color,
+		compareOp        = compare_op,
+		compareEnable    = compare_op != .NEVER,
+	}
 
 	sampler: vk.Sampler
 	vk_check(vk.CreateSampler(r_ctx.device, &sampler_create_info, nil, &sampler))

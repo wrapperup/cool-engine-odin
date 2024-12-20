@@ -16,7 +16,7 @@ init_sound_source :: proc(
 	volume: f32 = 1.0,
 ) {
 	extra_flags: ma.sound_flags = spatialization ? {} : {.NO_SPATIALIZATION}
-	ma.sound_init_from_file(&sound_manager.sound_engine, file_path, {.DECODE} + extra_flags, nil, nil, &source.sound)
+	ma.sound_init_from_file(&game.sound_system.sound_engine, file_path, {.DECODE} + extra_flags, nil, nil, &source.sound)
 	ma.sound_set_looping(&source.sound, loop)
 	ma.sound_set_rolloff(&source.sound, rolloff)
 	ma.sound_set_volume(&source.sound, volume)

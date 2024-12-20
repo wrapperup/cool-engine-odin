@@ -24,8 +24,8 @@ struct Vertex {
 };
 
 struct GPUDrawPushConstants {
-  float4x4 view_matrix;
-  float4x4 projection_matrix;
+  Mat4x4 view_matrix;
+  Mat4x4 projection_matrix;
   uint8_t *voxel_buffer;
   uint frame_time;
 };

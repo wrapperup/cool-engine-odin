@@ -38,10 +38,10 @@ game_init :: proc(window: glfw.WindowHandle) {
 		fmt.println("Graphics could not be initialized.")
 	}
 
-	game.entity_storage = init_entity_storage()
-	game.input_manager = init_input_manager()
-	game.sound_manager = init_sound_manager()
-	game.asset_manager = init_asset_manager()
+	// init_entity_system()
+	init_input_system()
+	init_sound_system()
+	// init_asset_system()
 
 	game_hot_reloaded(game)
 
@@ -86,10 +86,7 @@ game_hot_reloaded :: proc(mem: rawptr) {
 	game = cast(^Game)mem
 	glfw.MakeContextCurrent(game.window)
 	gfx.set_renderer(game.renderer)
-	set_entity_storage(game.entity_storage)
-	set_input_manager(game.input_manager)
-	lock_mouse(game.input_manager.mouse_locked)
-	set_sound_manager(game.sound_manager)
+	lock_mouse(game.input_system.mouse_locked)
 
 	gfx.load_vulkan_addresses()
 
@@ -120,8 +117,6 @@ init_input :: proc() {
 g_physx_error_callback := px.create_error_callback(user_error_callback, nil)
 
 init_physics :: proc() {
-	using px
-
 	PX_PHYSICS_VERSION_MAJOR :: 5
 	PX_PHYSICS_VERSION_MINOR :: 1
 	PX_PHYSICS_VERSION_BUGFIX :: 3
@@ -132,14 +127,14 @@ init_physics :: proc() {
 
 	assert(game.phys.foundation != nil)
 
-	game.phys.dispatcher = default_cpu_dispatcher_create(1, nil, px.DefaultCpuDispatcherWaitForWorkMode.WaitForWork, 0)
+	game.phys.dispatcher = px.default_cpu_dispatcher_create(1, nil, px.DefaultCpuDispatcherWaitForWorkMode.WaitForWork, 0)
 
-	game.phys.physics = create_physics_ext(game.phys.foundation)
+	game.phys.physics = px.create_physics_ext(game.phys.foundation)
 
 	assert(px.get_foundation() == game.phys.foundation)
 	assert(px.physics_get_foundation_mut(game.phys.physics) == game.phys.foundation)
 
-	callback_info := SimulationEventCallbackInfo {
+	callback_info := px.SimulationEventCallbackInfo {
 		collision_callback        = collision_callback,
 		trigger_callback          = trigger_callback,
 		constraint_break_callback = constraint_break_callback,
@@ -147,20 +142,20 @@ init_physics :: proc() {
 		advance_callback          = advance_callback,
 	}
 
-	callback := create_simulation_event_callbacks(&callback_info)
+	callback := px.create_simulation_event_callbacks(&callback_info)
 
-	scene_desc := scene_desc_new(tolerances_scale_new(1.0, 10.0))
-	scene_desc.gravity = vec3_new_3(0.0, -9.81 * 2, 0.0)
+	scene_desc := px.scene_desc_new(px.tolerances_scale_new(1.0, 10.0))
+	scene_desc.gravity = px.vec3_new_3(0.0, -9.81 * 2, 0.0)
 	scene_desc.cpuDispatcher = game.phys.dispatcher
 	scene_desc.simulationEventCallback = callback
 
-	enable_custom_filter_shader(&scene_desc, collision_filter_shader, 1)
+	px.enable_custom_filter_shader(&scene_desc, collision_filter_shader, 1)
 
-	game.phys.scene = physics_create_scene_mut(game.phys.physics, scene_desc)
+	game.phys.scene = px.physics_create_scene_mut(game.phys.physics, scene_desc)
 
-	game.phys.controller_manager = create_controller_manager(game.phys.scene, false)
+	game.phys.controller_manager = px.create_controller_manager(game.phys.scene, false)
 
-	scene_set_visualization_culling_box_mut(game.phys.scene, bounds3_new_1({-50, -50, -50}, {50, 50, 50}))
+	px.scene_set_visualization_culling_box_mut(game.phys.scene, px.bounds3_new_1({-50, -50, -50}, {50, 50, 50}))
 
 	// 	// create a ground plane to the scene
 	// 	ground_material := physics_create_material_mut(game.phys.physics, 0.5, 0.5, 0.3)
@@ -223,9 +218,9 @@ game_update :: proc() -> bool {
 	scope_stat_time(.Total)
 
 	if glfw.GetWindowAttrib(game.window, glfw.FOCUSED) > 0 {
-		ma.engine_set_volume(&sound_manager.sound_engine, 1.0)
+		ma.engine_set_volume(&game.sound_system.sound_engine, 1.0)
 	} else {
-		ma.engine_set_volume(&sound_manager.sound_engine, 0.0)
+		ma.engine_set_volume(&game.sound_system.sound_engine, 0.0)
 	}
 
 	game.live_time = f64(time.tick_since(start_live_time)) / f64(time.Second)
@@ -308,13 +303,11 @@ update_game_state :: proc(delta_time: f64) {
 
 @(export)
 game_shutdown :: proc() {
-	using px
-
 	px.controller_manager_release_mut(game.phys.controller_manager)
-	scene_release_mut(game.phys.scene)
-	physics_release_mut(game.phys.physics)
-	default_cpu_dispatcher_release_mut(game.phys.dispatcher)
-	foundation_release_mut(game.phys.foundation)
+	px.scene_release_mut(game.phys.scene)
+	px.physics_release_mut(game.phys.physics)
+	px.default_cpu_dispatcher_release_mut(game.phys.dispatcher)
+	px.foundation_release_mut(game.phys.foundation)
 
 	gfx.shutdown()
 }

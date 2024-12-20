@@ -5,7 +5,13 @@ import vk "vendor:vulkan"
 // Set required features to enable here. These are used to pick the physical device as well.
 REQUIRED_FEATURES := vk.PhysicalDeviceFeatures2 {
 	sType = .PHYSICAL_DEVICE_FEATURES_2,
-	features = {shaderStorageImageMultisample = true, shaderImageGatherExtended = true, multiDrawIndirect = true, geometryShader = true},
+	features = {
+		samplerAnisotropy = true,
+		shaderStorageImageMultisample = true,
+		shaderImageGatherExtended = true,
+		multiDrawIndirect = true,
+		geometryShader = true,
+	},
 	pNext = &REQUIRED_VK_11_FEATURES,
 }
 

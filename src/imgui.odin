@@ -148,7 +148,7 @@ configure_im :: proc() {
 
 update_imgui :: proc() {
 	scope_stat_time(.Imgui)
-	if input_manager.mouse_locked do return
+	if game.input_system.mouse_locked do return
 
 	dl := im.GetForegroundDrawList()
 	bl := im.GetBackgroundDrawList()
@@ -219,11 +219,11 @@ update_imgui :: proc() {
 	if im.Begin("Entities") {
 		if im.CollapsingHeader("Raw Entities") {
 			clipper: im.ListClipper
-			im.ListClipper_Begin(&clipper, i32(entity_storage.num_entities))
+			im.ListClipper_Begin(&clipper, i32(game.entity_system.num_entities))
 
 			for im.ListClipper_Step(&clipper) {
 				for i in clipper.DisplayStart ..< clipper.DisplayEnd {
-					entity := entity_storage.entities[i]
+					entity := game.entity_system.entities[i]
 					if entity.id.live {
 						im.Text("entity")
 						im.BulletText("id %d", entity.id.index)
@@ -288,11 +288,13 @@ update_imgui :: proc() {
 			im.Text("")
 		}
 
-		for key, subtype_ptr in entity_storage.subtype_storage {
+		for key, subtype_ptr in game.entity_system.subtype_storage {
 			storage_raw := cast(^RawSparseSet)subtype_ptr.ptr
 			size_t := subtype_ptr.type_info.size
 
-			if im.SmallButton("Clear All") {
+			if im.SmallButton(fmt.ctprintf("Clear All %s", key)) {
+				runtime.map_clear_dynamic(&storage_raw.sparse, &storage_raw.sparse_map_info)
+				storage_raw.dense.len = 0
 			}
 
 			im.SameLine()

@@ -4,14 +4,12 @@
 - [x] Window resizing / minimizing
 - [x] Full screen toggle
 
-## Cleanup
-- [ ] Cleanup renderer
-- - [x] Window should just be handled by the renderer? messy...
-- - [ ] Combine init functions (it's fragmented to like 100 functions bruh)
-- - [ ] Bindless system should be part of core GFX
-- - [ ] Combine GFX with main program?
+## Entity System
+- [ ] Use metaprogram?
+- [ ] Deleting untyped/raw entity and it's subtype via reflection (for ed/debug)
 
 ## General
+- [ ] Fixed ticks for everything
 - [ ] Asset system (UUID based)
 - - [ ] Sounds
 - - [ ] GLTF Meshes
@@ -26,7 +24,7 @@
 - - [ ] Static Meshes
 - - [ ] Punctual lights
 - - [ ] Irradiance Volumes
-- - [ ] Loading Assets (map to UUID? Needs asset system)
+- - [ ] Map and load assets
 
 ## Graphics
 - [ ] Make shadow map follow camera
@@ -37,3 +35,15 @@
 - - [ ] Trilinear Interpolation
 - [ ] Render Pass Abstraction
 - [ ] Render Graph
+
+## Editor
+- [ ] Blender control scheme (G, S, R)
+- [ ] Spawn Entities by type (?)
+
+## Cleanup
+- [ ] Destroy old swapchains
+- [ ] Cleanup renderer
+- - [x] Window should just be handled by the renderer? messy...
+- - [ ] Combine init functions (it's fragmented to like 100 functions bruh)
+- - [ ] Bindless system should be part of core GFX
+- - [ ] Combine GFX with main program?

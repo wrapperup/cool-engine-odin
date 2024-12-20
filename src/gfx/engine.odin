@@ -48,6 +48,10 @@ vk_check :: proc(result: vk.Result, loc := #caller_location) {
 
 r_ctx: ^Renderer
 
+DeviceLimits :: struct {
+	max_anisotropy: f32,
+}
+
 Renderer :: struct {
 	debug_messenger:             vk.DebugUtilsMessengerEXT,
 	enable_logs:                 bool,
@@ -89,6 +93,8 @@ Renderer :: struct {
 	imgui_ctx:                   ^im.Context,
 	imgui_init:                  bool,
 	imgui_pool:                  vk.DescriptorPool,
+
+	limits:                      vk.PhysicalDeviceLimits, // TODO: Too big?
 }
 
 Swapchain :: struct {
@@ -421,6 +427,13 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		if r_ctx.physical_device == nil {
 			panic("No GPU found that supports all required features.")
 		}
+	}
+
+	{ // Keep device limits
+		properties: vk.PhysicalDeviceProperties
+		vk.GetPhysicalDeviceProperties(r_ctx.physical_device, &properties)
+
+		r_ctx.limits = properties.limits
 	}
 
 	{

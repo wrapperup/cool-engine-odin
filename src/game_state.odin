@@ -50,7 +50,7 @@ init_skeletal_mesh_instance :: proc(skel: ^Skeleton, anim: ^SkeletalAnimation) -
 
 	for i in 0 ..< gfx.FRAME_OVERLAP {
 		instance.joint_matrices_buffers[i] = gfx.create_buffer(
-			vk.DeviceSize(size_of(hlsl.float4x4) * instance.skel.joint_count),
+			vk.DeviceSize(size_of(Mat4x4) * instance.skel.joint_count),
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
@@ -76,14 +76,14 @@ Game :: struct {
 	},
 	state:              GameState,
 	renderer:           ^gfx.Renderer,
-	input_manager:      ^InputManager,
-	sound_manager:      ^SoundManager,
-	asset_manager:      ^AssetManager,
+
+	// Systems
+	entity_system:     EntitySystem,
+	input_system:      InputSystem,
+	sound_system:      SoundSystem,
+	asset_system:      AssetSystem,
 	view_state:         ViewState,
 	render_state:       RenderState,
-
-	// Entity storage
-	entity_storage:     ^EntityStorage,
 
 	// Physics
 	phys:               PhysicsContext,

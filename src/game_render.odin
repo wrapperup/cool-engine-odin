@@ -56,7 +56,7 @@ GPUSkinningPushConstants :: struct {
 
 @(ShaderShared)
 GPUSkyboxPushConstants :: struct {
-	view_projection_matrix: hlsl.float4x4,
+	view_projection_matrix: Mat4x4,
 	vertex_buffer:          vk.DeviceAddress,
 	global_data_buffer:     vk.DeviceAddress,
 }
@@ -88,10 +88,10 @@ GPUEnvironment :: struct {
 
 @(ShaderShared)
 GPUGlobalData :: struct {
-	view_projection_matrix:       hlsl.float4x4,
-	view_projection_i_matrix:     hlsl.float4x4,
-	sun_view_projection_matrix:   hlsl.float4x4,
-	sun_view_projection_i_matrix: hlsl.float4x4,
+	view_projection_matrix:       Mat4x4,
+	view_projection_i_matrix:     Mat4x4,
+	sun_view_projection_matrix:   Mat4x4,
+	sun_view_projection_i_matrix: Mat4x4,
 	sun_color:                    hlsl.float3,
 	bias:                         f32,
 	sky_color:                    hlsl.float3,
@@ -140,7 +140,7 @@ RenderState :: struct {
 	// Mesh pipelines
 	mesh_pipeline_layout:       vk.PipelineLayout,
 	mesh_shader:                ShaderId,
-	model_matrices:             [dynamic]hlsl.float4x4,
+	model_matrices:             [dynamic]Mat4x4,
 
 	// Skeletal mesh pipelines
 	skinning_pipeline_layout:   vk.PipelineLayout,
@@ -271,7 +271,7 @@ init_bindless_descriptors :: proc() {
 	env := gfx.load_image_from_file("assets/gen/test_cubemap_ld.ktx2", .D2, .CUBE)
 
 	// Default Texture Sampler
-	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .REPEAT, max_lod = 10.0)
+	TEMP_mesh_image_sampler := gfx.create_sampler(.LINEAR, .REPEAT, max_lod = 10.0, max_anisotropy = gfx.renderer().limits.maxSamplerAnisotropy)
 	gfx.defer_destroy(&gfx.renderer().global_arena, TEMP_mesh_image_sampler)
 
 	// Shadow Depth Texture Sampler
@@ -464,7 +464,7 @@ init_buffers :: proc() {
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(
-			size_of(hlsl.float4x4) * 16_384,
+			size_of(Mat4x4) * 16_384,
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)

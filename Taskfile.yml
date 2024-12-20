@@ -16,13 +16,20 @@ tasks:
       - ./build/release/main.exe
 
   run-meta:
+    deps: [build-meta]
     cmds:
-      - odin run meta -out:build/meta.exe -debug
+      - ./build/meta.exe
 
   debug:
     cmds:
       - task build-debug
       - powershell ./scripts/debug-rad.ps1
+
+  build-meta:
+    sources:
+      - meta/**/*.odin
+    cmds:
+      - odin build meta -out:build/meta.exe -debug
 
   build-shaders-tools:
     sources:

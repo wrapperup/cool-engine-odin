@@ -3,9 +3,10 @@ import common;
 import consts;
 import ibl;
 import standard_brdf;
+import types;
 
 struct DrawPushConstants {
-  float4x4 view_projection_matrix;
+  Mat4x4 view_projection_matrix;
   Vertex *vertex_buffer;
   GlobalData *global_data_buffer;
 };

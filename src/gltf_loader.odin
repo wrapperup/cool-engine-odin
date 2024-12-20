@@ -492,8 +492,8 @@ upload_mesh_to_gpu :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffer
 	return buffers
 }
 
-gltf_matrix_to_odin_matrix :: proc(in_m: [16]f32) -> hlsl.float4x4 {
-	out_m: hlsl.float4x4
+gltf_matrix_to_odin_matrix :: proc(in_m: [16]f32) -> Mat4x4 {
+	out_m: Mat4x4
 
 	out_m[0, 0] = in_m[0]
 	out_m[1, 0] = in_m[1]
