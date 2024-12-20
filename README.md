@@ -6,8 +6,8 @@
 - Skeletal meshes and animation
 - Bindless
 - Limited glTF loading
-- PBR Pipeline based on Filament (WIP)
-- IBL (WIP)
+- PBR Pipeline based on Filament
+- IBL
 - Love!
 - Dear ImGui integration (is this a feature?)
 - There was jolt but I removed it and haven't added it back yet.
