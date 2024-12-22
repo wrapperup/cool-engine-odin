@@ -44,7 +44,7 @@ load_image_from_file :: proc(
 
 	extent := vk.Extent3D{ktx_texture.baseWidth, ktx_texture.baseHeight, ktx_texture.baseDepth}
 
-	image := create_image(
+	image := create_gpu_image(
 		format,
 		extent,
 		{.SAMPLED, .TRANSFER_DST},
@@ -53,7 +53,7 @@ load_image_from_file :: proc(
 		array_layers = num_layers,
 		flags = is_cubemap ? {.CUBE_COMPATIBLE} : {},
 	)
-	create_image_view(&image, {.COLOR}, image_view_type, 0, num_levels, 0, num_layers)
+	create_gpu_image_view(&image, {.COLOR}, image_view_type, 0, 0)
 
 	// Next, upload image data to vk Image
 	staging := create_buffer(vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
@@ -119,8 +119,8 @@ load_image_from_bytes :: proc(
 	image_type: vk.ImageType = .D2,
 	image_view_type: vk.ImageViewType = .D2,
 ) -> GPUImage {
-	image := create_image(image_format, extent, {.SAMPLED, .TRANSFER_DST}, image_type = image_type)
-	create_image_view(&image, {.COLOR}, image_view_type = image_view_type)
+	image := create_gpu_image(image_format, extent, {.SAMPLED, .TRANSFER_DST}, image_type = image_type)
+	create_gpu_image_view(&image, {.COLOR}, image_view_type)
 
 	defer_destroy(&r_ctx.global_arena, image.image_view)
 	defer_destroy(&r_ctx.global_arena, image.image, image.allocation)

@@ -109,6 +109,11 @@ public __generic<T = Vec4> typealias Tex2D   = _Tex<T, __Shape2D, 0, 0, 0, 0, 0>
 public __generic<T = Vec4> typealias Tex3D   = _Tex<T, __Shape3D, 0, 0, 0, 0, 0>;
 public __generic<T = Vec4> typealias TexCube = _Tex<T, __ShapeCube, 0, 0, 0, 0, 0>;
 
+public __generic<T = Vec4> typealias Tex1DArray   = _Tex<T, __Shape1D, 1, 0, 0, 0, 0>;
+public __generic<T = Vec4> typealias Tex2DArray   = _Tex<T, __Shape2D, 1, 0, 0, 0, 0>;
+public __generic<T = Vec4> typealias Tex3DArray   = _Tex<T, __Shape3D, 1, 0, 0, 0, 0>;
+public __generic<T = Vec4> typealias TexCubeArray = _Tex<T, __ShapeCube, 1, 0, 0, 0, 0>;
+
 public __generic<T = Vec4> typealias RWTex1D = _Tex<T, __Shape1D, 0, 0, 0, 1, 0>;
 public __generic<T = Vec4> typealias RWTex2D = _Tex<T, __Shape2D, 0, 0, 0, 1, 0>;
 public __generic<T = Vec4> typealias RWTex3D = _Tex<T, __Shape3D, 0, 0, 0, 1, 0>;

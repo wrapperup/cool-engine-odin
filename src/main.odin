@@ -63,7 +63,6 @@ game_init_window :: proc() -> glfw.WindowHandle {
 	glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
 	glfw.SwapInterval(1)
 
-
 	window := glfw.CreateWindow(1920, 1080, "Vulkan", nil, nil)
 
 	return window
@@ -77,6 +76,10 @@ game_memory :: proc() -> rawptr {
 @(export)
 game_memory_size :: proc() -> int {
 	return size_of(game)
+}
+
+@(export)
+game_pre_hot_reloaded :: proc() {
 }
 
 @(export)
@@ -209,7 +212,7 @@ init_scene :: proc() {
 
 	game.state = GameState {
 		player_id = entity_id_of(player),
-		environment = Environment{sun_pos = {12, 15, 10}, sun_target = 0.0, sun_color = 2.0, sky_color = 1.0, bias = 0.0004},
+		environment = Environment{sun_direction = linalg.normalize(Vec3{12, 15, 10}), sun_color = 2.0, sky_color = 1.0, bias = 0.0004},
 	}
 }
 

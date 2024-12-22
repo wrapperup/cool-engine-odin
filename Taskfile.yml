@@ -56,8 +56,6 @@ tasks:
       - pwsh ./scripts/build-release.ps1
 
   build-hotreload:
-    sources:
-      - src/**/*.odin
     cmds:
       - pwsh ./scripts/build-hotreload.ps1
 

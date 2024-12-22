@@ -168,7 +168,7 @@ update_player :: proc(player: ^Player, dt: f64) {
 		player.fire_time += dt
 
 		max_ground_acceleration: f32 = 50
-		max_air_acceleration: f32 = 15
+		max_air_acceleration: f32 = 50
 		max_braking_acceleration: f32 = 80
 
 		max_ground_speed: f32 = 10
@@ -381,29 +381,69 @@ update_player :: proc(player: ^Player, dt: f64) {
 // 	}
 // }
 
-get_view_matrix :: proc(player: ^Player) -> matrix[4, 4]f32 {
-	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
+get_current_projection_matrix :: proc() -> Mat4x4 {
+	player := get_entity(game.state.player_id)
+	//return player_get_projection_matrix(player)
+	return player_get_projection_matrix(player)
+}
 
+get_current_projection_matrix_clipped :: proc(near, far: f32) -> Mat4x4 {
+	player := get_entity(game.state.player_id)
+	return player_get_projection_matrix_clipped(player)
+}
+
+get_current_view_matrix :: proc() -> Mat4x4 {
+	player := get_entity(game.state.player_id)
+
+	// TODO: Make this an editor flag!!!!
+	when GAME_EDITOR {
+		if .ViewFromThirdPerson in debug_vis_flags() {
+			return linalg.matrix4_look_at_f32({0, 10, 0}, player.translation, {0, 1, 0})
+		}
+	}
+
+	return player_get_view_matrix(player)
+}
+
+get_current_projection_view_matrix :: proc() -> Mat4x4 {
+	return get_current_projection_matrix() * get_current_view_matrix()
+}
+
+player_get_view_matrix :: proc(player: ^Player) -> Mat4x4 {
 	translation := linalg.matrix4_translate(player != nil ? player.translation : {})
 	rotation := linalg.matrix4_from_quaternion(player != nil ? player.rotation : {})
 
 	return linalg.inverse(linalg.mul(translation, rotation))
 }
 
-get_projection_matrix :: proc(player: ^Player) -> matrix[4, 4]f32 {
+player_get_projection_matrix :: proc(player: ^Player, near: f32 = 0.1) -> Mat4x4 {
 	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
 
 	projection_matrix := gfx.matrix4_infinite_perspective_z0_f32(
 		linalg.to_radians(player != nil ? player.camera_fov_deg : 0),
 		aspect_ratio,
-		0.1,
+		near,
 	)
 	projection_matrix[1][1] *= -1.0
 
 	return projection_matrix
 }
 
-world_space_to_clip_space :: proc(view_projection: matrix[4, 4]f32, vec: Vec3) -> ([2]f32, bool) {
+player_get_projection_matrix_clipped :: proc(player: ^Player, near: f32 = 0.1, far: f32 = 100.0) -> Mat4x4 {
+	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
+
+	projection_matrix := gfx.matrix4_perspective_z0_f32(
+		linalg.to_radians(player != nil ? player.camera_fov_deg : 0),
+		aspect_ratio,
+		near,
+		far,
+	)
+	projection_matrix[1][1] *= -1.0
+
+	return projection_matrix
+}
+
+world_space_to_clip_space :: proc(view_projection: Mat4x4, vec: Vec3) -> ([2]f32, bool) {
 	vec_p := view_projection * [4]f32{vec.x, vec.y, vec.z, 1.0}
 	clip_vec := vec_p.xyz / vec_p.w
 

@@ -41,6 +41,7 @@ GameAPI :: struct {
 	shutdown:          proc(),
 	memory:            proc() -> rawptr,
 	memory_size:       proc() -> int,
+	pre_hot_reloaded:      proc(),
 	hot_reloaded:      proc(mem: rawptr),
 	modification_time: os.File_Time,
 	api_version:       int,
@@ -149,6 +150,7 @@ main :: proc() {
 			if new_game_api_ok {
 				append(&old_game_apis, game_api)
 				game_memory := game_api.memory()
+				game_api.pre_hot_reloaded()
 				game_api = new_game_api
 				game_api.hot_reloaded(game_memory)
 

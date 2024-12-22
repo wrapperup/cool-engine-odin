@@ -19,13 +19,12 @@ Shader :: struct {
 	pipeline:                 vk.Pipeline,
 	path:                     cstring,
 	extra_files:              []string,
-	entrypoints:              []cstring,
 	last_compile_time:        time.Time,
 	needs_recompile:          bool,
 	pipeline_create_callback: ShaderCreatePipelineCallback,
 }
 
-init_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callback: ShaderCreatePipelineCallback) -> Shader {
+init_shader :: proc(path: cstring, pipeline_create_callback: ShaderCreatePipelineCallback) -> Shader {
 	assert(os2.exists(string(path)))
 
 	extra_files := get_dependency_file_paths(path)
@@ -33,7 +32,6 @@ init_shader :: proc(path: cstring, entrypoints: []cstring, pipeline_create_callb
 	shader := Shader {
 		path                     = path,
 		extra_files              = extra_files,
-		entrypoints              = slice.clone(entrypoints),
 		last_compile_time        = time.now(),
 		pipeline_create_callback = pipeline_create_callback,
 	}
@@ -235,16 +233,6 @@ compile_slang_to_spirv :: proc(shader: ^Shader) -> (compiled_code: []u8, ok: boo
 
 	components: [dynamic]^IComponentType = {module}
 	defer delete(components)
-
-	for entrypoint_name in shader.entrypoints {
-		entrypoint: ^IEntryPoint
-		module->findEntryPointByName(entrypoint_name, &entrypoint)
-
-		if entrypoint == nil {
-			fmt.println("Shader", shader.path, ": Entrypoint", entrypoint_name, "doesn't exist.")
-			return
-		}
-	}
 
 	linked_program: ^IComponentType
 	r = session->createCompositeComponentType(&components[0], len(components), &linked_program, &diagnostics)

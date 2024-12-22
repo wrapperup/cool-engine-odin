@@ -148,10 +148,28 @@ configure_im :: proc() {
 
 update_imgui :: proc() {
 	scope_stat_time(.Imgui)
+
+	view_projection := get_current_projection_view_matrix()
+
+	bl := im.GetBackgroundDrawList()
+
+	rb := px.scene_get_render_buffer_mut(game.phys.scene)
+	for i in 0 ..< px.render_buffer_get_nb_lines(rb) {
+		line := px.render_buffer_get_lines(rb)[i]
+
+		line0, ok := world_space_to_clip_space(view_projection, transmute(Vec3)line.pos0)
+		line1, ok2 := world_space_to_clip_space(view_projection, transmute(Vec3)line.pos1)
+
+		if !ok && !ok2 do continue
+
+		im.DrawList_AddLine(bl, line0, line1, line.color0, 1.0)
+	}
+
 	if game.input_system.mouse_locked do return
 
+	editor_draw_imgui()
+
 	dl := im.GetForegroundDrawList()
-	bl := im.GetBackgroundDrawList()
 	red := im.GetColorU32ImVec4({1.0, 0.0, 0.0, 1.0})
 	green := im.GetColorU32ImVec4({0.0, 1.0, 0.0, 1.0})
 	blue := im.GetColorU32ImVec4({0.0, 0.0, 1.0, 1.0})
@@ -184,22 +202,7 @@ update_imgui :: proc() {
 
 	}
 
-	view_projection := get_projection_matrix(player) * get_view_matrix(player)
-
-	rb := px.scene_get_render_buffer_mut(game.phys.scene)
-	for i in 0 ..< px.render_buffer_get_nb_lines(rb) {
-		line := px.render_buffer_get_lines(rb)[i]
-
-		line0, ok := world_space_to_clip_space(view_projection, transmute(Vec3)line.pos0)
-		line1, ok2 := world_space_to_clip_space(view_projection, transmute(Vec3)line.pos1)
-
-		if !ok && !ok2 do continue
-
-		im.DrawList_AddLine(bl, line0, line1, line.color0, 1.0)
-	}
-
 	if im.Begin("Physics") {
-
 		enabled := px.scene_get_visualization_parameter(game.phys.scene, .Scale) > 0.0
 		if im.Checkbox("Enable debug view", &enabled) {
 			player := get_entity(Player, game.state.player_id)
@@ -331,8 +334,9 @@ update_imgui :: proc() {
 
 	if im.Begin("Environment") {
 		im.Checkbox("Draw skybox", &game.render_state.draw_skybox)
-		im.InputFloat3("pos", cast(^Vec3)(&game.state.environment.sun_pos))
-		im.InputFloat3("target", cast(^Vec3)(&game.state.environment.sun_target))
+		dir_vec := game.state.environment.sun_direction
+		im.InputFloat3("direction", cast(^Vec3)(&dir_vec))
+		game.state.environment.sun_direction = dir_vec
 		im.ColorEdit3("sun_color", cast(^Vec3)(&game.state.environment.sun_color))
 		im.ColorEdit3("sky_color", cast(^Vec3)(&game.state.environment.sky_color))
 		im.InputFloat("bias", cast(^f32)(&game.state.environment.bias))
@@ -386,7 +390,7 @@ debug_draw_line :: proc(pos0, pos1: Vec3, thickness: f32 = 1.0, color := im.Vec4
 	player := get_entity(game.state.player_id)
 
 	// TODO: cache this
-	view_projection := get_projection_matrix(player) * get_view_matrix(player)
+	view_projection := get_current_projection_view_matrix()
 
 	line0, ok := world_space_to_clip_space(view_projection, pos0)
 	line1, ok1 := world_space_to_clip_space(view_projection, pos1)
@@ -410,9 +414,10 @@ debug_draw_dot :: proc(pos: Vec3, half_size: f32 = 5.0, color := im.Vec4{1.0, 0.
 	player := get_entity(game.state.player_id)
 
 	// TODO: cache this
-	view_projection := get_projection_matrix(player) * get_view_matrix(player)
+	view_projection := get_current_projection_view_matrix()
 
 	bl := im.GetBackgroundDrawList()
+
 	col_u32 := im.GetColorU32ImVec4(color)
 
 	pos_cs, ok := world_space_to_clip_space(view_projection, pos)

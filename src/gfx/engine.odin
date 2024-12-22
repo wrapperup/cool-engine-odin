@@ -197,19 +197,19 @@ create_swapchain :: proc() {
 	draw_image_extent := vk.Extent3D{u32(x), u32(y), 1}
 	draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
 
-	r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = r_ctx.msaa_samples)
-	create_image_view(&r_ctx.draw_image, {.COLOR})
+	r_ctx.draw_image = create_gpu_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = r_ctx.msaa_samples)
+	create_gpu_image_view(&r_ctx.draw_image, {.COLOR})
 	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
 	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image_view)
 
 	// Used for MSAA resolution
-	r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
-	create_image_view(&r_ctx.resolve_image, {.COLOR})
+	r_ctx.resolve_image = create_gpu_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
+	create_gpu_image_view(&r_ctx.resolve_image, {.COLOR})
 	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image, r_ctx.resolve_image.allocation)
 	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image_view)
 
-	r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = r_ctx.msaa_samples)
-	create_image_view(&r_ctx.depth_image, {.DEPTH})
+	r_ctx.depth_image = create_gpu_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = r_ctx.msaa_samples)
+	create_gpu_image_view(&r_ctx.depth_image, {.DEPTH})
 	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image, r_ctx.depth_image.allocation)
 	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image_view)
 
@@ -708,8 +708,6 @@ is_shaders_updated :: proc() -> bool {
 // This command can fail if the window changes size, if `ok` returns false, then don't
 // draw anything to the screen. Wait for the window to finish polling.
 begin_command_buffer :: proc() -> vk.CommandBuffer {
-	render_imgui()
-
 	vk_check(vk.WaitForFences(r_ctx.device, 1, &current_frame().render_fence, true, 1_000_000_000))
 
 	// Delete resources for the current frame
@@ -765,6 +763,8 @@ copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_siz
 
 // Called by the user when they end drawing to the screen.
 submit :: proc(cmd: vk.CommandBuffer) {
+	render_imgui()
+
 	// set swapchain image layout to Attachment Optimal so we can draw it
 	transition_image(
 		cmd,

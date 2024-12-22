@@ -63,7 +63,7 @@ create_prefiltered_cubemap_pipeline :: proc(filename: cstring, out_width, out_he
 	if pass.width <= 0 do pass.width = w
 	if pass.height <= 0 do pass.height = h
 
-	pass.prefilter_image = gfx.create_image(
+	pass.prefilter_image = gfx.create_gpu_image(
 		.R32G32B32A32_SFLOAT,
 		{pass.width, pass.height, 1},
 		{.STORAGE, .TRANSFER_SRC},
@@ -115,8 +115,8 @@ create_prefiltered_cubemap_pipeline :: proc(filename: cstring, out_width, out_he
 	prefilter_shader, f_ok := gfx.load_shader_module("shaders/out/prefilter_env.spv")
 	assert(f_ok, "Failed to load shaders.")
 
-	pass.pipeline_layout = gfx.create_pipeline_layout_pc(&pass.descriptor_set_layout, PrefilteredCubeMapPushConstants, {.COMPUTE})
-	pass.pipeline, _ = gfx.create_compute_pipelines(pass.pipeline_layout, prefilter_shader)
+	pass.pipeline_layout = gfx.create_pipeline_layout_pc("Environment Prefilter", &pass.descriptor_set_layout, PrefilteredCubeMapPushConstants, {.COMPUTE})
+	pass.pipeline, _ = gfx.create_compute_pipelines("Environment Prefiler", pass.pipeline_layout, prefilter_shader)
 
 	gfx.destroy_shader_module(prefilter_shader)
 

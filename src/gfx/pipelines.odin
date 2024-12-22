@@ -212,8 +212,8 @@ pb_delete :: proc(builder: PipelineBuilder) {
 // ====================================================================
 
 create_pipeline_layout :: proc(
+	debug_name: cstring,
 	descriptor_set_layout: ^vk.DescriptorSetLayout = nil,
-	debug_name: cstring = nil,
 	loc := #caller_location,
 ) -> (
 	pipeline_layout: vk.PipelineLayout,
@@ -236,10 +236,10 @@ create_pipeline_layout :: proc(
 }
 
 create_pipeline_layout_pc :: proc(
+	debug_name: cstring,
 	descriptor_set_layout: ^vk.DescriptorSetLayout,
 	$T: typeid,
 	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
-	debug_name: cstring = nil,
 	loc := #caller_location,
 ) -> (
 	pipeline_layout: vk.PipelineLayout,
@@ -270,6 +270,7 @@ create_pipeline_layout_pc :: proc(
 }
 
 create_graphics_pipeline :: proc(
+	name: cstring,
 	pipeline_layout: vk.PipelineLayout,
 	shader: vk.ShaderModule,
 	input_topology: vk.PrimitiveTopology,
@@ -310,10 +311,15 @@ create_graphics_pipeline :: proc(
 		pb_set_color_attachment_format(&pipeline_builder, color_format)
 	}
 
-	return pb_build_pipeline(&pipeline_builder), true
+	pipeline := pb_build_pipeline(&pipeline_builder)
+
+	debug_set_object_name(pipeline, name)
+
+	return pipeline, true
 }
 
 create_compute_pipelines :: proc(
+	name: cstring,
 	pipeline_layout: vk.PipelineLayout,
 	shader: vk.ShaderModule,
 	entry: cstring = DEFAULT_COMPUTE_ENTRY,
@@ -337,6 +343,8 @@ create_compute_pipelines :: proc(
 
 	pipeline: vk.Pipeline
 	vk_check(vk.CreateComputePipelines(r_ctx.device, 0, 1, &compute_pipeline_create_info, nil, &pipeline), loc)
+
+	debug_set_object_name(pipeline, name)
 
 	return pipeline, true
 }

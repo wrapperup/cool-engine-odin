@@ -75,13 +75,14 @@ Game :: struct {
 		windowed_size: [2]i32,
 	},
 	state:              GameState,
+	editor:             Editor_State,
 	renderer:           ^gfx.Renderer,
 
 	// Systems
-	entity_system:     EntitySystem,
-	input_system:      InputSystem,
-	sound_system:      SoundSystem,
-	asset_system:      AssetSystem,
+	entity_system:      EntitySystem,
+	input_system:       InputSystem,
+	sound_system:       SoundSystem,
+	asset_system:       AssetSystem,
 	view_state:         ViewState,
 	render_state:       RenderState,
 
@@ -116,11 +117,10 @@ GameState :: struct {
 }
 
 Environment :: struct {
-	sun_color:  hlsl.float3,
-	sky_color:  hlsl.float3,
-	bias:       f32,
-	sun_pos:    Vec3,
-	sun_target: Vec3,
+	sun_color:     hlsl.float3,
+	sky_color:     hlsl.float3,
+	bias:          f32,
+	sun_direction: Vec3,
 }
 
 PlayerController :: struct {

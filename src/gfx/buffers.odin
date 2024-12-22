@@ -76,27 +76,27 @@ get_buffer_device_address :: proc(buffer: GPUBuffer) -> vk.DeviceAddress {
 }
 
 // Writes to the buffer with the input data at offset.
-write_buffer :: proc(buffer: ^GPUBuffer, in_data: ^$T, offset: vk.DeviceSize = 0) {
+write_buffer :: proc(buffer: ^GPUBuffer, in_data: ^$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
 	size := size_of(T)
-	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer")
+	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
 	data := cast([^]u8)buffer.info.pMappedData
 	mem.copy(data[offset:], in_data, size)
 }
 
 // Writes to the buffer with the input slice at offset.
-write_buffer_slice :: proc(buffer: ^GPUBuffer, in_data: []$T, offset: vk.DeviceSize = 0) {
+write_buffer_slice :: proc(buffer: ^GPUBuffer, in_data: []$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
 	size := size_of(T) * len(in_data)
-	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer")
+	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer", loc)
 
 	data := cast([^]u8)buffer.info.pMappedData
 	mem.copy(data[offset:], raw_data(in_data), size)
 }
 
 // Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
-staging_write_buffer :: proc(buffer: ^GPUBuffer, in_data: ^$T, offset: vk.DeviceSize = 0) {
+staging_write_buffer :: proc(buffer: ^GPUBuffer, in_data: ^$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
 	size := size_of(T)
-	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer")
+	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
 	staging := create_buffer(vk.DeviceSize(size_of(T)), {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer(&staging, in_data)

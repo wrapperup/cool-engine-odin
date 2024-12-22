@@ -6,15 +6,17 @@ import vk "vendor:vulkan"
 import "core:fmt"
 
 GPUImage :: struct {
-	image:      vk.Image,
-	image_view: vk.ImageView,
-	allocation: vma.Allocation,
-	extent:     vk.Extent3D,
-	format:     vk.Format,
+	image:        vk.Image,
+	image_view:   vk.ImageView,
+	allocation:   vma.Allocation,
+	extent:       vk.Extent3D,
+	format:       vk.Format,
+	mip_levels:   u32,
+	array_layers: u32,
 }
 
 // This allocates on the GPU, make sure to call `destroy_image` or add to the deletion queue when you are finished with the image.
-create_image :: proc(
+create_gpu_image :: proc(
 	format: vk.Format,
 	extent: vk.Extent3D,
 	image_usage_flags: vk.ImageUsageFlags,
@@ -46,8 +48,10 @@ create_image :: proc(
 	)
 
 	new_image := GPUImage {
-		extent = extent,
-		format = format,
+		extent       = extent,
+		format       = format,
+		mip_levels   = mip_levels,
+		array_layers = array_layers,
 	}
 
 	vk_check(vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil))
@@ -55,26 +59,53 @@ create_image :: proc(
 	return new_image
 }
 
-create_image_view :: proc(
+create_gpu_image_view :: proc(
 	image: ^GPUImage,
 	aspect_flags: vk.ImageAspectFlags,
-	image_view_type: vk.ImageViewType = .D2,
+	view_type: vk.ImageViewType = .D2,
 	base_mip_level: u32 = 0,
-	mip_count: u32 = 1,
 	base_array_layer: u32 = 0,
-	layer_count: u32 = 1,
 ) {
-	dview_info := init_imageview_create_info(
-		image.format,
+	image.image_view = create_image_view(
 		image.image,
+		image.format,
 		aspect_flags,
-		image_view_type,
+		view_type,
 		base_mip_level,
-		mip_count,
+		image.mip_levels,
 		base_array_layer,
-		layer_count,
+		image.array_layers,
 	)
-	vk_check(vk.CreateImageView(r_ctx.device, &dview_info, nil, &image.image_view))
+}
+
+create_image_view :: proc(
+	image: vk.Image,
+	format: vk.Format,
+	aspect_flags: vk.ImageAspectFlags,
+	view_type: vk.ImageViewType = .D2,
+	#any_int base_mip_level: u32 = 0,
+	#any_int mip_levels: u32 = 1,
+	#any_int base_array_layer: u32 = 0,
+	#any_int array_layers: u32 = 1,
+) -> vk.ImageView {
+	info := vk.ImageViewCreateInfo {
+		sType = .IMAGE_VIEW_CREATE_INFO,
+		viewType = view_type,
+		image = image,
+		format = format,
+		subresourceRange = {
+			baseMipLevel = base_mip_level,
+			levelCount = mip_levels,
+			baseArrayLayer = base_array_layer,
+			layerCount = array_layers,
+			aspectMask = aspect_flags,
+		},
+	}
+
+	image_view: vk.ImageView
+	vk_check(vk.CreateImageView(r_ctx.device, &info, nil, &image_view))
+
+	return image_view
 }
 
 create_sampler :: proc(

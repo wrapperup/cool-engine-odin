@@ -1,6 +1,6 @@
 import bindless;
 
-public static const Tex2D<float> SHADOW_ID = Tex2D<float>(0);
+public static const Tex2DArray<float> SHADOW_ID = Tex2DArray<float>(0);
 public static const Tex3D<float3> TONY_MC_MAPFACE_ID = Tex3D<float3>(1);
 public static const Tex2D DFG_ID = Tex2D<float4>(2);
 public static const TexCube ENVIRONMENT_MAP_ID = TexCube<float4>(3);

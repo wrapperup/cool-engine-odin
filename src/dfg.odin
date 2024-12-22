@@ -44,8 +44,8 @@ create_dfg_generate_pipeline :: proc(width, height: u32) -> DfgGeneratePass {
 		pass.descriptor_set_layout,
 	)
 
-	pass.dfg_image = gfx.create_image(.R16G16_SFLOAT, {width, height, 1}, {.STORAGE, .TRANSFER_SRC})
-	gfx.create_image_view(&pass.dfg_image, {.COLOR})
+	pass.dfg_image = gfx.create_gpu_image(.R16G16_SFLOAT, {width, height, 1}, {.STORAGE, .TRANSFER_SRC})
+	gfx.create_gpu_image_view(&pass.dfg_image, {.COLOR})
 
 	// Maybe we can make a nicer abstraction?
 	gfx.write_descriptor_set(
@@ -63,8 +63,8 @@ create_dfg_generate_pipeline :: proc(width, height: u32) -> DfgGeneratePass {
 	dfg_shader, f_ok := gfx.load_shader_module("shaders/out/dfg.spv")
 	assert(f_ok, "Failed to load shaders.")
 
-	pass.pipeline_layout = gfx.create_pipeline_layout_pc(&pass.descriptor_set_layout, DfgGeneratePassPC, {.COMPUTE})
-	pass.pipeline, _ = gfx.create_compute_pipelines(pass.pipeline_layout, dfg_shader)
+	pass.pipeline_layout = gfx.create_pipeline_layout_pc("DFG", &pass.descriptor_set_layout, DfgGeneratePassPC, {.COMPUTE})
+	pass.pipeline, _ = gfx.create_compute_pipelines("DFG", pass.pipeline_layout, dfg_shader)
 
 	gfx.destroy_shader_module(dfg_shader)
 
