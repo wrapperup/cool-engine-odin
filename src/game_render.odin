@@ -35,25 +35,26 @@ MAX_BINDLESS_IMAGES :: 100
 RESERVED_BINDLESS_IMAGES_COUNT :: 10
 MAX_BINDLESS_SAMPLERS :: 32
 
+NUM_CASCADES: u32 : 3
+
 @(ShaderShared)
 GPUDrawPushConstants :: struct {
-	global_data_buffer:      vk.DeviceAddress, // ^GPUGlobalDataBuffer
-	vertex_buffer:           vk.DeviceAddress, // []Vertex
-	model_matrices:          vk.DeviceAddress, // []Mat4x4
-	materials:               vk.DeviceAddress, // []GPUMaterial
-	shadow_cascade_matrices: vk.DeviceAddress, // []Mat4x4
-	model_index:             u32,
-	material_index:          MaterialId,
-	num_cascades:            u32,
+	global_data_buffer: vk.DeviceAddress, // ^GPUGlobalDataBuffer
+	vertex_buffer:      vk.DeviceAddress, // []Vertex
+	model_matrices:     vk.DeviceAddress, // []Mat4x4
+	materials:          vk.DeviceAddress, // []GPUMaterial
+	model_index:        u32,
+	material_index:     MaterialId,
+	num_cascades:       u32,
 }
 
 @(ShaderShared)
 GPUDrawShadowDepthPushConstants :: struct {
-	vertex_buffer:           vk.DeviceAddress, // []Vertex
-	model_matrices:          vk.DeviceAddress, // []Mat4x4
-	shadow_cascade_matrices: vk.DeviceAddress, // []Mat4x4
-	model_index:             u32,
-	cascade_index:           u32,
+	vertex_buffer:  vk.DeviceAddress, // []Vertex
+	model_matrices: vk.DeviceAddress, // []Mat4x4
+	global_data:    vk.DeviceAddress, // []Mat4x4
+	model_index:    u32,
+	cascade_index:  u32,
 }
 
 @(ShaderShared)
@@ -70,6 +71,12 @@ GPUSkyboxPushConstants :: struct {
 	vertex_buffer:      vk.DeviceAddress,
 	global_data_buffer: vk.DeviceAddress,
 }
+
+// 256 bytes is the maximum allowed in a push constant on a 3090Ti
+#assert(size_of(GPUDrawPushConstants) <= 256)
+#assert(size_of(GPUDrawShadowDepthPushConstants) <= 256)
+#assert(size_of(GPUSkinningPushConstants) <= 256)
+#assert(size_of(GPUSkyboxPushConstants) <= 256)
 
 // TODO: Make this into proper assets?
 TextureId :: distinct u32
@@ -90,34 +97,39 @@ GPUEnvironment :: struct {
 	num_point_lights: u32,
 }
 
-// 256 bytes is the maximum allowed in a push constant on a 3090Ti
-#assert(size_of(GPUDrawPushConstants) <= 256)
-#assert(size_of(GPUDrawShadowDepthPushConstants) <= 256)
-#assert(size_of(GPUSkinningPushConstants) <= 256)
-#assert(size_of(GPUSkyboxPushConstants) <= 256)
+@(ShaderShared)
+GPUCascadeConfig :: struct {
+	split_dist: f32,
+	bias:       f32,
+	slope_bias: f32,
+}
+
 
 @(ShaderShared)
 GPUGlobalData :: struct {
-	projection_matrix: Mat4x4,
-	view_matrix:       Mat4x4,
-	sun_color:         Vec3,
-	bias:              f32,
-	sky_color:         Vec3,
-	pad_0:             f32,
-	camera_pos:        Vec3,
-	pad_1:             f32,
-	sun_direction:     Vec3,
-	pad_2:             f32,
-	environment:       GPUEnvironment,
+	projection_matrix:       Mat4x4,
+	view_matrix:             Mat4x4,
+	cascade_world_to_shadow: vk.DeviceAddress,
+	cascade_configs:         vk.DeviceAddress,
+	sun_color:               Vec3,
+	pad_0:                    f32,
+	sky_color:               Vec3,
+	pad_1:                   f32,
+	camera_pos:              Vec3,
+	pad_2:                   f32,
+	sun_direction:           Vec3,
+	pad_3:                   f32,
+	environment:             GPUEnvironment,
 }
 
 GameFrameData :: struct {
-	global_uniform_buffer:           gfx.GPUBuffer,
-	model_matrices_buffer:           gfx.GPUBuffer,
-	shadow_cascades_matrices_buffer: gfx.GPUBuffer,
-	test_preskinned_vertex_buffer:   gfx.GPUBuffer,
-	mesh_draws:                      [dynamic]MeshDraw,
-	skel_instances:                  [dynamic]^SkeletalMeshInstance,
+	global_uniform_buffer:         gfx.GPUBuffer,
+	model_matrices_buffer:         gfx.GPUBuffer,
+	cascade_matrices_buffer:       gfx.GPUBuffer,
+	cascade_configs_buffer:        gfx.GPUBuffer,
+	test_preskinned_vertex_buffer: gfx.GPUBuffer,
+	mesh_draws:                    [dynamic]MeshDraw,
+	skel_instances:                [dynamic]^SkeletalMeshInstance,
 }
 
 RenderState :: struct {
@@ -159,8 +171,9 @@ RenderState :: struct {
 	shadow_pipeline_layout:          vk.PipelineLayout,
 	mesh_shadow_shader:              ShaderId,
 	shadow_depth_image:              gfx.GPUImage,
-	shadow_depth_attach_image_views: []vk.ImageView,
-	shadow_cascade_matrices:         []Mat4x4,
+	shadow_depth_attach_image_views: [NUM_CASCADES]vk.ImageView,
+	cascade_world_to_shadows:        [NUM_CASCADES]Mat4x4,
+	cascade_configs:                 [NUM_CASCADES]GPUCascadeConfig,
 
 	// Tonemapper pipelines
 	tonemapper_shader:               ShaderId,
@@ -179,7 +192,7 @@ current_frame_game :: proc() -> ^GameFrameData {
 
 //// INITIALIZATION
 init_game_renderer :: proc() {
-	init_shadow_maps({2048, 2048, 1}, 3)
+	init_shadow_maps()
 	init_descriptors()
 	init_pipelines()
 	init_buffers()
@@ -242,12 +255,14 @@ add_material :: proc(material: GPUMaterial) -> MaterialId {
 	return material_id
 }
 
-init_shadow_maps :: proc(extent: vk.Extent3D, cascades: u32 = 1) {
+init_shadow_maps :: proc() {
+	extent := vk.Extent3D{game.config.shadow_map_size, game.config.shadow_map_size, 1}
+
 	game.render_state.shadow_depth_image = gfx.create_gpu_image(
 		.D32_SFLOAT,
 		extent,
 		{.DEPTH_STENCIL_ATTACHMENT, .SAMPLED},
-		array_layers = cascades,
+		array_layers = NUM_CASCADES,
 	)
 	gfx.create_gpu_image_view(&game.render_state.shadow_depth_image, {.DEPTH}, .D2_ARRAY)
 
@@ -257,10 +272,6 @@ init_shadow_maps :: proc(extent: vk.Extent3D, cascades: u32 = 1) {
 		game.render_state.shadow_depth_image.image,
 		game.render_state.shadow_depth_image.allocation,
 	)
-
-	game.render_state.shadow_depth_attach_image_views = make([]vk.ImageView, cascades)
-	// TODO: CLEANUP: I don't really like where this is.
-	game.render_state.shadow_cascade_matrices = make([]Mat4x4, cascades)
 
 	depth_image := &game.render_state.shadow_depth_image
 
@@ -498,8 +509,14 @@ init_buffers :: proc() {
 		frame.model_matrices_buffer = gfx.create_buffer(size_of(Mat4x4) * 16_384, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
 		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.model_matrices_buffer)
 
-		frame.shadow_cascades_matrices_buffer = gfx.create_buffer(
-			size_of(Mat4x4) * len(game.render_state.shadow_cascade_matrices),
+		frame.cascade_matrices_buffer = gfx.create_buffer(
+			size_of(Mat4x4) * NUM_CASCADES,
+			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
+			.CPU_TO_GPU,
+		)
+
+		frame.cascade_configs_buffer = gfx.create_buffer(
+			size_of(GPUCascadeConfig) * NUM_CASCADES,
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
@@ -807,11 +824,11 @@ shadow_map_pass :: proc(cmd: vk.CommandBuffer, cascade: u32) {
 		vk.CmdBindIndexBuffer(cmd, mesh_draw.index_buffer, 0, .UINT32)
 
 		push_constants := GPUDrawShadowDepthPushConstants {
-			vertex_buffer           = mesh_draw.vertex_buffer_address,
-			model_matrices          = current_frame_game().model_matrices_buffer.address,
-			shadow_cascade_matrices = current_frame_game().shadow_cascades_matrices_buffer.address,
-			model_index             = mesh_draw.model_index,
-			cascade_index           = cascade,
+			vertex_buffer  = mesh_draw.vertex_buffer_address,
+			model_matrices = current_frame_game().model_matrices_buffer.address,
+			global_data    = current_frame_game().global_uniform_buffer.address,
+			model_index    = mesh_draw.model_index,
+			cascade_index  = cascade,
 		}
 
 		vk.CmdPushConstants(
@@ -872,14 +889,13 @@ geometry_pass :: proc(cmd: vk.CommandBuffer) {
 		vk.CmdBindIndexBuffer(cmd, mesh_draw.index_buffer, 0, .UINT32)
 
 		push_constants := GPUDrawPushConstants {
-			global_data_buffer      = current_frame_game().global_uniform_buffer.address,
-			vertex_buffer           = mesh_draw.vertex_buffer_address,
-			model_matrices          = current_frame_game().model_matrices_buffer.address,
-			materials               = game.render_state.scene_resources.materials_buffer.address,
-			shadow_cascade_matrices = current_frame_game().shadow_cascades_matrices_buffer.address,
-			model_index             = mesh_draw.model_index,
-			material_index          = mesh_draw.material_index,
-			num_cascades            = auto_cast len(game.render_state.shadow_cascade_matrices),
+			global_data_buffer = current_frame_game().global_uniform_buffer.address,
+			vertex_buffer      = mesh_draw.vertex_buffer_address,
+			model_matrices     = current_frame_game().model_matrices_buffer.address,
+			materials          = game.render_state.scene_resources.materials_buffer.address,
+			model_index        = mesh_draw.model_index,
+			material_index     = mesh_draw.material_index,
+			num_cascades       = NUM_CASCADES,
 		}
 
 		vk.CmdPushConstants(
@@ -967,17 +983,17 @@ post_processing_pass :: proc(cmd: vk.CommandBuffer) {
 }
 
 // TODO: Stick in math.odin
-Bounding_Box :: struct {
+Aabb :: struct {
 	min: Vec3,
 	max: Vec3,
 }
 
-bounding_box_center :: proc(box: Bounding_Box) -> Vec3 {
+aabb_center :: proc(box: Aabb) -> Vec3 {
 	offset := (box.max - box.min) / 2.0
 	return box.min + offset
 }
 
-debug_draw_bounding_box :: proc(box: Bounding_Box) {
+debug_draw_aabb :: proc(box: Aabb) {
 	offset := box.max - box.min
 
 	debug_draw_dot(box.min)
@@ -993,123 +1009,108 @@ debug_draw_bounding_box :: proc(box: Bounding_Box) {
 	debug_draw_dot(box.max)
 }
 
-FrustumCorners :: [8]Vec4
+calculate_shadow_view_projection_matrices :: proc(near: f32 = 0.1, far: f32 = 300) {
+	cascade_split_lambda := game.config.shadow_cascade_split_lambda
 
-calculate_corners_for_frustum :: proc(frustum_to_world_matrix: Mat4x4) -> (corners: FrustumCorners) {
-	i := 0
-	for x in 0 ..< 2 {
-		for y in 0 ..< 2 {
-			for z in 0 ..< 2 {
-				world_space_pos := frustum_to_world_matrix * Vec4{2.0 * f32(x) - 1.0, 2.0 * f32(y) - 1.0, f32(z), 1.0}
-				corners[i] = world_space_pos / world_space_pos.w
-				i += 1
+	cascade_splits: [NUM_CASCADES]f32
+
+	clip_range := far - near
+	ratio := far / near
+
+	// Calculate split depths based on view camera frustum
+	// Based on method presented in https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
+	for i in 0 ..< NUM_CASCADES {
+		p := (f32(i) + 1) / f32(NUM_CASCADES)
+		log := near * math.pow(ratio, p)
+		uniform := near + clip_range * p
+		d := cascade_split_lambda * (log - uniform) + uniform
+		cascade_splits[i] = (d - near) / clip_range
+	}
+
+	player := get_entity(game.state.player_id)
+	last_near := near
+	for i in 0 ..< NUM_CASCADES {
+		split_dist := cascade_splits[i]
+
+		test_far := near + split_dist * clip_range
+
+		world_to_clip := player_get_projection_matrix_clipped(player, near = last_near, far = test_far) * player_get_view_matrix(player)
+		clip_to_world := linalg.inverse(world_to_clip)
+
+		CORNERS_NDC :: [8]Vec4 {
+			{-1.0, -1.0, -1.0, 1.0},
+			{-1.0, -1.0, 1.0, 1.0},
+			{-1.0, 1.0, -1.0, 1.0},
+			{-1.0, 1.0, 1.0, 1.0},
+			{1.0, -1.0, -1.0, 1.0},
+			{1.0, -1.0, 1.0, 1.0},
+			{1.0, 1.0, -1.0, 1.0},
+			{1.0, 1.0, 1.0, 1.0},
+		}
+
+		corners_ws: [8]Vec4
+		for pos_fs, j in CORNERS_NDC {
+			pos_ws := clip_to_world * pos_fs
+			corners_ws[j] = pos_ws / pos_ws.w
+
+			if i == 1 {
+				debug_draw_dot(corners_ws[j].xyz)
 			}
 		}
-	}
 
-	return
-}
-
-calculate_bounding_box_for_corners :: proc(corners: FrustumCorners) -> Bounding_Box {
-	min_val: Vec3 = max(f32)
-	max_val: Vec3 = min(f32)
-
-	for corner in corners {
-		pos := corner
-		min_val.x = min(min_val.x, pos.x)
-		min_val.y = min(min_val.y, pos.y)
-		min_val.z = min(min_val.z, pos.z)
-
-		max_val.x = max(max_val.x, pos.x)
-		max_val.y = max(max_val.y, pos.y)
-		max_val.z = max(max_val.z, pos.z)
-	}
-
-	return {min = min_val, max = max_val}
-}
-
-calculate_bounding_box_for_corners_light :: proc(corners: FrustumCorners, light_view: Mat4x4) -> Bounding_Box {
-	min_val: Vec3 = max(f32)
-	max_val: Vec3 = min(f32)
-
-	fmt.println(max_val)
-
-	for corner in corners {
-		pos := light_view * corner
-		min_val.x = min(min_val.x, pos.x)
-		min_val.y = min(min_val.y, pos.y)
-		min_val.z = min(min_val.z, pos.z)
-
-		max_val.x = max(max_val.x, pos.x)
-		max_val.y = max(max_val.y, pos.y)
-		max_val.z = max(max_val.z, pos.z)
-	}
-
-	return {min = min_val, max = max_val}
-}
-
-calculate_shadow_view_projection_matrices :: proc(near: f32 = 0.1, far: f32 = 100) {
-	num_cascades := len(game.render_state.shadow_cascade_matrices)
-	frustum_segment_dist := (far - near) / f32(num_cascades)
-
-	curr_near := near
-	for &cascade_matrix, i in game.render_state.shadow_cascade_matrices {
-		player := get_entity(game.state.player_id)
-		frustum_to_world := linalg.inverse(
-			player_get_projection_matrix_clipped(player, near = curr_near, far = curr_near + frustum_segment_dist) *
-			player_get_view_matrix(player),
-		)
-
-		corners := calculate_corners_for_frustum(frustum_to_world)
-
-		center: Vec3
-		for corner in corners {
-			center += corner.xyz
+		center_ws: Vec3
+		for corner_ws in corners_ws {
+			center_ws += corner_ws.xyz
 		}
-		center /= len(corners)
-
-		radius: f32
-		for corner in corners {
-			dist := linalg.distance(center, corner.xyz)
-			radius = max(dist, radius)
-		}
+		center_ws /= len(corners_ws)
 
 		sun_dir := game.state.environment.sun_direction
 
-		box: Bounding_Box
-		box.min = -radius
-		box.max = radius
+		radius: f32
+		for corner in corners_ws {
+			// distance := linalg.length(corner - center_ws)
+			// radius = max(radius, distance)
 
-		actual_size := max(box.max.x - box.min.x, box.max.y - box.min.y)
-		// TODO: Erm... wtf? This should snap to pixel increments of the depth texture...
-		pixel_size_ws: f32 = actual_size / (2048/200)
+			distance_x := math.abs(corner.x - center_ws.x)
+			distance_y := math.abs(corner.y - center_ws.y)
+			distance_z := math.abs(corner.z - center_ws.z)
+			radius = max(radius, distance_x, distance_y, distance_z)
+		}
 
-		center = linalg.round(center / pixel_size_ws) * pixel_size_ws
-		box.min.xy = linalg.round(box.min.xy / pixel_size_ws) * pixel_size_ws
-		box.max.xy = linalg.round(box.max.xy / pixel_size_ws) * pixel_size_ws
+		aabb: Aabb
+		aabb.min = -radius
+		aabb.max = radius
 
-		sun_view_matrix := linalg.matrix4_look_at_f32(center - sun_dir * box.max.z, center + sun_dir, {0.0, 1.0, 0.0})
-		// box := calculate_bounding_box_for_corners_light(corners, sun_view_matrix)
+		cascade_world_to_view := linalg.matrix4_look_at_f32(center_ws, center_ws + sun_dir, {0.0, 1.0, 0.0})
+		cascade_view_to_clip := gfx.matrix_ortho3d_z0_f32(aabb.min.x, aabb.max.x, aabb.min.y, aabb.max.y, aabb.max.z * 10, aabb.min.z)
+		cascade_view_to_clip[1][1] *= -1.0
 
-		// when GAME_EDITOR {
-		// 	if .ViewFrustum in debug_vis_flags() && i == 0 {
-		// 		for corner in corners {
-		// 			debug_draw_dot(corner.xyz, color = {0, 1, 0, 1})
-		// 		}
-		//
-		// 		debug_box := calculate_bounding_box_for_corners(corners)
-		//
-		// 		debug_draw_dot(center, 10, {0, 0, 1, 1})
-		// 		debug_draw_bounding_box(debug_box)
-		// 	}
-		// }
+		if game.config.use_stable_shadow_maps {
+			sMapSize := f32(game.config.shadow_map_size)
 
-		sun_projection_matrix := gfx.matrix_ortho3d_z0_f32(box.min.x, box.max.x, box.min.y, box.max.y, box.max.z * 4, box.min.z)
-		sun_projection_matrix[1][1] *= -1.0
+			shadowMatrix := cascade_view_to_clip * cascade_world_to_view
+			shadowOrigin := Vec4{0, 0, 0, 1}
+			shadowOrigin = shadowMatrix * shadowOrigin
+			shadowOrigin *= sMapSize / 2.0
 
-		cascade_matrix = sun_projection_matrix * sun_view_matrix
+			roundedOrigin := linalg.round(shadowOrigin)
+			roundOffset := roundedOrigin - shadowOrigin
+			roundOffset *= 2.0 / sMapSize
+			roundOffset.zw = 0.0
 
-		curr_near += frustum_segment_dist
+			shadowProj := cascade_view_to_clip
+			shadowProj[3] += roundOffset
+			cascade_view_to_clip = shadowProj
+		}
+
+		game.render_state.cascade_world_to_shadows[i] = cascade_view_to_clip * cascade_world_to_view
+		game.render_state.cascade_configs[i] = {
+			split_dist = test_far,
+			bias       = game.config.shadow_map_biases[i],
+			slope_bias = game.config.shadow_map_slope_biases[i],
+		}
+
+		last_near = test_far
 	}
 }
 
@@ -1122,13 +1123,17 @@ update_buffers :: proc() {
 
 	global_uniform_data.sun_color = game.state.environment.sun_color
 	global_uniform_data.sky_color = game.state.environment.sky_color
-	global_uniform_data.bias = game.state.environment.bias
 
 	global_uniform_data.camera_pos = player != nil ? player.translation : {0, 0, 0}
 	global_uniform_data.sun_direction = game.state.environment.sun_direction
 
 	global_uniform_data.environment.num_point_lights = auto_cast len_entities(Point_Light)
 
+	global_uniform_data.cascade_world_to_shadow = current_frame_game().cascade_matrices_buffer.address
+	global_uniform_data.cascade_configs = current_frame_game().cascade_configs_buffer.address
+
+	gfx.write_buffer_slice(&current_frame_game().cascade_matrices_buffer, game.render_state.cascade_world_to_shadows[:])
+	gfx.write_buffer_slice(&current_frame_game().cascade_configs_buffer, game.render_state.cascade_configs[:])
 	gfx.write_buffer(&current_frame_game().global_uniform_buffer, global_uniform_data)
 
 	gfx.write_buffer_slice(&current_frame_game().model_matrices_buffer, game.render_state.model_matrices[:])
@@ -1151,6 +1156,4 @@ update_buffers :: proc() {
 	)
 
 	calculate_shadow_view_projection_matrices()
-
-	gfx.write_buffer_slice(&current_frame_game().shadow_cascades_matrices_buffer, game.render_state.shadow_cascade_matrices)
 }

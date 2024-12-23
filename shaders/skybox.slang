@@ -20,20 +20,20 @@ struct VertexInput {
 FragmentInput vertex_main(VertexInput input) {
   let vertex = pc.vertex_buffer[input.vertex_index];
 
-  let projection_matrix = pc.global_data_buffer.projection_matrix;
-  var view_matrix = pc.global_data_buffer.view_matrix;
+  let view_to_clip = pc.global_data_buffer.view_to_clip;
+  var world_to_view = pc.global_data_buffer.world_to_view;
 
-  view_matrix[0][3] = 0;
-  view_matrix[1][3] = 0;
-  view_matrix[2][3] = 0;
+  world_to_view[0][3] = 0;
+  world_to_view[1][3] = 0;
+  world_to_view[2][3] = 0;
 
-  let view_projection_matrix = mul(projection_matrix, view_matrix);
+  let world_to_clip = mul(view_to_clip, world_to_view);
 
-  let vert_pos = float4(vertex.position, 1.0);
+  let vert_pos_ws = float4(vertex.position, 1.0);
 
   FragmentInput output;
-  output.pos = view_projection_matrix * vert_pos;
-  output.frag_pos = vert_pos.xyz;
+  output.pos = mul(world_to_clip, vert_pos_ws);
+  output.frag_pos = vert_pos_ws.xyz;
 
   return output;
 }

@@ -36,10 +36,10 @@ void compute_main(uint3 dispatch_thread_id: SV_DispatchThreadID) {
 
   Vertex v;
 
-  v.position =    (skin_mat * float4(in_vertex.position, 1.0)).xyz;
-  v.normal =      (skin_mat * float4(in_vertex.normal, 0.0)).xyz;
+  v.position =    mul(skin_mat, Vec4(in_vertex.position, 1.0)).xyz;
+  v.normal =      mul(skin_mat, float4(in_vertex.normal, 0.0)).xyz;
   v.color =       in_vertex.color;
-  v.tangent =     skin_mat * float4(in_vertex.tangent.xyz, 0.0);
+  v.tangent =     mul(skin_mat, float4(in_vertex.tangent.xyz, 0.0));
   v.uv_x =        in_vertex.uv_x;
   v.uv_y =        in_vertex.uv_y;
 

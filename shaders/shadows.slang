@@ -20,7 +20,8 @@ uint3 pcg_3d(uint3 v) {
   return v;
 }
 
-float shadow_calc(float4 shadow_coord, float cascade, float2 offset = 0.0, float bias) {
+float shadow_calc(float4 shadow_coord, float cascade, float2 offset = 0.0,
+                  float bias) {
   // perform perspective divide
   float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
 
@@ -31,7 +32,8 @@ float shadow_calc(float4 shadow_coord, float cascade, float2 offset = 0.0, float
   return shadow;
 }
 
-float filter_pcf(float2 screen_pos, float4 shadow_coord, float cascade, float bias, float slope_bias, float NoL) {
+float filter_pcf(float2 screen_pos, float4 shadow_coord, float cascade,
+                 float bias, float slope_bias, float NoL) {
   int2 texDim;
   int elems;
   SHADOW_ID.get_dimensions(texDim.x, texDim.y, elems);
@@ -44,17 +46,13 @@ float filter_pcf(float2 screen_pos, float4 shadow_coord, float cascade, float bi
     return 1.f;
   }
 
-  float scale = 1.5;
+  float scale = 1.5f;
   float dx = scale * 1.0 / float(texDim.x);
   float dy = scale * 1.0 / float(texDim.y);
 
   float shadow_factor = 0.0;
   int count = 0;
   int range = 2;
-
-  float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
-
-  proj_coords = proj_coords;
 
   uint4 u = uint4(uint2(screen_pos), uint(screen_pos.x) ^ uint(screen_pos.y),
                   uint(screen_pos.x) + uint(screen_pos.y));
@@ -67,11 +65,12 @@ float filter_pcf(float2 screen_pos, float4 shadow_coord, float cascade, float bi
   dirA *= dx;
   dirB *= dy;
 
-	float totalBias = bias + slope_bias * tan(acos(NoL));
+  float totalBias = bias + slope_bias * tan(acos(NoL));
 
   for (int x = -range; x <= range; x++) {
     for (int y = -range; y <= range; y++) {
-      shadow_factor += shadow_calc(shadow_coord, cascade, dirA * x + dirB * y, bias);
+      shadow_factor +=
+          shadow_calc(shadow_coord, cascade, dirA * x + dirB * y, totalBias);
       count++;
     }
   }

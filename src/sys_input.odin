@@ -9,6 +9,7 @@ import "vendor:glfw"
 Action :: enum {
 	Jump,
 	Fire,
+	AltFire,
 	Sprint,
 	ToggleNoclip,
 	LockCamera,

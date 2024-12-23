@@ -29,6 +29,7 @@ game: ^Game
 @(export)
 game_init :: proc(window: glfw.WindowHandle) {
 	game = new(Game)
+	game.config = default_game_config()
 	glfw.Init()
 
 	game.window = window
@@ -107,6 +108,7 @@ init_input :: proc() {
 	add_action_key_mapping(.ExitGame, glfw.KEY_ESCAPE)
 
 	add_action_mouse_mapping(.Fire, glfw.MOUSE_BUTTON_LEFT)
+	add_action_mouse_mapping(.AltFire, glfw.MOUSE_BUTTON_RIGHT)
 
 	add_axis_key_mapping(.MoveForward, glfw.KEY_W, 1.0)
 	add_axis_key_mapping(.MoveForward, glfw.KEY_S, -1.0)
@@ -212,7 +214,7 @@ init_scene :: proc() {
 
 	game.state = GameState {
 		player_id = entity_id_of(player),
-		environment = Environment{sun_direction = linalg.normalize(Vec3{12, 15, 10}), sun_color = 2.0, sky_color = 1.0, bias = 0.0004},
+		environment = Environment{sun_direction = linalg.normalize(Vec3{12, 15, 10}), sun_color = 2.0, sky_color = 1.0},
 	}
 }
 

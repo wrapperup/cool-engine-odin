@@ -74,6 +74,7 @@ Game :: struct {
 		windowed_pos:  [2]i32,
 		windowed_size: [2]i32,
 	},
+	config:             GameConfig,
 	state:              GameState,
 	editor:             Editor_State,
 	renderer:           ^gfx.Renderer,
@@ -117,9 +118,8 @@ GameState :: struct {
 }
 
 Environment :: struct {
-	sun_color:     hlsl.float3,
-	sky_color:     hlsl.float3,
-	bias:          f32,
+	sun_color:     Vec3,
+	sky_color:     Vec3,
 	sun_direction: Vec3,
 }
 

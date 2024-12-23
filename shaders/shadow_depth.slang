@@ -4,7 +4,7 @@ import types;
 struct DrawPushConstants {
   Vertex *vertex_buffer;
   Mat4x4 *model_matrices;
-  Mat4x4 *shadow_cascade_matrices;
+  GlobalData *global_data;
   u32 model_index;
   u32 cascade_index;
 };
@@ -25,11 +25,11 @@ V2PShadow vertex_main(VertexInput input) {
   let vertex = pc.vertex_buffer[input.vertex_index];
 
   let model_to_world = pc.model_matrices[pc.model_index];
-  let view_projection_matrix = pc.shadow_cascade_matrices[pc.cascade_index];
+  let world_to_clip = pc.global_data.cascades_world_to_shadow[pc.cascade_index];
 
   V2PShadow output;
   output.pos =
-      view_projection_matrix * (model_to_world * Vec4(vertex.position, 1.0));
+      mul(world_to_clip, mul(model_to_world, Vec4(vertex.position, 1.0)));
 
   return output;
 }

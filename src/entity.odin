@@ -64,22 +64,19 @@ remove_elem_sparse_set :: proc(set: ^SparseSet($T), id: EntityId) -> (ok: bool) 
 // Entity Id is a packed u32 number that contains
 // the liveness, generation and index in entity array.
 EntityId :: distinct bit_field u32 {
-	live:       bool | 1,
-	generation: u8   | 7,
+	generation: u8   | 8,
 	index:      u32  | 24,
 }
 
 // For rawptr conversion only.
 _EntityId64 :: distinct bit_field u64 {
-	live:       bool | 1,
-	generation: u8   | 7,
+	generation: u8   | 8,
 	index:      u32  | 24,
 	pad:        u32  | 32,
 }
 
 entity_id_to_rawptr :: proc(id: EntityId) -> rawptr {
 	raw_id := _EntityId64 {
-		live       = id.live,
 		generation = id.generation,
 		index      = id.index,
 	}
@@ -89,7 +86,6 @@ entity_id_to_rawptr :: proc(id: EntityId) -> rawptr {
 entity_id_from_rawptr :: proc(ptr: rawptr) -> EntityId {
 	raw_id := transmute(_EntityId64)ptr
 	id := EntityId {
-		live       = raw_id.live,
 		generation = raw_id.generation,
 		index      = raw_id.index,
 	}
@@ -184,7 +180,7 @@ new_entity_subtype_id :: proc($T: typeid) -> (^T, TypedEntityId(T)) where intrin
 // extended, returns true, else if an entity was revived, false.
 new_entity_raw :: proc() -> ^Entity {
 	created_entity := Entity {
-		id = {live = true, generation = 0, index = game.entity_system.num_entities},
+		id = {generation = 0, index = game.entity_system.num_entities},
 		subtype = Entity, // none assigned.
 	}
 
@@ -248,7 +244,6 @@ remove_entity_raw :: proc(id: EntityId) -> bool {
 	}
 
 	// Invalidate all references to this entity.
-	entity.id.live = false
 	entity.id.generation += 1
 
 	return true

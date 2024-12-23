@@ -227,13 +227,9 @@ update_imgui :: proc() {
 			for im.ListClipper_Step(&clipper) {
 				for i in clipper.DisplayStart ..< clipper.DisplayEnd {
 					entity := game.entity_system.entities[i]
-					if entity.id.live {
-						im.Text("entity")
-						im.BulletText("id %d", entity.id.index)
-						im.BulletText("gen %d", entity.id.generation)
-					} else {
-						im.Text("deleted entity")
-					}
+					im.Text("entity")
+					im.BulletText("id %d", entity.id.index)
+					im.BulletText("gen %d", entity.id.generation)
 				}
 			}
 		}
@@ -335,11 +331,19 @@ update_imgui :: proc() {
 	if im.Begin("Environment") {
 		im.Checkbox("Draw skybox", &game.render_state.draw_skybox)
 		dir_vec := game.state.environment.sun_direction
-		im.InputFloat3("direction", cast(^Vec3)(&dir_vec))
+		im.InputFloat3("direction", &dir_vec)
 		game.state.environment.sun_direction = dir_vec
-		im.ColorEdit3("sun_color", cast(^Vec3)(&game.state.environment.sun_color))
-		im.ColorEdit3("sky_color", cast(^Vec3)(&game.state.environment.sky_color))
-		im.InputFloat("bias", cast(^f32)(&game.state.environment.bias))
+		im.ColorEdit3("sun_color", &game.state.environment.sun_color)
+		im.ColorEdit3("sky_color", &game.state.environment.sky_color)
+
+		for i in 0 ..< NUM_CASCADES {
+			bias := &game.config.shadow_map_biases[i]
+			slope_bias := &game.config.shadow_map_slope_biases[i]
+
+			im.InputFloat(fmt.ctprintf("bias %v", i), bias, format = "%.5f")
+			im.InputFloat(fmt.ctprintf("slope_bias %v", i), slope_bias, format = "%.5f")
+		}
+
 	}
 	im.End()
 

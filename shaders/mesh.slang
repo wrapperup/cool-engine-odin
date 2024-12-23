@@ -9,6 +9,11 @@ import standard_brdf;
 import types;
 import world_space;
 
+// Naming convention:
+// *_ws: World space
+// *_vs: View space
+// *_cs: Clip space
+
 static const Mat4x4 BIAS_MAT = {
   0.5, 0.0, 0.0, 0.5, //
   0.0, 0.5, 0.0, 0.5, //
@@ -21,7 +26,6 @@ struct DrawPushConstants {
   Vertex *vertex_buffer;
   Mat4x4 *model_matrices;
   PBRMaterial *materials;
-  Mat4x4 *shadow_cascade_matrices;
   u32 model_index;
   u32 material_index;
   u32 num_cascades;
@@ -49,38 +53,38 @@ FragmentInput vertex_main(VertexInput input) {
 
   let model_to_world = pc.model_matrices[pc.model_index];
 
-  let pos = model_to_world * Vec4(vertex.position, 1.0);
+  let pos_ws = mul(model_to_world, Vec4(vertex.position, 1.0));
   let uv = Vec2(vertex.uv_x, vertex.uv_y);
 
-  let N = normalize((Mat3x3)model_to_world * -vertex.normal);
+  let N = normalize(mul((Mat3x3)model_to_world, -vertex.normal));
   var tangent = vertex.tangent;
   if (pc.material_index == 0) {
     tangent = get_world_space_tangent(N);
   }
 
-  let T = normalize((Mat3x3)model_to_world * tangent.xyz);
+  let T = normalize(mul((Mat3x3)model_to_world, tangent.xyz));
   let B = cross(N, T) * tangent.w;
 
-  let view_projection_matrix = mul(pc.global_data_buffer.projection_matrix, pc.global_data_buffer.view_matrix);
+  let world_to_clip = mul(pc.global_data_buffer.view_to_clip,
+                                   pc.global_data_buffer.world_to_view);
 
   FragmentInput output;
   output.color = vertex.color.rgb;
-  output.pos = view_projection_matrix * pos;
-  output.view_pos = view_projection_matrix * pos;
+  output.pos_cs = mul(world_to_clip, pos_ws);
   output.uv = uv;
-  output.world_pos = pos;
-  output.view_pos = pc.global_data_buffer.view_matrix * pos;
+  output.pos_ws = pos_ws;
+  output.pos_vs = mul(pc.global_data_buffer.world_to_view, pos_ws);
   output.tbn = Mat3x3(T, B, N);
 
   return output;
 }
 
 struct FragmentInput {
-  Vec4 pos : SV_Position;
+  Vec4 pos_cs : SV_Position;
   Vec3 color : COLOR0;
   Vec2 uv : TEXCOORD0;
-  Vec4 world_pos;
-  Vec4 view_pos;
+  Vec4 pos_ws;
+  Vec4 pos_vs;
   Mat3x3 tbn;
   u32 tex_id;
 };
@@ -92,50 +96,25 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fragment_main(FragmentInput in) {
-  let world_pos = in.world_pos.xyz;
-  let view_pos = pc.global_data_buffer.camera_pos;
+  let pos_ws = in.pos_ws.xyz;
+  let camera_pos_ws = pc.global_data_buffer.camera_pos;
 
   let material = pc.materials[pc.material_index];
 
   Vec2 uv = in.uv;
   // uv = 0;
   if (pc.material_index == 0) {
-    uv = get_world_space_uv(world_pos, in.tbn[2]) / 4.f;
+    uv = get_world_space_uv(pos_ws, in.tbn[2]) / 4.f;
   }
 
   Vec3 normal =
       material.normal_map_id.sample(DEFAULT_SAMPLER_ID, uv).rgb * 2.0 - 1.0;
   normal.y *= -1;
-  normal = normal * in.tbn;
+  normal = mul(normal, in.tbn); // Note: Matrices constructed in Slang/HLSL are row-major by default...
   normal = normalize(normal);
-
-  static const f32 FAR = 100;
-  static const f32 NEAR = 0.1;
-
-  let segment_dist = (FAR - NEAR) / pc.num_cascades;
-
-  u32 cascade_index = 0;
-
-  for (uint i = 0; i < pc.num_cascades; i++) {
-    if ((in.view_pos.z) < -(NEAR + (segment_dist * (i)))) {
-      cascade_index = i;
-    }
-  }
 
   Vec3 base_color =
       material.base_color_id.sample(DEFAULT_SAMPLER_ID, uv).xyz * in.color;
-
-  // if (cascade_index == 0) {
-  //   base_color = Vec3(1, 0, 0);
-  // }
-  // else if (cascade_index == 1) {
-  //   base_color = Vec3(0, 1, 0);
-  // }
-  // else if (cascade_index == 2) {
-  //   base_color = Vec3(0, 0, 1);
-  // } else {
-  //   base_color = 0;
-  // }
 
   f32 reflectance = 0.5f;
 
@@ -154,34 +133,47 @@ FragmentOutput fragment_main(FragmentInput in) {
   Vec3 diffuse = (1.0 - metallic) * base_color.rgb;
 
   Vec3 n = normal;
-  Vec3 v = normalize(view_pos - world_pos);
+  Vec3 v = normalize(camera_pos_ws - pos_ws);
   Vec3 l = normalize(pc.global_data_buffer.sun_direction); // Directional light
 
   f32 sun_NoL = clamp(dot(n, l), 0.0, 1.0);
 
-  let world_to_shadow = pc.shadow_cascade_matrices[cascade_index];
-  let shadow_space_pos = BIAS_MAT * (world_to_shadow * in.world_pos);
+  u32 cascade_index = 0;
 
-  let shadow = filter_pcf(in.pos.xy, shadow_space_pos, cascade_index,
-                          pc.global_data_buffer.bias, 0, sun_NoL);
+  float blend_factor = 0.f;
+  let blend_dist = 10.f;
+
+  for (uint i = 0; i < pc.num_cascades; i++) {
+    let split_dist = pc.global_data_buffer.cascade_configs[i].split_dist;
+    if (in.pos_vs.z < -split_dist) {
+      cascade_index = i + 1;
+      blend_factor = saturate((in.pos_vs.z + split_dist) / blend_dist);
+    }
+  }
+
+  let world_to_shadow = pc.global_data_buffer.cascades_world_to_shadow[cascade_index];
+  let shadow_space_pos = mul(BIAS_MAT, mul(world_to_shadow, in.pos_ws));
+
+  let bias = pc.global_data_buffer.cascade_configs[cascade_index].bias;
+  let slope_bias = pc.global_data_buffer.cascade_configs[cascade_index].slope_bias;
+
+  let shadow = filter_pcf(in.pos_cs.xy, shadow_space_pos, cascade_index, bias, slope_bias, sun_NoL);
 
   Vec3 frag_color = 0;
-  frag_color =
-      saturate((min(sun_NoL, min(shadow, ao)) * pc.global_data_buffer.sun_color) *
-               standard_bsdf(diffuse, proughness, v, l, n, f0, sun_NoL));
+  frag_color = saturate( (min(sun_NoL, min(shadow, ao)) * pc.global_data_buffer.sun_color) *
+      standard_bsdf(diffuse, proughness, v, l, n, f0, sun_NoL));
 
-  for (uint i = 0; i < pc.global_data_buffer.environment.num_point_lights;
-       i++) {
+  for (uint i = 0; i < pc.global_data_buffer.environment.num_point_lights; i++) {
     let point_light = pc.global_data_buffer.environment.point_lights[i];
 
-    let light_pos = point_light.world_pos;
+    let light_pos_ws = point_light.world_pos;
     let radius = point_light.radius;
     let lumens = point_light.lumens;
     let color = normalize(point_light.color);
-    let dist = distance(world_pos, light_pos);
+    let dist = distance(pos_ws, light_pos_ws);
 
     if (dist <= radius) {
-      let pos_to_light = light_pos - world_pos;
+      let pos_to_light = light_pos_ws - pos_ws;
       let point_light_l = normalize(pos_to_light);
       let point_light_h = normalize(v + point_light_l);
       let point_light_NoL = clamp(dot(n, point_light_l), 0.0, 1.0);
@@ -214,6 +206,7 @@ FragmentOutput fragment_main(FragmentInput in) {
   // frag_color = saturate(i.tbn[1]); // Bitangent
   // frag_color = saturate(i.tbn[2]); // Normal
   // frag_color = saturate(world_pos.xyz);
+  // frag_color = Vec3(saturate(in.pos.xyz/1920.f));
 
   FragmentOutput output;
   output.frag_color = Vec4(frag_color, 1.0f);

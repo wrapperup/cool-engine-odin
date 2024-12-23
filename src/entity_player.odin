@@ -16,6 +16,11 @@ Move_Mode :: enum {
 	Noclip,
 }
 
+Fire_Mode :: enum {
+	CreatePointLight,
+	LaunchForward,
+}
+
 Player :: struct {
 	using entity:               ^Entity,
 	//
@@ -32,6 +37,7 @@ Player :: struct {
 	footstep:                   u32,
 	camera_shake_time:          f64,
 	temp_cycler:                u32,
+	fire_mode:                  Fire_Mode,
 }
 
 on_shape_hit_callback :: proc "c" (#by_ptr hit: px.ControllerShapeHit) {
@@ -214,27 +220,35 @@ update_player :: proc(player: ^Player, dt: f64) {
 
 		player.velocity += {0, -70, 0} * f32(dt)
 
-		if action_is_pressed(.Fire) && player.fire_time > 0.1 {
-			point_light := new_entity(Point_Light)
-			color: Vec3 = 0
-			switch player.temp_cycler {
-			case 0:
-				color = {1, 0, 0}
-			case 1:
-				color = {0, 1, 0}
-			case 2:
-				color = {0, 0, 1}
+		if action_is_pressed(.AltFire) {
+			player.fire_mode = Fire_Mode((u32(player.fire_mode) + 1) % len(Fire_Mode))
+		}
+
+		if action_just_pressed(.Fire) {
+			switch player.fire_mode {
+			case .CreatePointLight:
+				if player.fire_time > 0.1 {
+					point_light := new_entity(Point_Light)
+					color: Vec3 = 0
+					switch player.temp_cycler {
+					case 0:
+						color = {1, 0, 0}
+					case 1:
+						color = {0, 1, 0}
+					case 2:
+						color = {0, 0, 1}
+					}
+
+					init_point_light(point_light, player.translation, color, 10, 10)
+
+					player.temp_cycler = (player.temp_cycler + 1) % 3
+
+					player.fire_time = 0
+				}
+			case .LaunchForward:
+				player.velocity.xz += move_direction_n.xz * 15
+				player.velocity += {0, 1, 0} * 10
 			}
-
-			init_point_light(point_light, player.translation, color, 10, 10)
-
-			player.temp_cycler = (player.temp_cycler + 1) % 3
-
-			player.fire_time = 0
-			// player.velocity.xz = move_direction_n.xz * 15
-			// player.velocity += {0, 1, 0} * 10
-			// ball := new_entity(Ball)
-			// init_ball(ball, player.translation + look_forward * 2 - {0, 1.5, 0}, player.velocity + look_forward * 100)
 		}
 
 		clear(&player.ground_contact_normals)

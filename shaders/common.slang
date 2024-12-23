@@ -33,17 +33,25 @@ struct Environment {
   u32 num_point_lights;
 }
 
-struct GlobalData {
-  Mat4x4 projection_matrix;
-  Mat4x4 view_matrix;
-  Vec3 sun_color;
+struct CascadeConfig {
+  f32 split_dist;
   f32 bias;
-  Vec3 sky_color;
+  f32 slope_bias;
+}
+
+struct GlobalData {
+  Mat4x4 view_to_clip;
+  Mat4x4 world_to_view;
+  Mat4x4* cascades_world_to_shadow;
+  CascadeConfig* cascade_configs;
+  Vec3 sun_color;
   f32 pad_0;
-  Vec3 camera_pos;
+  Vec3 sky_color;
   f32 pad_1;
-  Vec3 sun_direction;
+  Vec3 camera_pos;
   f32 pad_2;
+  Vec3 sun_direction;
+  f32 pad_3;
   Environment environment;
 };
 
@@ -56,70 +64,3 @@ struct PBRMaterial {
 Vec3 srgb_to_linear(Vec3 color) { return pow(color, 2.2); }
 
 Vec3 linear_to_srgb(Vec3 color) { return pow(color, 1.0 / 2.2); }
-
-// General inner products
-
-// scalar-vector and vector-scalar
-__generic<T : __BuiltinArithmeticType, let N : int> vector<T, N>
-operator *(vector<T, N> x, T y) {
-  return mul(x, y);
-}
-
-__generic<T : __BuiltinArithmeticType, let N : int> vector<T, N>
-operator *(T x, vector<T, N> y) {
-  return mul(x, y);
-}
-
-// scalar-matrix and matrix-scalar
-__generic<T : __BuiltinArithmeticType, let N : int, let M : int> matrix<T, N, M>
-operator *(matrix<T, N, M> x, T y) {
-  return mul(x, y);
-}
-
-__generic<T : __BuiltinArithmeticType, let N : int, let M : int> matrix<T, N, M>
-operator *(T x, matrix<T, N, M> y) {
-  return mul(x, y);
-}
-
-// vector-vector (dot product)
-/// @category math
-__generic<T : __BuiltinFloatingPointType, let N : int>
-    T operator *(vector<T, N> x, vector<T, N> y) {
-  return mul(x, y);
-}
-
-__generic<T : __BuiltinIntegerType, let N : int> T operator *(vector<T, N> x,
-                                                              vector<T, N> y) {
-  return mul(x, y);
-}
-
-// vector-matrix
-__generic<T : __BuiltinFloatingPointType, let N : int, let M : int> vector<T, M>
-operator *(vector<T, N> left, matrix<T, N, M> right) {
-  return mul(left, right);
-}
-
-__generic<T : __BuiltinIntegerType, let N : int, let M : int> vector<T, M>
-operator *(vector<T, N> left, matrix<T, N, M> right) {
-  return mul(left, right);
-}
-
-__generic<T : __BuiltinLogicalType, let N : int, let M : int> vector<T, M>
-operator *(vector<T, N> left, matrix<T, N, M> right) {
-  return mul(left, right);
-}
-
-// matrix-vector
-__generic<T : __BuiltinFloatingPointType, let N : int, let M : int> vector<T, N>
-operator *(matrix<T, N, M> left, vector<T, M> right) {
-  return mul(left, right);
-}
-__generic<T : __BuiltinIntegerType, let N : int, let M : int> vector<T, N>
-operator *(matrix<T, N, M> left, vector<T, M> right) {
-  return mul(left, right);
-}
-__generic<T : __BuiltinLogicalType, let N : int, let M : int>[
-  OverloadRank(-1)
-] vector<T, N> operator *(matrix<T, N, M> left, vector<T, M> right) {
-  return mul(left, right);
-}
