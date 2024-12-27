@@ -40,18 +40,14 @@ struct CascadeConfig {
 }
 
 struct GlobalData {
+  Mat4x4* cascade_world_to_shadows;
+  CascadeConfig* cascade_configs;
   Mat4x4 view_to_clip;
   Mat4x4 world_to_view;
-  Mat4x4* cascades_world_to_shadow;
-  CascadeConfig* cascade_configs;
   Vec3 sun_color;
-  f32 pad_0;
   Vec3 sky_color;
-  f32 pad_1;
   Vec3 camera_pos;
-  f32 pad_2;
   Vec3 sun_direction;
-  f32 pad_3;
   Environment environment;
 };
 

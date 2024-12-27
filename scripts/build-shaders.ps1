@@ -68,4 +68,15 @@ slangc `
     -Wno-39001 `
     -o shaders/out/skinning.spv
 
+slangc `
+    shaders/text.slang `
+    -profile sm_6_0 `
+    -target spirv `
+    -capability spirv_1_6 `
+    -emit-spirv-directly `
+    -fvk-use-scalar-layout `
+    -fvk-use-entrypoint-name `
+    -Wno-39001 `
+    -o shaders/out/text.spv
+
 exit $LastExitCode

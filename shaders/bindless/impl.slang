@@ -6,21 +6,22 @@ public [vk_binding(0, 0)] __DynamicResource Textures[];
 public [vk_binding(1, 0)] __DynamicResource<__DynamicResourceKind.Sampler> Samplers[];
 public [vk_binding(2, 0)] __DynamicResource RWTextures[];
 
-public struct BindlessId {
+public struct _Tex<T, Shape: __ITextureShape, let isArray:int, let isMS:int, let sampleCount:int, let access:int, let format:int> {
+    public typealias TextureType = _Texture<T, Shape, isArray, isMS, sampleCount, access, 0, 0, format>;
     public u32 index;
 }
 
-public struct _Tex<T, Shape: __ITextureShape, let isArray:int, let isMS:int, let sampleCount:int, let access:int, let format:int> : BindlessId {
-    public typealias TextureType = _Texture<T, Shape, isArray, isMS, sampleCount, access, 0, 0, format>;
-}
+public struct Sampler {
+    public u32 index;
 
-public struct Sampler : BindlessId {
     public SamplerState get() {
         return Samplers[this.index].as<SamplerState>();
     }
 }
 
-public struct SamplerComparison : BindlessId {
+public struct SamplerComparison {
+    public u32 index;
+
     public SamplerComparisonState get() {
         return Samplers[this.index].as<SamplerComparisonState>();
     }

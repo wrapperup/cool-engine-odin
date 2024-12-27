@@ -43,6 +43,10 @@ init_shader :: proc(path: cstring, pipeline_create_callback: ShaderCreatePipelin
 	return shader
 }
 
+defer_destroy_shader :: proc(arena: ^gfx.VulkanArena, shader: Shader) {
+	gfx.defer_destroy(arena, shader.pipeline)
+}
+
 get_cached_shader_path :: proc(path: string) -> string {
 	return filepath.join({"shaders", ".cache", filepath.base(path)})
 }
@@ -163,15 +167,21 @@ diagnostics_check :: #force_inline proc(diagnostics: ^sp.IBlob, loc := #caller_l
 init_slang_session :: proc() -> ^sp.ISession {
 	using sp
 
+
+	target_options := [?]CompilerOptionEntry{{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}}}
 	target_desc := TargetDesc {
-		structureSize = size_of(TargetDesc),
-		format        = .SPIRV,
-		flags         = {.GENERATE_SPIRV_DIRECTLY},
-		profile       = game.render_state.global_session->findProfile("sm_6_0"),
+		structureSize            = size_of(TargetDesc),
+		format                   = .SPIRV,
+		flags                    = {.GENERATE_SPIRV_DIRECTLY},
+		profile                  = game.render_state.global_session->findProfile("sm_6_0"),
+		forceGLSLScalarBufferLayout = true,
+		compilerOptionEntries    = &target_options[0],
+		compilerOptionEntryCount = len(target_options),
 	}
 
-	compiler_option_entries := [?]CompilerOptionEntry {
+	session_options := [?]CompilerOptionEntry {
 		{name = .VulkanUseEntryPointName, value = {kind = .Int, intValue0 = 1}},
+		{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}},
 		{name = .DisableWarning, value = {kind = .String, stringValue0 = "39001"}},
 	}
 	session_desc := SessionDesc {
@@ -179,8 +189,8 @@ init_slang_session :: proc() -> ^sp.ISession {
 		targets                  = &target_desc,
 		targetCount              = 1,
 		defaultMatrixLayoutMode  = .COLUMN_MAJOR,
-		compilerOptionEntries    = &compiler_option_entries[0],
-		compilerOptionEntryCount = len(compiler_option_entries),
+		compilerOptionEntries    = &session_options[0],
+		compilerOptionEntryCount = len(session_options),
 	}
 	session: ^ISession
 	slang_check(game.render_state.global_session->createSession(session_desc, &session))

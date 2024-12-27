@@ -403,7 +403,7 @@ get_current_projection_matrix :: proc() -> Mat4x4 {
 
 get_current_projection_matrix_clipped :: proc(near, far: f32) -> Mat4x4 {
 	player := get_entity(game.state.player_id)
-	return player_get_projection_matrix_clipped(player)
+	return player_get_projection_matrix_clipped(player, near, far)
 }
 
 get_current_view_matrix :: proc() -> Mat4x4 {
@@ -443,7 +443,7 @@ player_get_projection_matrix :: proc(player: ^Player, near: f32 = 0.1) -> Mat4x4
 	return projection_matrix
 }
 
-player_get_projection_matrix_clipped :: proc(player: ^Player, near: f32 = 0.1, far: f32 = 100.0) -> Mat4x4 {
+player_get_projection_matrix_clipped :: proc(player: ^Player, near, far: f32) -> Mat4x4 {
 	aspect_ratio := f32(gfx.renderer().draw_extent.width) / f32(gfx.renderer().draw_extent.height)
 
 	projection_matrix := gfx.matrix4_perspective_z0_f32(

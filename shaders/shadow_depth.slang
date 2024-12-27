@@ -25,7 +25,7 @@ V2PShadow vertex_main(VertexInput input) {
   let vertex = pc.vertex_buffer[input.vertex_index];
 
   let model_to_world = pc.model_matrices[pc.model_index];
-  let world_to_clip = pc.global_data.cascades_world_to_shadow[pc.cascade_index];
+  let world_to_clip = pc.global_data.cascade_world_to_shadows[pc.cascade_index];
 
   V2PShadow output;
   output.pos =

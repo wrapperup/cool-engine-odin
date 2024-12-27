@@ -11,6 +11,9 @@ REQUIRED_FEATURES := vk.PhysicalDeviceFeatures2 {
 		shaderImageGatherExtended = true,
 		multiDrawIndirect = true,
 		geometryShader = true,
+		shaderInt64 = true,
+		shaderInt16 = true,
+		shaderFloat64 = true,
 	},
 	pNext = &REQUIRED_VK_11_FEATURES,
 }
@@ -30,6 +33,7 @@ REQUIRED_VK_12_FEATURES := vk.PhysicalDeviceVulkan12Features {
 	storagePushConstant8   = true,
 	shaderInt8             = true,
 	runtimeDescriptorArray = true,
+	scalarBlockLayout      = true,
 }
 
 REQUIRED_VK_13_FEATURES := vk.PhysicalDeviceVulkan13Features {

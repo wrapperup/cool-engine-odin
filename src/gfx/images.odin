@@ -206,3 +206,8 @@ copy_image_to_image :: proc(cmd: vk.CommandBuffer, source: vk.Image, destination
 
 	vk.CmdBlitImage2(cmd, &blit_info)
 }
+
+destroy_gpu_image :: proc(gpu_image: GPUImage) {
+	vk.DestroyImageView(r_ctx.device, gpu_image.image_view, nil)
+	vma.DestroyImage(r_ctx.allocator, gpu_image.image, gpu_image.allocation)
+}

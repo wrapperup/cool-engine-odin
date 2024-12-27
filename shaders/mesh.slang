@@ -151,7 +151,7 @@ FragmentOutput fragment_main(FragmentInput in) {
     }
   }
 
-  let world_to_shadow = pc.global_data_buffer.cascades_world_to_shadow[cascade_index];
+  let world_to_shadow = pc.global_data_buffer.cascade_world_to_shadows[cascade_index];
   let shadow_space_pos = mul(BIAS_MAT, mul(world_to_shadow, in.pos_ws));
 
   let bias = pc.global_data_buffer.cascade_configs[cascade_index].bias;
