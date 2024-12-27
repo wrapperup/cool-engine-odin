@@ -119,7 +119,7 @@ staging_write_buffer_slice :: proc(buffer: ^GPUBuffer, in_data: []$T, offset: vk
 	size := size_of(T) * len(in_data)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer", loc)
 
-	staging := create_buffer(vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(size, {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer_slice(&staging, in_data)
 
 	if cmd, ok := immediate_submit(); ok {

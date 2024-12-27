@@ -101,7 +101,6 @@ GPUCascadeConfig :: struct {
 	slope_bias: f32,
 }
 
-
 @(ShaderShared)
 GPUGlobalData :: struct #max_field_align (16) {
 	cascade_world_to_shadows: vk.DeviceAddress,
@@ -322,7 +321,6 @@ init_shadow_maps :: proc() {
 		view = gfx.create_image_view(depth_image.image, depth_image.format, {.DEPTH}, .D2, 0, 1, i, 1)
 		gfx.defer_destroy(&gfx.renderer().global_arena, view)
 	}
-
 }
 
 init_bindless_descriptors :: proc() {
@@ -385,6 +383,7 @@ write_builtin_bindless_descriptors :: proc() {
 	dfg := game.render_state.temp_resources.dfg
 	env := game.render_state.temp_resources.env
 	mesh_image_sampler := game.render_state.temp_resources.mesh_image_sampler
+	font_image_sampler := game.render_state.temp_resources.font_image_sampler
 	shadow_depth_sampler := game.render_state.temp_resources.shadow_depth_sampler
 	env_sampler := game.render_state.temp_resources.env_sampler
 
@@ -426,6 +425,13 @@ write_builtin_bindless_descriptors :: proc() {
 				sampler = shadow_depth_sampler,
 				image_layout = .DEPTH_READ_ONLY_OPTIMAL,
 				array_index = SHADOW_SAMPLER_ID,
+			},
+			{
+				binding = 1,
+				type = .SAMPLER,
+				sampler = font_image_sampler,
+				image_layout = .READ_ONLY_OPTIMAL,
+				array_index = FONT_SAMPLER_ID,
 			},
 			{binding = 1, type = .SAMPLER, sampler = env_sampler, image_layout = .READ_ONLY_OPTIMAL, array_index = ENVIRONMENT_SAMPLER_ID},
 			{binding = 2, type = .STORAGE_IMAGE, image_view = gfx.renderer().resolve_image.image_view, image_layout = .GENERAL},
@@ -562,14 +568,14 @@ init_font_renderer :: proc() {
 			shader = module,
 			input_topology = .TRIANGLE_LIST,
 			polygon_mode = .FILL,
-			cull_mode = {.BACK},
+			cull_mode = {},
 			front_face = .COUNTER_CLOCKWISE,
+			blend_mode = .Alpha,
 			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
 			color_format = gfx.renderer().draw_image.format,
 			multisampling_samples = gfx.msaa_samples(),
 		)
 	})
-
 
 	font_state.font_instance_buf = gfx.create_buffer(
 		size_of(GPU_Font_Instance) * 512,
@@ -578,7 +584,7 @@ init_font_renderer :: proc() {
 	)
 
 	font_state.font_index_buf = gfx.create_buffer(size_of(u32) * 6, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
-	gfx.staging_write_buffer_slice(&font_state.font_index_buf, []u32{0, 1, 2, 1, 2, 3})
+	gfx.staging_write_buffer_slice(&font_state.font_index_buf, []u32{2, 1, 0, 1, 2, 3})
 }
 
 init_buffers :: proc() {
@@ -604,12 +610,14 @@ init_buffers :: proc() {
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
+		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.cascade_matrices_buffer)
 
 		frame.cascade_configs_buffer = gfx.create_buffer(
 			size_of(GPUCascadeConfig) * NUM_CASCADES,
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
+		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.cascade_configs_buffer)
 	}
 
 	comp_coeffs := process_sh_coefficients_from_cubemap_file("assets/gen/test_cubemap_ld.ktx2")
@@ -723,23 +731,25 @@ renderer_draw_text :: proc(
 		quad: fontstash.Quad
 		fontstash.TextIterNext(&font_state.font_ctx, &iter, &quad) or_break
 
-		append(
-			&font_state.font_instances,
-			GPU_Font_Instance {
-				// Transform quads into NDC
-				pos_min = (Vec2{quad.x0, quad.y0} * inv_screen) * 2.0 - 1.0,
-				pos_max = (Vec2{quad.x1, quad.y1} * inv_screen) * 2.0 - 1.0,
-				uv_min  = {quad.s0, quad.t0},
-				uv_max  = {quad.s1, quad.t1},
-				color   = {color.x, color.y, color.z, 1.0},
-			},
-		)
+		font_inst := GPU_Font_Instance {
+			// Transform quads into NDC
+			pos_min = (Vec2{quad.x0, quad.y0} * inv_screen) * 2.0 - 1.0,
+			pos_max = (Vec2{quad.x1, quad.y1} * inv_screen) * 2.0 - 1.0,
+			uv_min  = {quad.s0, quad.t0},
+			uv_max  = {quad.s1, quad.t1},
+			color   = {color.x, color.y, color.z, 1.0},
+		}
+
+		font_inst.pos_min.y *= -1
+		font_inst.pos_max.y *= -1
+
+		append(&font_state.font_instances, font_inst)
 	}
 }
 
 draw :: proc() {
-	renderer_draw_text("Testing!!!!", 0, 128)
 	scope_stat_time(.Render)
+	renderer_draw_text("Testing!!!!", 30, 128, color = 0)
 
 	when ODIN_DEBUG {
 		if check_shader_hotreload() {
@@ -762,7 +772,7 @@ draw :: proc() {
 		draw_mesh(static_mesh.mesh, static_mesh.material, static_mesh.translation, static_mesh.rotation, 1)
 	}
 
-	if false {
+	{
 		font_state := &game.render_state.font_state
 
 		if len(font_state.font_instances) > 0 {
@@ -774,20 +784,28 @@ draw :: proc() {
 			font_state.font_ctx.dirtyRect[0] < font_state.font_ctx.dirtyRect[2] &&
 			font_state.font_ctx.dirtyRect[1] < font_state.font_ctx.dirtyRect[3]
 
-		if font_state.font_atlas_size != atlas_size || dirty_texture {
+		if font_state.font_atlas_size != atlas_size {
+			dirty_texture = true
 			font_state.font_atlas_size = atlas_size
 
 			vk.DeviceWaitIdle(gfx.renderer().device)
 
-			gfx.destroy_gpu_image(font_state.font_img)
-			font_state.font_img = gfx.load_image_from_bytes(
-				font_state.font_ctx.textureData,
-				{atlas_size.x, atlas_size.y, 1},
+			if font_state.font_img.image != 0 {
+				gfx.defer_destroy_gpu_image(&gfx.current_frame().arena, font_state.font_img)
+			}
+
+			font_state.font_img = gfx.create_gpu_image(
 				.R8_UINT,
-				.D2,
-				.D2,
+				{atlas_size.x, atlas_size.y, 1},
+				{.TRANSFER_DST, .SAMPLED},
 			)
+			gfx.create_gpu_image_view(&font_state.font_img, {.COLOR})
+
 			set_texture(font_state.font_img, FONT_ATLAS_ID)
+		}
+
+		if dirty_texture {
+			gfx.staging_write_image_slice(&font_state.font_img, font_state.font_ctx.textureData)
 		}
 
 		font_state.font_ctx.state_count = 0
@@ -842,7 +860,7 @@ draw :: proc() {
 	geometry_pass(cmd)
 	// End mesh pass
 
-	if false {
+	{
 		font_state := &game.render_state.font_state
 
 		// Draw text
@@ -871,7 +889,7 @@ draw :: proc() {
 				size_of(GPUFontRendererPushConstants),
 				&GPUFontRendererPushConstants {
 					atlas = FONT_ATLAS_ID,
-					sampler = FONT_SAMPLER_ID,
+					sampler = DEFAULT_SAMPLER_ID,
 					instances = font_state.font_instance_buf.address,
 				},
 			)

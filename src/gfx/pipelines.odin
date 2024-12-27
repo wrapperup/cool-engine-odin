@@ -101,7 +101,7 @@ pb_set_multisampling :: proc(builder: ^PipelineBuilder, samples: vk.SampleCountF
 	builder.multisampling.minSampleShading = 1.0
 	builder.multisampling.pSampleMask = nil
 
-	builder.multisampling.alphaToCoverageEnable = false
+	builder.multisampling.alphaToCoverageEnable = true
 	builder.multisampling.alphaToOneEnable = false
 }
 
@@ -109,6 +109,29 @@ pb_disable_blending :: proc(builder: ^PipelineBuilder) {
 	builder.color_blend_attachment.colorWriteMask = {.R, .G, .B, .A}
 	builder.color_blend_attachment.blendEnable = false
 }
+
+pb_enable_blending_additive :: proc(builder: ^PipelineBuilder) {
+	builder.color_blend_attachment.colorWriteMask = {.R, .G, .B, .A}
+	builder.color_blend_attachment.blendEnable = true
+	builder.color_blend_attachment.srcColorBlendFactor = .SRC_ALPHA
+	builder.color_blend_attachment.dstColorBlendFactor = .ONE
+	builder.color_blend_attachment.colorBlendOp = .ADD
+	builder.color_blend_attachment.srcAlphaBlendFactor = .ONE
+	builder.color_blend_attachment.dstAlphaBlendFactor = .ZERO
+	builder.color_blend_attachment.alphaBlendOp = .ADD
+}
+
+pb_enable_blending_alphablend :: proc(builder: ^PipelineBuilder) {
+	builder.color_blend_attachment.colorWriteMask = {.R, .G, .B, .A}
+	builder.color_blend_attachment.blendEnable = true
+	builder.color_blend_attachment.srcColorBlendFactor = .SRC_ALPHA
+	builder.color_blend_attachment.dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA
+	builder.color_blend_attachment.colorBlendOp = .ADD
+	builder.color_blend_attachment.srcAlphaBlendFactor = .ONE
+	builder.color_blend_attachment.dstAlphaBlendFactor = .ZERO
+	builder.color_blend_attachment.alphaBlendOp = .ADD
+}
+
 
 pb_set_color_attachment_format :: proc(builder: ^PipelineBuilder, format: vk.Format) {
 	builder.color_attachment_format = format
@@ -269,6 +292,12 @@ create_pipeline_layout_pc :: proc(
 	return
 }
 
+PipelineBlendMode :: enum {
+	None,
+	Additive,
+	Alpha,
+}
+
 create_graphics_pipeline :: proc(
 	name: cstring,
 	pipeline_layout: vk.PipelineLayout,
@@ -282,6 +311,7 @@ create_graphics_pipeline :: proc(
 		compare_op:    vk.CompareOp,
 		format:        vk.Format,
 	},
+	blend_mode: PipelineBlendMode = .None,
 	multisampling_samples: vk.SampleCountFlag = ._1,
 	color_format: vk.Format = .UNDEFINED,
 	vertex_entry: cstring = DEFAULT_VERTEX_ENTRY,
@@ -300,7 +330,14 @@ create_graphics_pipeline :: proc(
 	pb_set_cull_mode(&pipeline_builder, cull_mode, front_face)
 	pb_set_multisampling(&pipeline_builder, multisampling_samples)
 
-	pb_disable_blending(&pipeline_builder)
+	switch blend_mode {
+	case .None:
+		pb_disable_blending(&pipeline_builder)
+	case .Additive:
+		pb_enable_blending_additive(&pipeline_builder)
+	case .Alpha:
+		pb_enable_blending_alphablend(&pipeline_builder)
+	}
 
 	pb_enable_depthtest(&pipeline_builder, depth.write_enabled, depth.compare_op)
 	pb_set_depth_format(&pipeline_builder, depth.format)

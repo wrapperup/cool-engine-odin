@@ -17,7 +17,7 @@ struct FontInstance {
 }
 
 struct DrawPushConstants {
-    Tex2D atlas;
+    Tex2D<u8> atlas;
     Sampler sampler;
     FontInstance *instances;
 };
@@ -69,7 +69,7 @@ struct FragmentOutput {
 
 [shader("fragment")]
 FragmentOutput fragment_main(FragmentInput in) {
-    let frag_color = in.color * Vec4(pc.atlas.sample(pc.sampler, in.uv).r);
+    let frag_color = saturate(in.color * Vec4(pc.atlas.sample(pc.sampler, in.uv).r));
 
     return {
       frag_color,

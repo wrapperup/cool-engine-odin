@@ -125,14 +125,24 @@ load_image_from_bytes :: proc(
 	defer_destroy(&r_ctx.global_arena, image.image_view)
 	defer_destroy(&r_ctx.global_arena, image.image, image.allocation)
 
-	// Next, upload image data to vk Image
-	staging := create_buffer(vk.DeviceSize(len(bytes)), {.TRANSFER_SRC}, .CPU_ONLY)
-	data := staging.info.pMappedData
+	staging_write_image_slice(&image, bytes, 0)
 
-	mem.copy(data, raw_data(bytes), len(bytes))
+	return image
+}
+
+// Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
+staging_write_image :: proc(gpu_image: ^GPUImage, in_data: ^$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
+	assert(gpu_image.image_view != 0, "GPUImage is missing a valid image view.")
+
+	size := size_of(T)
+	gpu_size := gpu_image.extent.width * gpu_image.extent.height * gpu_image.extent.depth * size_of(T) // TODO: Validate this.
+	assert(gpu_size >= (u32(size) + u32(offset)), "The size of the data and offset is larger than the buffer", loc)
+
+	staging := create_buffer(vk.DeviceSize(size_of(T)), {.TRANSFER_SRC}, .CPU_ONLY)
+	write_buffer(&staging, in_data)
 
 	if cmd, ok := immediate_submit(); ok {
-		transition_image(cmd, image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+		transition_image(cmd, gpu_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 		copy_region := vk.BufferImageCopy {
 			bufferOffset = 0,
@@ -142,14 +152,42 @@ load_image_from_bytes :: proc(
 			imageExtent = extent,
 		}
 
-		vk.CmdCopyBufferToImage(cmd, staging.buffer, image.image, .TRANSFER_DST_OPTIMAL, 1, &copy_region)
+		vk.CmdCopyBufferToImage(cmd, staging.buffer, gpu_image.image, .TRANSFER_DST_OPTIMAL, 1, &copy_region)
 
-		transition_image(cmd, image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
+		transition_image(cmd, gpu_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
 	destroy_buffer(&staging)
+}
 
-	return image
+// Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
+staging_write_image_slice :: proc(gpu_image: ^GPUImage, in_data: []$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
+	assert(gpu_image.image_view != 0, "GPUImage is missing a valid image view.")
+
+	size := size_of(T) * len(in_data)
+	gpu_size := gpu_image.extent.width * gpu_image.extent.height * gpu_image.extent.depth * size_of(T) // TODO: Validate this.
+	assert(gpu_size >= (u32(size) + u32(offset)), "The size of the data and offset is larger than the buffer", loc)
+
+	staging := create_buffer(size, {.TRANSFER_SRC}, .CPU_ONLY)
+	write_buffer_slice(&staging, in_data)
+
+	if cmd, ok := immediate_submit(); ok {
+		transition_image(cmd, gpu_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+
+		copy_region := vk.BufferImageCopy {
+			bufferOffset = 0,
+			bufferRowLength = 0,
+			bufferImageHeight = 0,
+			imageSubresource = {aspectMask = {.COLOR}, mipLevel = 0, baseArrayLayer = 0, layerCount = 1},
+			imageExtent = gpu_image.extent,
+		}
+
+		vk.CmdCopyBufferToImage(cmd, staging.buffer, gpu_image.image, .TRANSFER_DST_OPTIMAL, 1, &copy_region)
+
+		transition_image(cmd, gpu_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
+	}
+
+	destroy_buffer(&staging)
 }
 
 write_buffer_to_ktx_file :: proc(

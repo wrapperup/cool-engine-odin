@@ -180,6 +180,18 @@ defer_destroy_buffer :: proc(
 	defer_destroy(arena, buffer.buffer, buffer.allocation);
 }
 
+defer_destroy_gpu_image :: proc(
+	arena: ^VulkanArena,
+	image: GPUImage,
+	debug: string = "UNKNOWN",
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
+	defer_destroy(arena, image.image, image.allocation, debug, loc);
+	if image.image_view != 0 {
+		defer_destroy(arena, image.image_view, nil, debug, loc);
+	}
+}
+
 flush_vk_arena :: proc(arena: ^VulkanArena) {
 	#reverse for &resource in arena.resource_arena {
 		vk_destroy_resource_by_handle(resource)
