@@ -191,14 +191,14 @@ init_scene :: proc() {
 	anim_ptr := new(SkeletalAnimation)
 	anim_ptr^ = anim
 
-	// for i in 0 ..< grid_size / 2 {
-	// 	for j in 0 ..< grid_size * 4 {
-	// 		for k in 0 ..< grid_size / 2 {
-	// 			ball := new_entity(Ball)
-	// 			init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
-	// 		}
-	// 	}
-	// }
+	for i in 0 ..< grid_size / 2 {
+		for j in 0 ..< grid_size * 2 {
+			for k in 0 ..< grid_size / 2 {
+				ball := new_entity(Ball)
+				init_ball(ball, {i * 3, j * 3, k * 3}, {}, skel_ptr, anim_ptr)
+			}
+		}
+	}
 
 	test_mesh := new_entity(StaticMesh)
 	init_static_mesh(test_mesh, "assets/meshes/static/map_test.glb", 0)

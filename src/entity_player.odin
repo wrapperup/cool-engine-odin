@@ -82,53 +82,69 @@ init_player :: proc(player: ^Player) {
 }
 
 update_player :: proc(player: ^Player, dt: f64) {
+	// Values / Constants
+	max_ground_acceleration: f32 = 50
+	max_air_acceleration: f32 = 50
+	max_braking_acceleration: f32 = 80
 
-	filter_data := px.filter_data_new_2(get_words_from_filter({}))
-	filters := px.controller_filters_new(&filter_data, nil, nil)
+	max_ground_speed: f32 = 10
+	max_sprinting_ground_speed: f32 = 10
+	max_air_speed: f32 = 10
 
-	collision_flags := px.controller_move_mut(
-		player.controller,
-		transmute(px.Vec3)((player.velocity * f32(dt)) - {0, player.is_grounded_last_frame ? 0.05 : 0, 0}),
-		0.001,
-		f32(dt),
-		filters,
-		nil,
-	)
+	{ 	// Physics Character Controller
+		filter_data := px.filter_data_new_2(get_words_from_filter({}))
+		filters := px.controller_filters_new(&filter_data, nil, nil)
 
-	// Look scheme
-	yaw_delta: f32
-	pitch_delta: f32
-
-	mouse_x := axis_get_value(.LookRight)
-	mouse_y := axis_get_value(.LookUp)
-
-	if action_just_pressed(.LockCamera) {
-		toggle_lock_mouse()
+		collision_flags := px.controller_move_mut(
+			player.controller,
+			transmute(px.Vec3)((player.velocity * f32(dt)) - {0, player.is_grounded_last_frame ? 0.05 : 0, 0}),
+			0.001,
+			f32(dt),
+			filters,
+			nil,
+		)
 	}
 
-	yaw_delta = linalg.to_radians(f32(mouse_x)) * 0.025
-	pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.025
+	camera_forward: Vec3
+	// camera_right: Vec3
+	forward: Vec3
+	right: Vec3
+	{
+		// Look scheme
+		yaw_delta: f32
+		pitch_delta: f32
 
-	player.camera_rot += {f32(pitch_delta), f32(yaw_delta), 0}
-	player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI / 2, math.PI / 2)
-	player.camera_rot.y = math.wrap(player.camera_rot.y, math.PI * 2)
+		mouse_x := axis_get_value(.LookRight)
+		mouse_y := axis_get_value(.LookUp)
 
-	pitch := linalg.quaternion_angle_axis(player.camera_rot.x, Vec3{1, 0, 0})
-	yaw := linalg.quaternion_angle_axis(player.camera_rot.y, Vec3{0, -1, 0})
+		if action_just_pressed(.LockCamera) {
+			toggle_lock_mouse()
+		}
 
-	look := yaw * pitch
+		yaw_delta = linalg.to_radians(f32(mouse_x)) * 0.025
+		pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.025
 
-	look_forward := linalg.quaternion_mul_vector3(player.rotation, Vec3{0, 0, -1})
-	forward := linalg.quaternion_mul_vector3(yaw, Vec3{0, 0, -1})
-	right := linalg.vector_cross3(forward, Vec3{0, 1, 0})
+		player.camera_rot += {f32(pitch_delta), f32(yaw_delta), 0}
+		player.camera_rot.x = math.clamp(player.camera_rot.x, -math.PI / 2, math.PI / 2)
+		player.camera_rot.y = math.wrap(player.camera_rot.y, math.PI * 2)
 
-	tilt_angle := math.atan(linalg.dot(player.velocity / 100, right)) / 5
-	player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(dt))
-	tilt := linalg.quaternion_angle_axis(player.camera_rot.z, Vec3{0, 0, -1})
+		pitch := linalg.quaternion_angle_axis(player.camera_rot.x, Vec3{1, 0, 0})
+		yaw := linalg.quaternion_angle_axis(player.camera_rot.y, Vec3{0, -1, 0})
 
-	// General Movement
+		look := yaw * pitch
 
-	player.rotation = look * tilt
+		camera_forward = linalg.quaternion_mul_vector3(player.rotation, Vec3{0, 0, -1})
+		forward = linalg.quaternion_mul_vector3(yaw, Vec3{0, 0, -1})
+		right = linalg.vector_cross3(forward, Vec3{0, 1, 0})
+
+		tilt_angle := math.atan(linalg.dot(player.velocity / 100, right)) / 5
+		player.camera_rot.z = linalg.lerp(player.camera_rot.z, tilt_angle, 20.0 * f32(dt))
+		tilt := linalg.quaternion_angle_axis(player.camera_rot.z, Vec3{0, 0, -1})
+
+		// General Movement
+
+		player.rotation = look * tilt
+	}
 
 	f, r := axis_get_2d_normalized(.MoveForward, .MoveRight)
 	move_forward, move_right := cast(f32)f, cast(f32)r
@@ -141,7 +157,7 @@ update_player :: proc(player: ^Player, dt: f64) {
 		player.move_mode = Move_Mode(int(player.move_mode) % len(Move_Mode))
 	}
 
-	set_listener_position(player.translation, look_forward)
+	set_listener_position(player.translation, camera_forward)
 
 	switch player.move_mode {
 	case .Ground:
@@ -173,37 +189,8 @@ update_player :: proc(player: ^Player, dt: f64) {
 
 		player.fire_time += dt
 
-		max_ground_acceleration: f32 = 50
-		max_air_acceleration: f32 = 50
-		max_braking_acceleration: f32 = 80
-
-		max_ground_speed: f32 = 10
-		max_air_speed: f32 = 10
-
 		if action_is_pressed(.Sprint) {
-			max_ground_speed = 15
-		}
-
-		// Returns the change in acceleration to apply to the player's current acceleration.
-		apply_acceleration :: proc(
-			requested_dir: Vec3,
-			max_speed: f32,
-			max_acceleration: f32,
-			current_velocity: Vec3,
-			has_traction: bool,
-			dt: f64,
-		) -> Vec3 {
-			current_speed := linalg.dot(current_velocity, requested_dir)
-			add_speed := max_speed - current_speed
-
-			if add_speed < 0 && !has_traction {
-				return 0
-			}
-
-			acceleration_change := ((max_speed * requested_dir) - current_velocity) / f32(dt)
-			acceleration_change = linalg.clamp_length(acceleration_change, max_acceleration)
-
-			return acceleration_change
+			max_ground_speed = max_sprinting_ground_speed
 		}
 
 		if linalg.length(move_direction) > 0.01 {
@@ -301,99 +288,27 @@ update_player :: proc(player: ^Player, dt: f64) {
 	}
 }
 
-// update_main_player :: proc(player: ^Player, delta_time: f64) {
-// 	player := get_entity(game.state.player_id)
-// 	{
-// 		yaw_delta: f32
-// 		pitch_delta: f32
-//
-// 		wants_rotate_player := glfw.GetMouseButton(game.window, glfw.MOUSE_BUTTON_RIGHT) == glfw.PRESS
-// 		// wants_rotate_player := true
-//
-// 		mouse_x, mouse_y := glfw.GetCursorPos(game.window)
-//
-// 		if wants_rotate_player {
-// 			glfw.SetCursorPos(game.window, f64(game.window_extent.x) / 2, f64(game.window_extent.y) / 2)
-// 		}
-//
-// 		if player.rotating_player {
-// 			glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-// 			glfw.SetInputMode(game.window, glfw.CURSOR, glfw.RAW_MOUSE_MOTION)
-// 		} else {
-// 			glfw.SetInputMode(game.window, glfw.CURSOR, glfw.CURSOR_NORMAL)
-// 		}
-//
-// 		if player.rotating_player && wants_rotate_player {
-// 			center := game.window_extent / 2.0
-//
-// 			mouse_x -= f64(center.x)
-// 			mouse_y -= f64(center.y)
-//
-// 			yaw_delta = linalg.to_radians(f32(mouse_x)) * 0.1
-// 			pitch_delta = linalg.to_radians(f32(mouse_y)) * -0.1
-//
-// 			player.player_rot += {f32(pitch_delta), f32(yaw_delta)}
-// 		}
-//
-// 		player.rotating_player = wants_rotate_player
-// 	}
-//
-// 	if player != nil {
-// 		pitch := linalg.quaternion_angle_axis(player.player_rot.x, Vec3{1, 0, 0})
-// 		yaw := linalg.quaternion_angle_axis(player.player_rot.y, Vec3{0, -1, 0})
-// 		player.rotation = yaw * pitch
-//
-// 		forward := linalg.quaternion_mul_vector3(player.rotation, Vec3{0, 0, -1})
-// 		right := linalg.vector_cross3(forward, Vec3{0, 1, 0})
-//
-// 		key_w := glfw.GetKey(game.window, glfw.KEY_W) == glfw.PRESS
-// 		key_a := glfw.GetKey(game.window, glfw.KEY_A) == glfw.PRESS
-// 		key_s := glfw.GetKey(game.window, glfw.KEY_S) == glfw.PRESS
-// 		key_d := glfw.GetKey(game.window, glfw.KEY_D) == glfw.PRESS
-// 		key_space := glfw.GetKey(game.window, glfw.KEY_SPACE) == glfw.PRESS
-// 		key_space |= glfw.GetKey(game.window, glfw.KEY_E) == glfw.PRESS
-// 		key_shift := glfw.GetKey(game.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
-// 		key_shift |= glfw.GetKey(game.window, glfw.KEY_Q) == glfw.PRESS
-//
-// 		shoot_ray := glfw.GetMouseButton(game.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
-//
-// 		if shoot_ray {
-// 			hit, ok := query_raycast_single(player.translation, forward, 50, {.Dynamic, .Static}, true)
-// 			if ok {
-// 				if ball := get_entity(Ball, entity_id_from_rawptr(hit.actor.userData)); ball != nil {
-// 					px.rigid_body_add_force_mut(ball.rigid, transmute(px.Vec3)(transmute(Vec3)hit.normal * -1 * 10), .Impulse, true)
-// 				}
-// 			}
-// 		}
-//
-// 		accelleration: f32 = 120
-//
-// 		if key_w {
-// 			player.velocity += forward * accelleration * f32(delta_time)
-// 		}
-// 		if key_a {
-// 			player.velocity += right * -accelleration * f32(delta_time)
-// 		}
-// 		if key_s {
-// 			player.velocity += forward * -accelleration * f32(delta_time)
-// 		}
-// 		if key_d {
-// 			player.velocity += right * accelleration * f32(delta_time)
-// 		}
-// 		if key_space {
-// 			player.velocity += {0, 1, 0} * accelleration * f32(delta_time)
-// 		}
-// 		if key_shift {
-// 			player.velocity += {0, -1, 0} * accelleration * f32(delta_time)
-// 		}
-//
-// 		player.translation += player.velocity * f32(delta_time)
-// 		if linalg.length(player.velocity) > 0.0 {
-// 			friction: f32 = 0.0005
-// 			player.velocity = linalg.lerp(player.velocity, 0.0, 1 - math.pow_f32(friction, f32(delta_time)))
-// 		}
-// 	}
-// }
+// Returns the change in acceleration to apply to the player's current acceleration.
+apply_acceleration :: proc(
+	requested_dir: Vec3,
+	max_speed: f32,
+	max_acceleration: f32,
+	current_velocity: Vec3,
+	has_traction: bool,
+	dt: f64,
+) -> Vec3 {
+	current_speed := linalg.dot(current_velocity, requested_dir)
+	add_speed := max_speed - current_speed
+
+	if add_speed < 0 && !has_traction {
+		return 0
+	}
+
+	acceleration_change := ((max_speed * requested_dir) - current_velocity) / f32(dt)
+	acceleration_change = linalg.clamp_length(acceleration_change, max_acceleration)
+
+	return acceleration_change
+}
 
 get_current_projection_matrix :: proc() -> Mat4x4 {
 	player := get_entity(game.state.player_id)
