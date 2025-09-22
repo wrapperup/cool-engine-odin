@@ -231,6 +231,7 @@ is_sampler_descriptor_type :: proc(ty: vk.DescriptorType) -> bool {
 	return ty == .SAMPLER
 }
 
+// TODO: This should not allocate.
 write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite, loc := #caller_location) {
 	// Collect writes in the convenient format into vk's.
 	descriptor_writes: [dynamic]vk.WriteDescriptorSet
