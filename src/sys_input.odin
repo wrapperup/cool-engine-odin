@@ -1,8 +1,6 @@
 package game
 
 import sm "core:container/small_array"
-import "core:fmt"
-import "core:math"
 import "core:math/linalg"
 import "vendor:glfw"
 
@@ -15,6 +13,7 @@ Action :: enum {
 	LockCamera,
 	Fullscreen,
 	ExitGame,
+    ShowDebug,
 }
 
 Axis :: enum {

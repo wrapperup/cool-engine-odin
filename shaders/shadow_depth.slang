@@ -1,20 +1,12 @@
 import common;
 import types;
 
-struct DrawPushConstants {
-  Vertex *vertex_buffer;
-  Mat4x4 *model_matrices;
-  GlobalData *global_data;
-  u32 model_index;
-  u32 cascade_index;
-};
-
 struct VertexInput {
   u32 vertex_index : SV_VertexID;
 };
 
 [vk_push_constant]
-DrawPushConstants pc;
+DrawShadowDepthPushConstants pc;
 
 struct V2PShadow {
   Vec4 pos : SV_Position;

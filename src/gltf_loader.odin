@@ -1,244 +1,13 @@
 package game
 
 import "base:intrinsics"
-import "base:runtime"
-import "core:fmt"
-import "core:math"
-import "core:math/linalg"
-import "core:math/linalg/hlsl"
-import "core:mem"
-import "core:reflect"
-import "core:slice"
 
-import "vendor:cgltf"
+import "deps:gltf2"
 import vk "vendor:vulkan"
 
 import mikk "deps:odin-mikktspace"
 
 import "gfx"
-
-Accessor_Buffer_Iterator :: struct($T: typeid) {
-	accessor: ^cgltf.accessor,
-	idx:      int,
-	expr:     string,
-	loc:      runtime.Source_Code_Location,
-}
-
-make_accessor_buf_iterator :: proc(
-	accessor: ^cgltf.accessor,
-	$T: typeid,
-	expr := #caller_expression,
-	loc := #caller_location,
-) -> Accessor_Buffer_Iterator(T) {
-	return Accessor_Buffer_Iterator(T){accessor, 0, expr, loc}
-}
-
-accessor_buf_iterator :: proc(iter: ^Accessor_Buffer_Iterator($T)) -> (T, int, bool) {
-	idx := iter.idx
-
-	if uint(idx) >= iter.accessor.count {
-		return 0, idx, false
-	}
-
-	value_ptr := mem.ptr_offset(
-		cast(^u8)iter.accessor.buffer_view.buffer.data,
-		int(iter.accessor.offset) + int(iter.accessor.buffer_view.offset) + (idx * int(iter.accessor.stride)),
-	)
-
-	iter.idx += 1
-
-	cast_value, ok := try_cast_accessor_type(T, value_ptr, iter.accessor.component_type, iter.accessor.type)
-
-	assert(ok, iter.expr, iter.loc)
-
-	return cast_value, idx, ok
-}
-
-try_cast_accessor_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-	type: cgltf.type,
-) -> (
-	value: T,
-	ok: bool,
-) {
-	when intrinsics.type_is_array(T) {
-		value, ok = try_cast_vec_type(T, value_ptr, component_type, type)
-	} else when intrinsics.type_is_integer(T) || intrinsics.type_is_unsigned(T) || intrinsics.type_is_float(T) {
-		value, ok = try_cast_numeric_type(T, value_ptr, component_type)
-	}
-
-	return
-}
-
-try_cast_numeric_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	T,
-	bool,
-) where intrinsics.type_is_integer(T) ||
-	intrinsics.type_is_float(T) ||
-	intrinsics.type_is_unsigned(T) {
-	when intrinsics.type_is_unsigned(T) {
-		return try_cast_uint_type(T, value_ptr, component_type)
-	} else when intrinsics.type_is_float(T) {
-		return try_cast_float_type(T, value_ptr, component_type)
-	} else when intrinsics.type_is_integer(T) {
-		return try_cast_int_type(T, value_ptr, component_type)
-	}
-}
-
-try_cast_int_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_integer(T) {
-	#partial switch component_type {
-	case .r_8:
-		value = cast(T)((cast(^i8)value_ptr)^)
-	case .r_16:
-		value = cast(T)((cast(^i16)value_ptr)^)
-	case:
-		return
-	}
-
-	ok = true
-
-	return
-}
-
-try_cast_uint_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_unsigned(T) {
-
-	#partial switch component_type {
-	case .r_8u:
-		value = cast(T)((cast(^u8)value_ptr)^)
-	case .r_16u:
-		value = cast(T)((cast(^u16)value_ptr)^)
-	case .r_32u:
-		value = cast(T)((cast(^u32)value_ptr)^)
-	case:
-		return
-	}
-
-	ok = true
-
-	return
-}
-
-try_cast_float_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_float(T) {
-	switch component_type {
-	case .r_32f:
-		value = cast(T)((cast(^f32)value_ptr)^)
-	case default:
-		return
-	}
-
-	ok = true
-
-	return
-}
-
-try_cast_vec_type :: proc(
-	$T: typeid,
-	value_ptr: rawptr,
-	component_type: cgltf.component_type,
-	type: cgltf.type,
-) -> (
-	value: T,
-	ok: bool,
-) where intrinsics.type_is_array(T) {
-	// T = [N]U
-	U :: intrinsics.type_elem_type(T)
-	N :: len(T)
-
-	ty_ok: bool = true
-
-	// We don't support casting to different vec types.
-	switch N {
-	case 1:
-		if type != .scalar do ty_ok = false
-	case 2:
-		if type != .vec2 do ty_ok = false
-	case 3:
-		if type != .vec3 do ty_ok = false
-	case 4:
-		if type != .vec4 do ty_ok = false
-	case 16:
-		if type != .mat4 do ty_ok = false
-	}
-
-	if !ty_ok {
-		ok = false
-		return
-	}
-
-	switch component_type {
-	case .r_8:
-		reinterp_val := (cast(^[N]i8)value_ptr)^
-		value = cast(T)linalg.array_cast(reinterp_val, U)
-	case .r_16:
-		reinterp_val := (cast(^[N]i16)value_ptr)^
-		value = cast(T)linalg.array_cast(reinterp_val, U)
-	case .r_8u:
-		reinterp_val := (cast(^[N]u8)value_ptr)^
-		value = cast(T)linalg.array_cast(reinterp_val, U)
-	case .r_16u:
-		reinterp_val := (cast(^[N]u16)value_ptr)^
-		value = cast(T)linalg.array_cast(reinterp_val, U)
-	case .r_32u:
-		reinterp_val := (cast(^[N]u32)value_ptr)^
-		value = cast(T)linalg.array_cast(reinterp_val, U)
-	case .r_32f:
-		reinterp_val := (cast(^[N]f32)value_ptr)^
-		value = cast(T)linalg.array_cast(reinterp_val, U)
-	case .invalid:
-		return
-	}
-
-	ok = true
-
-	return
-}
-
-find_attribute :: proc(prim: ^cgltf.primitive, type: cgltf.attribute_type) -> (int, bool) {
-	for attribute, i in &prim.attributes {
-		if attribute.type == type {
-			return i, true
-		}
-	}
-
-	return 0, false
-}
-
-find_custom_attribute :: proc(prim: ^cgltf.primitive, name: cstring) -> (int, bool) {
-	for attribute, i in &prim.attributes {
-		if attribute.type == .custom && attribute.name == name {
-			return i, true
-		}
-	}
-
-	return 0, false
-}
 
 create_mesh_buffers :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffers {
 	index_count := u32(len(mesh.indices))
@@ -247,20 +16,18 @@ create_mesh_buffers :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffe
 	assert(index_count > 0)
 	assert(vertex_count > 0)
 
-	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * vertex_count)
-	index_buffer_size := vk.DeviceSize(size_of(u32) * index_count)
-
 	new_surface: GPUMeshBuffers
 	new_surface.index_count = index_count
 	new_surface.vertex_count = vertex_count
 
 	new_surface.vertex_buffer = gfx.create_buffer(
-		vertex_buffer_size,
+        Vertex,
+		vertex_count,
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 		loc = loc,
 	)
-	new_surface.index_buffer = gfx.create_buffer(index_buffer_size, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY, loc = loc)
+	new_surface.index_buffer = gfx.create_buffer(u32, index_count, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY, loc = loc)
 
 	return new_surface
 }
@@ -272,7 +39,7 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 	assert(buffers.index_count == u32(len(mesh.indices)))
 	assert(buffers.vertex_count == u32(len(mesh.vertices)))
 
-	staging := gfx.create_buffer(vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY, loc = loc)
+	staging := gfx.create_buffer(u8, vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY, loc = loc)
 
 	gfx.write_buffer_slice(&staging, mesh.vertices)
 	gfx.write_buffer_slice(&staging, mesh.indices, vertex_buffer_size)
@@ -297,9 +64,8 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 	gfx.destroy_buffer(&staging)
 }
 
-
 // Allocates two slices if successful. Make sure to free them when you're done.
-parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Mesh, ok: bool) {
+parse_gltf_mesh_into_mesh :: proc(data: ^gltf2.Data, mesh_idx: int) -> (mesh: Mesh, ok: bool) {
 	gltf_mesh := &data.meshes[mesh_idx]
 	primitive := &gltf_mesh.primitives[0]
 
@@ -308,46 +74,47 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 		assert(skin != nil)
 	}
 
-	pos_idx := find_attribute(primitive, .position) or_return
-	norm_idx, norm_ok := find_attribute(primitive, .normal)
-	color_idx, color_ok := find_attribute(primitive, .color)
-	uv_idx, uv_ok := find_attribute(primitive, .texcoord)
-	//lightmap_uv_idx, lightmap_uv_ok := find_attribute(primitive, .texcoord)
-	tangent_idx, tangent_ok := find_attribute(primitive, .tangent)
-
-	mesh.indices = make([]u32, primitive.indices.count)
+    indices_idx := primitive.indices.?
+	pos_idx, pos_ok := primitive.attributes["POSITION"]
+    assert(pos_ok)
+	norm_idx, norm_ok := primitive.attributes["NORMAL"]
+	color_idx, color_ok := primitive.attributes["COLOR_0"]
+	uv_idx, uv_ok := primitive.attributes["TEXCOORD_0"]
+	//lightmap_uv_idx, lightmap_uv_ok := primitive.attributes["texcoord"]
+	tangent_idx, tangent_ok := primitive.attributes["TANGENT"]
 
 	{
-		it := make_accessor_buf_iterator(primitive.indices, u32)
-		for val, i in accessor_buf_iterator(&it) {
-			mesh.indices[i] = val
-		}
+        indices_buf := gltf2.buffer_slice(data, indices_idx).([]u16)
+		mesh.indices = make([]u32, len(indices_buf))
+
+        for index, i in indices_buf {
+            mesh.indices[i] = cast(u32)index
+        }
 	}
 
 	{
-		data := primitive.attributes[pos_idx].data
-		mesh.vertices = make([]Vertex, data.count)
+        vertices_buf := gltf2.buffer_slice(data, pos_idx).([][3]f32)
+		mesh.vertices = make([]Vertex, len(vertices_buf))
 
-		it := make_accessor_buf_iterator(data, hlsl.float3)
-		for val, i in accessor_buf_iterator(&it) {
+		for val, i in vertices_buf {
 			mesh.vertices[i].position = val
 		}
 	}
 
 	if norm_ok {
-		data := primitive.attributes[norm_idx].data
-		it := make_accessor_buf_iterator(data, hlsl.float3)
-		for val, i in accessor_buf_iterator(&it) {
+        norm_buf := gltf2.buffer_slice(data, norm_idx).([][3]f32)
+
+		for val, i in norm_buf {
 			mesh.vertices[i].normal = val
 		}
 	}
 
 	if color_ok {
-		data := primitive.attributes[color_idx].data
-		it := make_accessor_buf_iterator(data, hlsl.float3)
-		for val, i in accessor_buf_iterator(&it) {
-			mesh.vertices[i].color.rgb = val
-			mesh.vertices[i].color.a = 1
+        color_buf := gltf2.buffer_slice(data, color_idx).([][3]f32)
+
+		for val, i in color_buf {
+			mesh.vertices[i].color.xyz = val
+            mesh.vertices[i].color.a = 1
 		}
 	} else {
 		// Default the color to 1
@@ -357,19 +124,19 @@ parse_gltf_mesh_into_mesh :: proc(data: ^cgltf.data, mesh_idx: int) -> (mesh: Me
 	}
 
 	if uv_ok {
-		data := primitive.attributes[uv_idx].data
-		it := make_accessor_buf_iterator(data, hlsl.float2)
-		for val, i in accessor_buf_iterator(&it) {
-			mesh.vertices[i].uv_x = val.x
-			mesh.vertices[i].uv_y = val.y
+        uv_buf := gltf2.buffer_slice(data, uv_idx).([][2]f32)
+
+		for val, i in uv_buf {
+			mesh.vertices[i].uv_x  = val.x
+            mesh.vertices[i].uv_y = val.y
 		}
 	}
 
-	if tangent_ok {
-		data := primitive.attributes[tangent_idx].data
-		it := make_accessor_buf_iterator(data, hlsl.float4)
-		for val, i in accessor_buf_iterator(&it) {
-			mesh.vertices[i].tangent = val
+	if false {
+        tangent_buf := gltf2.buffer_slice(data, tangent_idx).([][4]f32)
+
+		for val, i in tangent_buf {
+            mesh.vertices[i].tangent = val
 		}
 	} else if uv_ok && norm_ok {
 		// Generate tangents if we have normals + uv and no tangents are included.
@@ -452,30 +219,20 @@ SkeletalMesh :: struct {
 }
 
 
-load_mesh_from_file :: proc(path: cstring, loc := #caller_location) -> (mesh: Mesh, ok: bool) {
-	opts := cgltf.options{}
-	data, result := cgltf.parse_file(opts, path)
-	if result != .success do return
+load_mesh_from_file :: proc(path: string, loc := #caller_location) -> (Mesh, bool) {
+    data, error := gltf2.load_from_file(path)
+    assert(error == nil, "Couldn't load mesh.", loc = loc)
 
-	result = cgltf.load_buffers(opts, data, path)
-	if result != .success do return
+    // if there are no errors we want to free memory when we are done with processing gltf/glb file.
+    defer gltf2.unload(data)
 
-	defer cgltf.free(data)
+    mesh, ok := parse_gltf_mesh_into_mesh(data, 0)
 
-	return parse_gltf_mesh_into_mesh(data, 0)
+    return mesh, ok
 }
 
-load_gpu_mesh_from_file :: proc(path: cstring, loc := #caller_location) -> (gpu_mesh: GPUMeshBuffers, ok: bool) {
-	opts := cgltf.options{}
-	data, result := cgltf.parse_file(opts, path)
-	if result != .success do return
-
-	result = cgltf.load_buffers(opts, data, path)
-	if result != .success do return
-
-	defer cgltf.free(data)
-
-	mesh := parse_gltf_mesh_into_mesh(data, 0) or_return
+load_gpu_mesh_from_file :: proc(path: string, loc := #caller_location) -> (gpu_mesh: GPUMeshBuffers, ok: bool) {
+    mesh := load_mesh_from_file(path, loc = loc) or_return
 	return upload_mesh_to_gpu(mesh, loc = loc), true
 }
 
@@ -485,6 +242,9 @@ defer_destroy_gpu_mesh :: proc(arena: ^gfx.VulkanArena, gpu_mesh: GPUMeshBuffers
 }
 
 upload_mesh_to_gpu :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffers {
+    assert(len(mesh.indices) > 0, "Mesh has no indices!")
+    assert(len(mesh.vertices) > 0, "Mesh has no vertices!")
+
 	buffers := create_mesh_buffers(mesh, loc = loc)
 	staging_write_mesh_buffers(&buffers, mesh)
 	buffers.index_count = u32(len(mesh.indices))
@@ -492,35 +252,9 @@ upload_mesh_to_gpu :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffer
 	return buffers
 }
 
-gltf_matrix_to_odin_matrix :: proc(in_m: [16]f32) -> Mat4x4 {
-	out_m: Mat4x4
-
-	out_m[0, 0] = in_m[0]
-	out_m[1, 0] = in_m[1]
-	out_m[2, 0] = in_m[2]
-	out_m[3, 0] = in_m[3]
-
-	out_m[0, 1] = in_m[4]
-	out_m[1, 1] = in_m[5]
-	out_m[2, 1] = in_m[6]
-	out_m[3, 1] = in_m[7]
-
-	out_m[0, 2] = in_m[8]
-	out_m[1, 2] = in_m[9]
-	out_m[2, 2] = in_m[10]
-	out_m[3, 2] = in_m[11]
-
-	out_m[0, 3] = in_m[12]
-	out_m[1, 3] = in_m[13]
-	out_m[2, 3] = in_m[14]
-	out_m[3, 3] = in_m[15]
-
-	return out_m
-}
-
 // Allocates two slices if successful. Make sure to free them when you're done.
 parse_gltf_mesh_into_skel_mesh :: proc(
-	data: ^cgltf.data,
+	data: ^gltf2.Data,
 	mesh_idx: int,
 ) -> (
 	skel_mesh: SkeletalMesh,
@@ -539,61 +273,53 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 	assert(skin != nil)
 
 	// Required for skeletal mesh.
-	joints_idx := find_attribute(primitive, .joints) or_return
-	weights_idx := find_attribute(primitive, .weights) or_return
+	joints_idx := primitive.attributes["JOINTS_0"] or_return
+	weights_idx := primitive.attributes["WEIGHTS_0"] or_return
 
-	assert(primitive.attributes[joints_idx].data.count == primitive.attributes[weights_idx].data.count)
-	skel_mesh.attrs = make([]SkeletonVertexAttribute, primitive.attributes[joints_idx].data.count)
+    joints_buf := gltf2.buffer_slice(data, joints_idx).([][4]u8)
+    weights_buf := gltf2.buffer_slice(data, weights_idx).([][4]f32)
+
+	skel_mesh.attrs = make([]SkeletonVertexAttribute, len(joints_buf))
 
 	{
-		it := make_accessor_buf_iterator(primitive.attributes[joints_idx].data, [4]u8)
-		for val, i in accessor_buf_iterator(&it) {
-			skel_mesh.attrs[i].joints = val
-		}
-	}
-	{
-		it := make_accessor_buf_iterator(primitive.attributes[weights_idx].data, [4]f32)
-		for val, i in accessor_buf_iterator(&it) {
-			skel_mesh.attrs[i].weights = val
+		for &attr, i in skel_mesh.attrs {
+			attr.joints = joints_buf[i]
+			attr.weights = weights_buf[i]
 		}
 	}
 
 	{
-		ptr_to_index: map[^cgltf.node]int
-
 		reserve(&skeleton.inverse_bind_matrices, len(skin.joints))
 		reserve(&skeleton.bind_matrices_ls, len(skin.joints))
 		reserve(&skeleton.joint_tree, len(skin.joints))
 
 		skeleton.joint_count = len(skin.joints)
 
-		it := make_accessor_buf_iterator(skin.inverse_bind_matrices, [16]f32)
-		for val, i in accessor_buf_iterator(&it) {
-			append(&skeleton.inverse_bind_matrices, gltf_matrix_to_odin_matrix(val))
+		inverse_bind_matrices_buf := gltf2.buffer_slice(data, skin.inverse_bind_matrices.?).([]JointMatrix)
+
+		for val in inverse_bind_matrices_buf {
+			append(&skeleton.inverse_bind_matrices, val)
 		}
 
-		for &gltf_joint, i in skin.joints {
+        joint_remap: map[u32]u32
+
+		for joint_i, i in skin.joints {
+            joint_remap[joint_i] = u32(i)
+        }
+
+		for &joint_i in skin.joints {
+			node := data.nodes[joint_i]
+
 			// Calc the local-space transform of the joint.
 			// TODO: We're just gonna assume that the skeleton is at the origin, so the world-space transform IS the local-space transform.
-			gltf_local_matrix: [16]f32
-			cgltf.node_transform_local(gltf_joint, &gltf_local_matrix[0])
-			local_matrix := gltf_matrix_to_odin_matrix(gltf_local_matrix)
-
-			ptr_to_index[gltf_joint] = len(skeleton.bind_matrices_ls)
+			local_matrix := node.mat
 			append(&skeleton.bind_matrices_ls, local_matrix)
-		}
 
-		// Create hierarchical tree structure for joints (used later for calcing joint matrices)
-		for &gltf_joint, i in skin.joints {
-			children: [dynamic]u32
-			reserve(&children, len(gltf_joint.children))
+            children: [dynamic]JointId
 
-			for &node_child in gltf_joint.children {
-				index, ok := ptr_to_index[node_child]
-				assert(ok, "Child node is not a joint.")
-
-				append(&children, u32(index))
-			}
+            for child_idx in node.children {
+                append(&children, joint_remap[child_idx])
+            }
 
 			append(&skeleton.joint_tree, children)
 		}
@@ -601,45 +327,45 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 		// TODO: TESTING: Grab first animation TESTING
 		animation := data.animations[0]
 
-		joint_anims: map[int]JointTrack
+		joint_anims: map[u32]JointTrack
 
-		for &channel, i in animation.channels {
-			joint_index, ok := ptr_to_index[channel.target_node]
-			if ok {
-				joint_anim, ok_j := &joint_anims[joint_index]
-				if !ok_j {
-					// TODO: this is kinda ass ngl
-					joint_anims[joint_index] = JointTrack{}
-					joint_anim = &joint_anims[joint_index]
-				}
+		for &channel in animation.channels {
+			joint_index := channel.target.node.?
 
-				#partial switch channel.target_path {
-				case .translation:
-					it := make_accessor_buf_iterator(channel.sampler.output, Vec3)
-					for val, i in accessor_buf_iterator(&it) {
-						append(&joint_anim.keyframes_translation, val)
-					}
-				case .rotation:
-					it := make_accessor_buf_iterator(channel.sampler.output, [4]f32)
-					for val, i in accessor_buf_iterator(&it) {
-						q := quaternion(w = val.w, x = val.x, y = val.y, z = val.z)
-						k: quaternion128 = 1 + 2i + 3j + 4k
-						append(&joint_anim.keyframes_rotation, q)
-					}
-				case .scale:
-					it := make_accessor_buf_iterator(channel.sampler.output, Vec3)
-					for val, i in accessor_buf_iterator(&it) {
-						append(&joint_anim.keyframes_scale, val)
-					}
-				case:
-					panic("Unsupported animation channel type.")
-				}
-			}
+            joint_anim, ok_j := &joint_anims[joint_index]
+            if !ok_j {
+                // TODO: this is kinda ass ngl
+                joint_anims[joint_index] = JointTrack{}
+                joint_anim = &joint_anims[joint_index]
+            }
+
+            sampler := animation.samplers[channel.sampler]
+
+            #partial switch channel.target.path {
+            case .Translation:
+                translation_buf := gltf2.buffer_slice(data, sampler.output).([]Vec3)
+                for val in translation_buf {
+                    append(&joint_anim.keyframes_translation, val)
+                }
+            case .Rotation:
+                rotation_buf := gltf2.buffer_slice(data, sampler.output).([]Vec4)
+                for val in rotation_buf {
+                    q := quaternion(w = val.w, x = val.x, y = val.y, z = val.z)
+                    append(&joint_anim.keyframes_rotation, q)
+                }
+            case .Scale:
+                scale_buf := gltf2.buffer_slice(data, sampler.output).([]Vec3)
+                for val in scale_buf {
+                    append(&joint_anim.keyframes_scale, val)
+                }
+            case:
+                panic("Unsupported animation channel type.")
+            }
 		}
 
-		reserve(&skel_anim.joint_animations, len(joint_anims))
-		for k in 0 ..< len(joint_anims) {
-			append(&skel_anim.joint_animations, joint_anims[k])
+		resize(&skel_anim.joint_animations, len(joint_anims))
+		for k, v in joint_anims {
+			skel_anim.joint_animations[k] = v
 		}
 
 		skel_anim.keyframe_count = u32(len(skel_anim.joint_animations[0].keyframes_translation))
@@ -651,15 +377,12 @@ parse_gltf_mesh_into_skel_mesh :: proc(
 	return
 }
 
-load_skel_mesh_from_file :: proc(path: cstring, loc := #caller_location) -> (skeleton: Skeleton, anim: SkeletalAnimation, ok: bool) {
-	opts := cgltf.options{}
-	data, result := cgltf.parse_file(opts, path)
-	assert(result == .success)
+load_skel_mesh_from_file :: proc(path: string, loc := #caller_location) -> (skeleton: Skeleton, anim: SkeletalAnimation, ok: bool) {
+    data, error := gltf2.load_from_file(path)
+    assert(error == nil, "Couldn't load skeletal mesh.", loc = loc)
 
-	result = cgltf.load_buffers(opts, data, path)
-	if result != .success do return
-
-	defer cgltf.free(data)
+    // if there are no errors we want to free memory when we are done with processing gltf/glb file.
+    defer gltf2.unload(data)
 
 	skel_mesh, skel, an := parse_gltf_mesh_into_skel_mesh(data, 0) or_return
 	skeleton = skel
@@ -688,7 +411,8 @@ create_skel_mesh_buffers :: proc(skel_mesh: SkeletalMesh, loc := #caller_locatio
 	new_surface.attrs_count = u32(len(skel_mesh.attrs))
 
 	new_surface.skel_vert_attrs_buffer = gfx.create_buffer(
-		vk.DeviceSize(size_of(SkeletonVertexAttribute) * len(skel_mesh.attrs)),
+		SkeletonVertexAttribute,
+        len(skel_mesh.attrs),
 		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 		loc = loc,
@@ -702,8 +426,5 @@ staging_write_skel_mesh_buffers :: proc(buffers: ^GPUSkelMeshBuffers, skel_mesh:
 	assert(len(skel_mesh.vertices) == len(skel_mesh.attrs))
 
 	staging_write_mesh_buffers(buffers, skel_mesh)
-
-	attrs_buffer_size := vk.DeviceSize(size_of(SkeletonVertexAttribute) * len(skel_mesh.attrs))
-
 	gfx.staging_write_buffer_slice(&buffers.skel_vert_attrs_buffer, skel_mesh.attrs)
 }

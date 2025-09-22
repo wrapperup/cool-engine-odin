@@ -1,8 +1,6 @@
 package gfx
 
 import "base:runtime"
-import "core:fmt"
-import "core:mem"
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
 
@@ -56,25 +54,25 @@ destroy_resource :: proc(
 
 	switch ty {
 	case .VmaBuffer:
-		vma.DestroyBuffer(r_ctx.allocator, transmute(vk.Buffer)resource.handle, resource.allocation)
+		vma.DestroyBuffer(r_ctx.allocator, cast(vk.Buffer)resource.handle, resource.allocation)
 	case .VmaImage:
-		vma.DestroyImage(r_ctx.allocator, transmute(vk.Image)resource.handle, resource.allocation)
+		vma.DestroyImage(r_ctx.allocator, cast(vk.Image)resource.handle, resource.allocation)
 	case .CommandPool:
-		vk.DestroyCommandPool(r_ctx.device, transmute(vk.CommandPool)resource.handle, nil)
+		vk.DestroyCommandPool(r_ctx.device, cast(vk.CommandPool)resource.handle, nil)
 	case .DescriptorPool:
-		vk.DestroyDescriptorPool(r_ctx.device, transmute(vk.DescriptorPool)resource.handle, nil)
+		vk.DestroyDescriptorPool(r_ctx.device, cast(vk.DescriptorPool)resource.handle, nil)
 	case .DescriptorSetLayout:
-		vk.DestroyDescriptorSetLayout(r_ctx.device, transmute(vk.DescriptorSetLayout)resource.handle, nil)
+		vk.DestroyDescriptorSetLayout(r_ctx.device, cast(vk.DescriptorSetLayout)resource.handle, nil)
 	case .Fence:
-		vk.DestroyFence(r_ctx.device, transmute(vk.Fence)resource.handle, nil)
+		vk.DestroyFence(r_ctx.device, cast(vk.Fence)resource.handle, nil)
 	case .ImageView:
-		vk.DestroyImageView(r_ctx.device, transmute(vk.ImageView)resource.handle, nil)
+		vk.DestroyImageView(r_ctx.device, cast(vk.ImageView)resource.handle, nil)
 	case .Pipeline:
-		vk.DestroyPipeline(r_ctx.device, transmute(vk.Pipeline)resource.handle, nil)
+		vk.DestroyPipeline(r_ctx.device, cast(vk.Pipeline)resource.handle, nil)
 	case .PipelineLayout:
-		vk.DestroyPipelineLayout(r_ctx.device, transmute(vk.PipelineLayout)resource.handle, nil)
+		vk.DestroyPipelineLayout(r_ctx.device, cast(vk.PipelineLayout)resource.handle, nil)
 	case .Sampler:
-		vk.DestroySampler(r_ctx.device, transmute(vk.Sampler)resource.handle, nil)
+		vk.DestroySampler(r_ctx.device, cast(vk.Sampler)resource.handle, nil)
 	}
 }
 
@@ -89,25 +87,25 @@ vk_destroy_resource_by_handle :: proc(resource: ResourceHandle) {
 
 	switch resource.ty {
 	case .VmaBuffer:
-		vma.DestroyBuffer(r_ctx.allocator, transmute(vk.Buffer)resource.handle, resource.allocation)
+		vma.DestroyBuffer(r_ctx.allocator, cast(vk.Buffer)resource.handle, resource.allocation)
 	case .VmaImage:
-		vma.DestroyImage(r_ctx.allocator, transmute(vk.Image)resource.handle, resource.allocation)
+		vma.DestroyImage(r_ctx.allocator, cast(vk.Image)resource.handle, resource.allocation)
 	case .CommandPool:
-		vk.DestroyCommandPool(r_ctx.device, transmute(vk.CommandPool)resource.handle, nil)
+		vk.DestroyCommandPool(r_ctx.device, cast(vk.CommandPool)resource.handle, nil)
 	case .DescriptorPool:
-		vk.DestroyDescriptorPool(r_ctx.device, transmute(vk.DescriptorPool)resource.handle, nil)
+		vk.DestroyDescriptorPool(r_ctx.device, cast(vk.DescriptorPool)resource.handle, nil)
 	case .DescriptorSetLayout:
-		vk.DestroyDescriptorSetLayout(r_ctx.device, transmute(vk.DescriptorSetLayout)resource.handle, nil)
+		vk.DestroyDescriptorSetLayout(r_ctx.device, cast(vk.DescriptorSetLayout)resource.handle, nil)
 	case .Fence:
-		vk.DestroyFence(r_ctx.device, transmute(vk.Fence)resource.handle, nil)
+		vk.DestroyFence(r_ctx.device, cast(vk.Fence)resource.handle, nil)
 	case .ImageView:
-		vk.DestroyImageView(r_ctx.device, transmute(vk.ImageView)resource.handle, nil)
+		vk.DestroyImageView(r_ctx.device, cast(vk.ImageView)resource.handle, nil)
 	case .Pipeline:
-		vk.DestroyPipeline(r_ctx.device, transmute(vk.Pipeline)resource.handle, nil)
+		vk.DestroyPipeline(r_ctx.device, cast(vk.Pipeline)resource.handle, nil)
 	case .PipelineLayout:
-		vk.DestroyPipelineLayout(r_ctx.device, transmute(vk.PipelineLayout)resource.handle, nil)
+		vk.DestroyPipelineLayout(r_ctx.device, cast(vk.PipelineLayout)resource.handle, nil)
 	case .Sampler:
-		vk.DestroySampler(r_ctx.device, transmute(vk.Sampler)resource.handle, nil)
+		vk.DestroySampler(r_ctx.device, cast(vk.Sampler)resource.handle, nil)
 	}
 }
 
@@ -156,12 +154,23 @@ defer_destroy :: proc(
 ) {
 	resource_type := resource_type_of_handle(T)
 
+    defer_destroy_raw(arena, transmute(u64)handle, resource_type, allocation, debug, loc)
+}
+
+defer_destroy_raw :: proc(
+	arena: ^VulkanArena,
+	handle: u64,
+    resource_type: ResourceType,
+	allocation: vma.Allocation = nil,
+	debug: string = "UNKNOWN",
+	loc: runtime.Source_Code_Location = #caller_location,
+) {
 	if resource_requires_allocation(resource_type) {
 		assert(allocation != nil, "Resource of this type requires an allocation to be passed in.", loc)
 	}
 
 	resource_handle := ResourceHandle {
-		handle          = transmute(u64)handle,
+		handle          = handle,
 		ty              = resource_type,
 		allocation      = allocation,
 		debug_info      = debug,
@@ -173,7 +182,7 @@ defer_destroy :: proc(
 
 defer_destroy_buffer :: proc(
 	arena: ^VulkanArena,
-	buffer: GPUBuffer,
+	buffer: GPUBuffer($T),
 	debug: string = "UNKNOWN",
 	loc: runtime.Source_Code_Location = #caller_location,
 ) {

@@ -1,7 +1,6 @@
 package game
 
-import "gfx"
-
+@shader_shared
 GPU_Point_Light :: struct {
 	color:     Vec3,
 	radius:    f32,

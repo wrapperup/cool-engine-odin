@@ -1,7 +1,6 @@
 import bindless;
 import brdf;
 import common;
-import consts;
 import ibl;
 import lights;
 import shadows;
@@ -21,20 +20,6 @@ static const Mat4x4 BIAS_MAT = {
   0.0, 0.0, 0.0, 1.0, //
 };
 
-struct DrawPushConstants {
-  GlobalData *global_data_buffer;
-  Vertex *vertex_buffer;
-  Mat4x4 *model_matrices;
-  PBRMaterial *materials;
-  u32 model_index;
-  u32 material_index;
-  u32 num_cascades;
-};
-
-struct VertexInput {
-  u32 vertex_index : SV_VertexID;
-};
-
 struct PbrMaterialParams {
   Vec4 base_color;
   Vec4 emissive;
@@ -46,6 +31,10 @@ struct PbrMaterialParams {
 
 [vk_push_constant]
 DrawPushConstants pc;
+
+struct VertexInput {
+  u32 vertex_index : SV_VertexID;
+};
 
 [shader("vertex")]
 FragmentInput vertex_main(VertexInput input) {
@@ -108,18 +97,18 @@ FragmentOutput fragment_main(FragmentInput in) {
   }
 
   Vec3 normal =
-      material.normal_map_id.sample(DEFAULT_SAMPLER_ID, uv).rgb * 2.0 - 1.0;
+      material.normal_map_id.sample(pc.global_data_buffer.default_sampler, uv).rgb * 2.0 - 1.0;
   normal.y *= -1;
   normal = mul(normal, in.tbn); // Note: Matrices constructed in Slang/HLSL are row-major by default...
   normal = normalize(normal);
 
   Vec3 base_color =
-      material.base_color_id.sample(DEFAULT_SAMPLER_ID, uv).xyz * in.color;
+      material.base_color_id.sample(pc.global_data_buffer.default_sampler, uv).xyz * in.color;
 
   f32 reflectance = 0.5f;
 
   let ao_roughness_metallic =
-      material.ao_roughness_metallic.sample(DEFAULT_SAMPLER_ID, uv).rgb;
+      material.ao_roughness_metallic_id.sample(pc.global_data_buffer.default_sampler, uv).rgb;
 
   let ao_roughness_metallic_srgb = linear_to_srgb(ao_roughness_metallic);
 
@@ -157,7 +146,11 @@ FragmentOutput fragment_main(FragmentInput in) {
   let bias = pc.global_data_buffer.cascade_configs[cascade_index].bias;
   let slope_bias = pc.global_data_buffer.cascade_configs[cascade_index].slope_bias;
 
-  let shadow = filter_pcf(in.pos_cs.xy, shadow_space_pos, cascade_index, bias, slope_bias, sun_NoL);
+  Shadow_Params shadow_params;
+  shadow_params.depth = pc.shadow_depth;
+  shadow_params.sampler = pc.shadow_sampler;
+
+  let shadow = filter_pcf(shadow_params, in.pos_cs.xy, shadow_space_pos, cascade_index, bias, slope_bias, sun_NoL);
 
   Vec3 frag_color = 0;
   frag_color = saturate( (min(sun_NoL, min(shadow, ao)) * pc.global_data_buffer.sun_color) *
@@ -188,9 +181,15 @@ FragmentOutput fragment_main(FragmentInput in) {
     }
   }
 
+  PBR_Params params;
+  params.dfg = pc.global_data_buffer.environment.dfg;
+  params.env_map = pc.global_data_buffer.environment.env_map;
+  params.env_sampler = pc.global_data_buffer.environment.env_sampler;
+  params.default_sampler = pc.global_data_buffer.default_sampler;
+
   frag_color += pc.global_data_buffer.sky_color * ao *
-                evaluate_ibl(n, v, diffuse, f0, proughness,
-                             pc.global_data_buffer.environment.sh_volume[0]);
+                evaluate_ibl(params, n, v, diffuse, f0, proughness,
+                             pc.global_data_buffer.environment.sh_volume, pos_ws, pc.global_data_buffer.environment.world_to_volume);
 
   // DEBUG
   // frag_color = base_color;

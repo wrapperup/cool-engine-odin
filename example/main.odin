@@ -40,8 +40,8 @@ main :: proc() {
 	}
 	indices: [3]u32 = {0, 1, 2}
 
-	vertex_buffer := gfx.create_buffer(size_of(vertices), {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
-	index_buffer := gfx.create_buffer(size_of(indices), {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
+	vertex_buffer := gfx.create_buffer([3]Vertex, len(vertices), {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
+	index_buffer := gfx.create_buffer([3]u32, len(indices), {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
 
 	gfx.staging_write_buffer_slice(&vertex_buffer, vertices[:])
 	gfx.staging_write_buffer_slice(&index_buffer, indices[:])

@@ -1,0 +1,57 @@
+{
+    "Compiler": {
+        "captureEnvironment": true,
+        "commandLineOptions": "",
+        "forcePrecompiledHeaderPDBs": false,
+        "isOverridden": true,
+        "overrideLocation": "C:/Repos/odin/odin-livepp/fake-compiler.exe",
+        "removeShowIncludes": false,
+        "removeSourceDependencies": false,
+        "useOverrideAsFallback": false
+    },
+    "ContinuousCompilation": {
+        "directory": "C:/Repos/odin/odin-livepp/testprog",
+        "isEnabled": true,
+        "timeout": 100
+    },
+    "ExceptionHandler": {
+        "isEnabled": true,
+        "order": 1
+    },
+    "General": {
+        "directoryToBroker": "../../Broker",
+        "showErrorOnFailedBrokerConnection": true,
+        "spawnBrokerForLocalConnection": true
+    },
+    "HotReload": {
+        "callCompileHooksForHaltedProcesses": false,
+        "callHotReloadHooksForHaltedProcesses": false,
+        "callLinkHooksForHaltedProcesses": false,
+        "captureToolchainEnvironmentTimeout": 10000,
+        "libraryFileExtensions": ".lib;.a",
+        "objectFileExtensions": ".obj;.o",
+        "preBuildCommandLineOptions": "",
+        "preBuildExecutable": "",
+        "preBuildIsEnabled": false,
+        "preBuildWorkingDirectory": "./",
+        "sourcePathFilters": ".odin"
+    },
+    "Linker": {
+        "captureEnvironment": true,
+        "commandLineOptions": "",
+        "isOverridden": false,
+        "overrideLocation": "",
+        "suppressCreationOfImportLibrary": true,
+        "useOverrideAsFallback": false
+    },
+    "UnitySplitting": {
+        "fileExtensions": ".cpp;.c;.cc;.c++;.cp;.cxx",
+        "isEnabled": true,
+        "threshold": 3
+    },
+    "VirtualDrive": {
+        "directory": "",
+        "isEnabled": false,
+        "letter": ""
+    }
+}

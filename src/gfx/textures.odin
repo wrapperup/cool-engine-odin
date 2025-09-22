@@ -1,12 +1,9 @@
 package gfx
 
-import "core:c"
-import "core:fmt"
-import "core:math"
+import "core:log"
 import "core:mem"
 
 import ktx "deps:odin-libktx"
-import vma "deps:odin-vma"
 
 import vk "vendor:vulkan"
 
@@ -21,8 +18,35 @@ load_image_from_file :: proc(
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 
-	assert(ktx_result == .SUCCESS, "Failed to load image.")
+    assert(ktx_result == .SUCCESS, "Failed to load image.")
 
+    return load_image_from_ktx_texture(ktx_texture, image_type, image_view_type, out_width, out_height, out_depth)
+}
+
+load_image_from_memory :: proc(
+	mem: []u8,
+	image_type: vk.ImageType = .D2,
+	image_view_type: vk.ImageViewType = .D2,
+	out_width: ^u32 = nil,
+	out_height: ^u32 = nil,
+	out_depth: ^u32 = nil,
+) -> GPUImage {
+	ktx_texture: ^ktx.Texture2
+	ktx_result := ktx.Texture2_CreateFromMemory(raw_data(mem), len(mem), {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
+
+    assert(ktx_result == .SUCCESS, "Failed to load image.")
+
+    return load_image_from_ktx_texture(ktx_texture, image_type, image_view_type, out_width, out_height, out_depth)
+}
+
+load_image_from_ktx_texture :: proc(
+	ktx_texture: ^ktx.Texture2,
+	image_type: vk.ImageType = .D2,
+	image_view_type: vk.ImageViewType = .D2,
+	out_width: ^u32 = nil,
+	out_height: ^u32 = nil,
+	out_depth: ^u32 = nil,
+) -> GPUImage {
 	num_faces := ktx_texture.numFaces // Faces (cubemap)
 	num_levels := ktx_texture.numLevels // Mip levels
 	num_layers := ktx_texture.numLayers // Array levels
@@ -40,7 +64,7 @@ load_image_from_file :: proc(
 	data := ktx.Texture_GetData(ktx_texture)
 	format := ktx.Texture_GetVkFormat(ktx_texture)
 
-	fmt.println("format:", format)
+	log.info("format:", format)
 
 	extent := vk.Extent3D{ktx_texture.baseWidth, ktx_texture.baseHeight, ktx_texture.baseDepth}
 
@@ -56,7 +80,7 @@ load_image_from_file :: proc(
 	create_gpu_image_view(&image, {.COLOR}, image_view_type, 0, 0)
 
 	// Next, upload image data to vk Image
-	staging := create_buffer(vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(u8, vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
 	mapped_data := staging.info.pMappedData
 
 	mem.copy(mapped_data, data, int(size))
@@ -89,9 +113,9 @@ load_image_from_file :: proc(
 	}
 
 	if cmd, ok := immediate_submit(); ok {
-		transition_image(cmd, image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+		transition_image(cmd, &image, .TRANSFER_DST_OPTIMAL)
 		vk.CmdCopyBufferToImage(cmd, staging.buffer, image.image, .TRANSFER_DST_OPTIMAL, u32(len(copy_regions)), raw_data(copy_regions))
-		transition_image(cmd, image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
+		transition_image(cmd, &image, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
 	destroy_buffer(&staging)
@@ -112,24 +136,6 @@ load_image_from_file :: proc(
 	return image
 }
 
-load_image_from_bytes :: proc(
-	bytes: []u8,
-	extent: vk.Extent3D,
-	image_format: vk.Format,
-	image_type: vk.ImageType = .D2,
-	image_view_type: vk.ImageViewType = .D2,
-) -> GPUImage {
-	image := create_gpu_image(image_format, extent, {.SAMPLED, .TRANSFER_DST}, image_type = image_type)
-	create_gpu_image_view(&image, {.COLOR}, image_view_type)
-
-	defer_destroy(&r_ctx.global_arena, image.image_view)
-	defer_destroy(&r_ctx.global_arena, image.image, image.allocation)
-
-	staging_write_image_slice(&image, bytes, 0)
-
-	return image
-}
-
 // Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
 staging_write_image :: proc(gpu_image: ^GPUImage, in_data: ^$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
 	assert(gpu_image.image_view != 0, "GPUImage is missing a valid image view.")
@@ -138,7 +144,7 @@ staging_write_image :: proc(gpu_image: ^GPUImage, in_data: ^$T, offset: vk.Devic
 	gpu_size := gpu_image.extent.width * gpu_image.extent.height * gpu_image.extent.depth * size_of(T) // TODO: Validate this.
 	assert(gpu_size >= (u32(size) + u32(offset)), "The size of the data and offset is larger than the buffer", loc)
 
-	staging := create_buffer(vk.DeviceSize(size_of(T)), {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(u8, vk.DeviceSize(size_of(T)), {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer(&staging, in_data)
 
 	if cmd, ok := immediate_submit(); ok {
@@ -168,7 +174,7 @@ staging_write_image_slice :: proc(gpu_image: ^GPUImage, in_data: []$T, offset: v
 	gpu_size := gpu_image.extent.width * gpu_image.extent.height * gpu_image.extent.depth * size_of(T) // TODO: Validate this.
 	assert(gpu_size >= (u32(size) + u32(offset)), "The size of the data and offset is larger than the buffer", loc)
 
-	staging := create_buffer(size, {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(u8, size, {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer_slice(&staging, in_data)
 
 	if cmd, ok := immediate_submit(); ok {

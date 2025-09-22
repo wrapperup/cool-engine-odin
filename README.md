@@ -7,9 +7,10 @@ Toy engine + Vulkan renderer I built for fun to learn Odin language (and some gr
 - Sparse entity system (ECS-like)
 - First person player controller based on Unreal character movement
 - Skeletal meshes and animation
-- Bindless System (see `shaders/text.slang` for a simple example!)
-- - Bindless versions of `Texture`, `SamplerState` and `SamplerComparisonState` as handles, while keeping the usage the same.
+- Bindless System (see `shaders/tonemapping.slang` for a simple example!)
+- - Bindless versions of `Texture*`, `SamplerState` and `SamplerComparisonState`, while keeping the usage the same.
 - - Buffers use BDA
+- Metaprogram to generate assets tables and shader glue code
 - glTF loading of meshes and skeletal meshes
 - Physics (with Physx 5.1)
 

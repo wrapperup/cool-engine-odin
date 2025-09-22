@@ -1,5 +1,6 @@
 package game
 
+import "core:strings"
 import ma "vendor:miniaudio"
 
 SoundSystem :: struct {
@@ -17,9 +18,12 @@ init_sound_system :: proc() {
 	game.sound_system.initialized = true
 }
 
-play_sound :: proc(path: cstring) {
+play_sound :: proc(asset_name: Asset_Name) {
 	assert(game.sound_system.initialized)
-	ma.engine_play_sound(&game.sound_system.sound_engine, path, nil)
+    path_c := strings.clone_to_cstring(asset_path(asset_name))
+    defer delete(path_c)
+
+	ma.engine_play_sound(&game.sound_system.sound_engine, path_c, nil)
 }
 
 play_sound_3d :: proc(path: cstring, position: Vec3) {

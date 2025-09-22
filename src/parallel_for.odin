@@ -1,9 +1,6 @@
 package game
 
-import "core:math"
-import "core:sync"
 import "core:thread"
-import "core:fmt"
 
 POOL: thread.Pool
 THREAD_COUNT: int = 0

@@ -16,3 +16,6 @@
 [submodule "deps/odin-mikktspace"]
 	path = deps/odin-mikktspace
 	url = https://github.com/wrapperup/odin-mikktspace
+[submodule "deps/gltf2"]
+	path = deps/gltf2
+	url = https://github.com/Pawel82S/glTF2

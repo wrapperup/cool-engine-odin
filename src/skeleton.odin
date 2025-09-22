@@ -1,9 +1,7 @@
 package game
 
-import "core:fmt"
 import "core:math"
 import "core:math/linalg"
-import "core:math/linalg/hlsl"
 
 JointId :: u32
 JointMatrix :: Mat4x4
@@ -110,7 +108,7 @@ sample_animation :: proc(animator: ^SkeletonAnimator, time_s: f32) {
 // Transforms a list of joints in local space to joint space. Usually for applying to vertices for skinning.
 calc_joint_matrices :: proc(skeleton: ^Skeleton, in_joints_ls: []JointMatrix, out_joints_js: []JointMatrix) {
 	// Root joint is assumed to be at the origin in model space (since... it's the root)
-	calc_joint_matrix(skeleton, in_joints_ls, JointId(0), linalg.identity_matrix(JointMatrix), out_joints_js)
+	calc_joint_matrix(skeleton, in_joints_ls, 0, linalg.identity_matrix(JointMatrix), out_joints_js)
 }
 
 // TODO: Make this more efficient, it's recursive.

@@ -9,11 +9,7 @@ import "core:reflect"
 import "core:slice"
 import "core:strings"
 
-import "vendor:glfw"
-
 import im "deps:odin-imgui"
-import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 import px "deps:physx-odin"
 
 import "gfx"
@@ -29,12 +25,13 @@ configure_im :: proc() {
 	font_config.GlyphMaxAdvanceX = max(f32)
 	font_config.RasterizerMultiply = 1.4
 	font_config.RasterizerDensity = 1.0
-	font_config.EllipsisChar = cast(im.Wchar)(max(u16))
+	font_config.EllipsisChar = max(u16)
 
 	font_config.PixelSnapH = false
 	font_config.GlyphOffset = {0.0, -1.0}
 
-	im.FontAtlas_AddFontFromFileTTF(io.Fonts, "C:\\Windows\\Fonts\\segoeui.ttf", 18.0, &font_config)
+	segoe_ui := asset_content(.f_segoeui)
+	im.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(segoe_ui), cast(i32)len(segoe_ui), 18.0, &font_config)
 
 	font_config.MergeMode = true
 
@@ -46,7 +43,15 @@ configure_im :: proc() {
 	font_config.RasterizerMultiply = 1.0
 	font_config.GlyphOffset = {0.0, -1.0}
 
-	im.FontAtlas_AddFontFromFileTTF(io.Fonts, "assets/fonts/fa-regular-400.ttf", 14.0, &font_config, slice.as_ptr(FA_RANGES[:]))
+	fa_regular := asset_content(.f_fa_regular_400)
+	im.FontAtlas_AddFontFromMemoryTTF(
+		io.Fonts,
+		raw_data(fa_regular),
+		cast(i32)len(fa_regular),
+		14.0,
+		&font_config,
+		slice.as_ptr(FA_RANGES[:]),
+	)
 
 	font_config.MergeMode = false
 
@@ -56,7 +61,7 @@ configure_im :: proc() {
 	tone_text_2: im.Vec4 : {0.69, 0.69, 0.69, 0.8}
 
 	tone_1: im.Vec4 : {0.16, 0.16, 0.18, 1.0}
-	tone_1_b := tone_1 * 1.2
+	// tone_1_b := tone_1 * 1.2
 	tone_1_e := tone_1 * 1.2
 	tone_1_e_a := tone_1_e
 	tone_3: im.Vec4 : {0.11, 0.11, 0.12, 1.0}
@@ -165,7 +170,11 @@ update_imgui :: proc() {
 		im.DrawList_AddLine(bl, line0, line1, line.color0, 1.0)
 	}
 
-	if game.input_system.mouse_locked do return
+	if action_just_pressed(.ShowDebug) {
+		game.show_imgui = !game.show_imgui
+	}
+
+	if !game.show_imgui do return
 
 	editor_draw_imgui()
 
@@ -205,7 +214,6 @@ update_imgui :: proc() {
 	if im.Begin("Physics") {
 		enabled := px.scene_get_visualization_parameter(game.phys.scene, .Scale) > 0.0
 		if im.Checkbox("Enable debug view", &enabled) {
-			player := get_entity(Player, game.state.player_id)
 			min := player.translation - 50
 			max := player.translation + 50
 			px.scene_set_visualization_culling_box_mut(game.phys.scene, px.bounds3_new_1(transmute(px.Vec3)min, transmute(px.Vec3)max))
@@ -255,7 +263,6 @@ update_imgui :: proc() {
 			if data == nil {
 				display_string = strings.clone_to_cstring(info_named.name, context.temp_allocator)
 			} else {
-				entity := (^Entity)(data)
 				display_string = fmt.ctprintf("%s %p", info_named.name, data)
 			}
 
@@ -264,7 +271,6 @@ update_imgui :: proc() {
 				name := info_struct.names[i]
 				ty := info_struct.types[i]
 				offset := info_struct.offsets[i]
-				is_using := info_struct.usings[i]
 
 				if data == nil {
 					im.Text(strings.clone_to_cstring(name, context.temp_allocator))
@@ -288,7 +294,7 @@ update_imgui :: proc() {
 		}
 
 		for key, subtype_ptr in game.entity_system.subtype_storage {
-			storage_raw := cast(^RawSparseSet)subtype_ptr.ptr
+			storage_raw := subtype_ptr.ptr
 			size_t := subtype_ptr.type_info.size
 
 			if im.SmallButton(fmt.ctprintf("Clear All %s", key)) {
@@ -321,7 +327,7 @@ update_imgui :: proc() {
 			im.InputFloat3("pos", &player.translation)
 			im.InputFloat3("vel", &player.velocity)
 			im.InputFloat3("pitch yaw", &player.camera_rot)
-			im.InputFloat("fov", cast(^f32)(&player.camera_fov_deg))
+			im.InputFloat("fov", &player.camera_fov_deg)
 			items := [len(ViewState)]cstring{"SceneColor", "SceneDepth", "ShadowDepth"}
 			im.ComboChar("view", cast(^i32)(&game.view_state), raw_data(&items), len(items))
 		}
@@ -388,43 +394,4 @@ update_imgui :: proc() {
 	// 	}
 	// }
 	// im.End()
-}
-
-debug_draw_line :: proc(pos0, pos1: Vec3, thickness: f32 = 1.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}, dots: bool = false) {
-	player := get_entity(game.state.player_id)
-
-	// TODO: cache this
-	view_projection := get_current_projection_view_matrix()
-
-	line0, ok := world_space_to_clip_space(view_projection, pos0)
-	line1, ok1 := world_space_to_clip_space(view_projection, pos1)
-
-	bl := im.GetBackgroundDrawList()
-	col_u32 := im.GetColorU32ImVec4(color)
-
-	if ok && ok1 {
-		im.DrawList_AddLine(bl, line0, line1, col_u32)
-	}
-
-	if dots {
-		pad: [2]f32 = 5
-
-		if ok do im.DrawList_AddRectFilled(bl, line0 - pad, line0 + pad, col_u32)
-		if ok1 do im.DrawList_AddRectFilled(bl, line1 - pad, line1 + pad, col_u32)
-	}
-}
-
-debug_draw_dot :: proc(pos: Vec3, half_size: f32 = 5.0, color := im.Vec4{1.0, 0.0, 0.0, 1.0}) {
-	player := get_entity(game.state.player_id)
-
-	// TODO: cache this
-	view_projection := get_current_projection_view_matrix()
-
-	bl := im.GetBackgroundDrawList()
-
-	col_u32 := im.GetColorU32ImVec4(color)
-
-	pos_cs, ok := world_space_to_clip_space(view_projection, pos)
-
-	if ok do im.DrawList_AddRectFilled(bl, pos_cs - half_size, pos_cs + half_size, col_u32)
 }

@@ -4,6 +4,10 @@
 - [x] Window resizing / minimizing
 - [x] Full screen toggle
 
+## Shaders
+- [x] Bindless solution
+- [x] Generate shared types
+
 ## Entity System
 - [ ] Use metaprogram?
 - [ ] Deleting untyped/raw entity and it's subtype via reflection (for ed/debug)
@@ -27,10 +31,10 @@
 - - [ ] Map and load assets
 
 ## Graphics
-- [ ] Make shadow map follow camera
-- [ ] Shadow Cascades
+- [x] Make shadow map follow camera
+- [x] Shadow Cascades
 - [ ] Irradiance Volumes
-- - [x] Bake from Blender
+- - [ ] Bake from Blender
 - - [ ] Implement with IBL/Mesh shading
 - - [ ] Trilinear Interpolation
 - [ ] Render Pass Abstraction

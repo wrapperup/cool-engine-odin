@@ -1,23 +1,16 @@
 package gfx
 
 import "base:runtime"
-import "core:c/libc"
 import "core:dynlib"
 import "core:fmt"
-import "core:math"
-import "core:mem"
+import "core:log"
 import "core:os"
 import "core:reflect"
 import "core:strings"
-import "core:time"
 
 import vma "deps:odin-vma"
-import "vendor:cgltf"
 import "vendor:glfw"
 import vk "vendor:vulkan"
-
-import linalg "core:math/linalg"
-import hlsl "core:math/linalg/hlsl"
 
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
@@ -31,7 +24,7 @@ log_normal :: proc(args: ..any) {
 
 log_error :: proc(args: ..any) {
 	if r_ctx.enable_logs {
-		fmt.println(..args)
+		fmt.eprintln(..args)
 	}
 }
 
@@ -94,6 +87,11 @@ Renderer :: struct {
 	imgui_init:                  bool,
 	imgui_pool:                  vk.DescriptorPool,
 
+	// Bindless
+	bindless_system:             BindlessSystem,
+	current_pipeline:            Pipeline,
+
+	// Limits
 	limits:                      vk.PhysicalDeviceLimits, // TODO: Too big?
 }
 
@@ -378,8 +376,6 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 
 		log_normal("Available Extensions:")
 
-		bytes, ok := os.read_entire_file("")
-
 		for &ext in &extension_props {
 			log_normal(" - %s", cstring(&ext.extensionName[0]))
 		}
@@ -429,7 +425,7 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		}
 	}
 
-	{ // Keep device limits
+	{ 	// Keep device limits
 		properties: vk.PhysicalDeviceProperties
 		vk.GetPhysicalDeviceProperties(r_ctx.physical_device, &properties)
 
@@ -611,19 +607,13 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		init_descriptor_allocator(&r_ctx.global_descriptor_allocator, r_ctx.device, 10, sizes, {.UPDATE_AFTER_BIND})
 	}
 
+	init_bindless_descriptors()
+
 	return true
 }
 
 cleanup_vulkan :: proc() {
 	vk.DeviceWaitIdle(r_ctx.device)
-
-	if r_ctx.imgui_init {
-		im_vk.Shutdown()
-		vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
-	}
-
-	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
-	destroy_descriptor_allocator(&r_ctx.global_descriptor_allocator)
 
 	// Cleanup queued resources
 	flush_vk_arena(&r_ctx.global_arena)
@@ -639,6 +629,14 @@ cleanup_vulkan :: proc() {
 		flush_vk_arena(&frame.arena)
 		delete_vk_arena(frame.arena)
 	}
+
+	if r_ctx.imgui_init {
+		im_vk.Shutdown()
+		vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
+	}
+
+	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
+	destroy_descriptor_allocator(&r_ctx.global_descriptor_allocator)
 
 	if r_ctx.swapchain.swapchain != 0 {
 		vk.DestroySwapchainKHR(r_ctx.device, r_ctx.swapchain.swapchain, nil)
@@ -693,7 +691,7 @@ set_viewport_and_scissor :: proc {
 LAST_WRITE: os.File_Time
 
 is_shaders_updated :: proc() -> bool {
-	lib_last_write, lib_last_write_err := os.last_write_time_by_name("./shaders/out/gradient.comp.spv")
+	lib_last_write, _ := os.last_write_time_by_name("./shaders/out/gradient.comp.spv")
 
 	if LAST_WRITE == lib_last_write {
 		return false
@@ -722,12 +720,7 @@ begin_command_buffer :: proc() -> vk.CommandBuffer {
 		&r_ctx.swapchain.swapchain_image_index,
 	)
 
-	if acquire_image_result == .ERROR_OUT_OF_DATE_KHR {
-		resize_swapchain()
-		return nil
-	} else {
-		vk_check(acquire_image_result)
-	}
+	vk_check(acquire_image_result)
 
 	r_ctx.draw_extent.width = r_ctx.draw_image.extent.width
 	r_ctx.draw_extent.height = r_ctx.draw_image.extent.height
@@ -750,7 +743,7 @@ begin_command_buffer :: proc() -> vk.CommandBuffer {
 }
 
 copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_size: vk.Extent2D) {
-	transition_image(cmd, r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+	transition_vk_image(cmd, r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index], .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 	copy_image_to_image(
 		cmd,
@@ -762,11 +755,11 @@ copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_siz
 }
 
 // Called by the user when they end drawing to the screen.
-submit :: proc(cmd: vk.CommandBuffer) {
+submit :: proc(cmd: vk.CommandBuffer) -> (swapchain_resized: bool) {
 	render_imgui()
 
 	// set swapchain image layout to Attachment Optimal so we can draw it
-	transition_image(
+	transition_vk_image(
 		cmd,
 		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
 		.TRANSFER_DST_OPTIMAL,
@@ -777,7 +770,7 @@ submit :: proc(cmd: vk.CommandBuffer) {
 	draw_imgui(cmd, r_ctx.swapchain.swapchain_image_views[r_ctx.swapchain.swapchain_image_index])
 
 	// set swapchain image layout to Present so we can show it on the screen
-	transition_image(
+	transition_vk_image(
 		cmd,
 		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
 		.COLOR_ATTACHMENT_OPTIMAL,
@@ -809,12 +802,15 @@ submit :: proc(cmd: vk.CommandBuffer) {
 
 	if queue_present_result == .ERROR_OUT_OF_DATE_KHR {
 		resize_swapchain()
+		swapchain_resized = true
 	} else {
 		// TODO: Do normal assert check, maybe other cases though?
 		vk_check(queue_present_result)
 	}
 
 	r_ctx.frame_number += 1
+
+	return
 }
 
 InitConfig :: struct {
@@ -968,9 +964,8 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 
 	for &expected_extension in DEVICE_EXTENSIONS {
 		found := false
-
 		for &available in &available_extensions {
-			if libc.strcmp(cstring(&available.extensionName[0]), expected_extension) == 0 {
+			if strings.compare(string(cstring(&available.extensionName[0])), string(expected_extension)) == 0 {
 				found = true
 				break
 			}
@@ -1014,7 +1009,7 @@ check_validation_layers :: proc() -> bool {
 		layer_found := false
 
 		for &layer_property in &available_layers {
-			if libc.strcmp(layer_name, cstring(&layer_property.layerName[0])) == 0 {
+			if strings.compare(string(layer_name), string(cstring(&layer_property.layerName[0]))) == 0 {
 				layer_found = true
 				break
 			}

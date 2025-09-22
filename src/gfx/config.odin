@@ -23,6 +23,7 @@ REQUIRED_VK_11_FEATURES := vk.PhysicalDeviceVulkan11Features {
 	pNext                         = &REQUIRED_VK_12_FEATURES,
 	variablePointers              = true,
 	variablePointersStorageBuffer = true,
+	shaderDrawParameters          = true,
 }
 
 REQUIRED_VK_12_FEATURES := vk.PhysicalDeviceVulkan12Features {

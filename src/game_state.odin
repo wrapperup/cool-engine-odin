@@ -1,27 +1,15 @@
 package game
 
 import "base:intrinsics"
-import "core:/math/linalg/hlsl"
-import "core:fmt"
-import "core:math/linalg"
 import "core:time"
 
 import glfw "vendor:glfw"
-import vk "vendor:vulkan"
 
 import px "deps:physx-odin"
 
 import gfx "gfx"
 
 NUM_FRAME_AVG_COUNT :: 10
-
-FrameTimeStats :: enum {
-	Total,
-	GameState,
-	Imgui,
-	Physics,
-	Render,
-}
 
 PhysicsContext :: struct {
 	foundation:         ^px.Foundation,
@@ -38,8 +26,8 @@ ViewState :: enum {
 }
 
 SkeletalMeshInstance :: struct {
-	preskinned_vertex_buffers: [gfx.FRAME_OVERLAP]gfx.GPUBuffer,
-	joint_matrices_buffers:    [gfx.FRAME_OVERLAP]gfx.GPUBuffer,
+	preskinned_vertex_buffers: [gfx.FRAME_OVERLAP]gfx.GPUBuffer(Vertex),
+	joint_matrices_buffers:    [gfx.FRAME_OVERLAP]gfx.GPUBuffer(Mat4x4),
 	skel:                      ^Skeleton,
 }
 
@@ -48,14 +36,17 @@ init_skeletal_mesh_instance :: proc(skel: ^Skeleton, anim: ^SkeletalAnimation) -
 		skel = skel,
 	}
 
+
 	for i in 0 ..< gfx.FRAME_OVERLAP {
 		instance.joint_matrices_buffers[i] = gfx.create_buffer(
-			vk.DeviceSize(size_of(Mat4x4) * instance.skel.joint_count),
+			Mat4x4,
+			instance.skel.joint_count,
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
 		instance.preskinned_vertex_buffers[i] = gfx.create_buffer(
-			vk.DeviceSize(instance.skel.buffers.vertex_count * size_of(Vertex)),
+			Vertex,
+			instance.skel.buffers.vertex_count,
 			{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
 			.GPU_ONLY,
 		)
@@ -83,7 +74,7 @@ Game :: struct {
 	entity_system:      EntitySystem,
 	input_system:       InputSystem,
 	sound_system:       SoundSystem,
-	asset_system:       AssetSystem,
+	//asset_system:       AssetSystem,
 	view_state:         ViewState,
 	render_state:       RenderState,
 
@@ -97,6 +88,17 @@ Game :: struct {
 	frame_time_start:   time.Tick,
 	delta_time:         f64,
 	live_time:          f64,
+
+    // Debug
+	show_imgui:         bool,
+}
+
+FrameTimeStats :: enum {
+	Total,
+	GameState,
+	Imgui,
+	Physics,
+	Render,
 }
 
 @(deferred_in = end_scope_stat_time)
