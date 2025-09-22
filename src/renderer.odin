@@ -21,7 +21,7 @@ NUM_CASCADES: u32 : 3
 @(private = "file") ImageId :: gfx.ImageId
 @(private = "file") SamplerId :: gfx.SamplerId
 
-@(shader_shared)
+@shader_shared
 GPUDrawPushConstants :: struct {
 	global_data_buffer: GPUPtr(GPUGlobalData),
 	vertex_buffer:      GPUPtr(Vertex),
@@ -34,7 +34,7 @@ GPUDrawPushConstants :: struct {
 	shadow_sampler:     gfx.SamplerId `SamplerComparison`,
 }
 
-@(shader_shared)
+@shader_shared
 GPUDrawShadowDepthPushConstants :: struct {
 	vertex_buffer:  GPUPtr(Vertex),
 	model_matrices: GPUPtr(Mat4x4),
@@ -43,7 +43,7 @@ GPUDrawShadowDepthPushConstants :: struct {
 	cascade_index:  u32,
 }
 
-@(shader_shared)
+@shader_shared
 GPUSkinningPushConstants :: struct {
 	input_vertex_buffer:  GPUPtr(Vertex),
 	output_vertex_buffer: GPUPtr(Vertex),
@@ -52,31 +52,31 @@ GPUSkinningPushConstants :: struct {
 	vertex_count:         u32,
 }
 
-@(shader_shared)
+@shader_shared
 GPUSkyboxPushConstants :: struct {
 	vertex_buffer:      GPUPtr(Vertex),
 	global_data_buffer: GPUPtr(GPUGlobalData),
 }
 
-@(shader_shared)
+@shader_shared
 GPUPostProcessingPushConstants :: struct {
 	resolved_image:  ImageId `RWImage2D`,
 	tony_mc_mapface: ImageId `Image3D<Vec3>`,
 	sampler:         SamplerId `Sampler`,
 }
 
-@(shader_shared)
+@shader_shared
 GPUMaterial :: struct {
 	base_color_id:            ImageId `Image2D`,
 	normal_map_id:            ImageId `Image2D`,
 	ao_roughness_metallic_id: ImageId `Image2D`,
 }
 
-@(shader_shared)
+@shader_shared
 GPUEnvironment :: struct {
 	world_to_volume:  Mat4x4,
 	sh_volume:        GPUPtr(Sh_Coefficients),
-	point_lights:     GPUPtr(GPU_Point_Light),
+	point_lights:     GPUPtr(GPUPointLight),
 	num_point_lights: u32,
 
 	env_map:          ImageId `ImageCube`,
@@ -84,14 +84,14 @@ GPUEnvironment :: struct {
 	env_sampler:      SamplerId `Sampler`,
 }
 
-@(shader_shared)
+@shader_shared
 GPUCascadeConfig :: struct {
 	split_dist: f32,
 	bias:       f32,
 	slope_bias: f32,
 }
 
-@(shader_shared)
+@shader_shared
 GPUGlobalData :: struct #max_field_align(16) {
 	environment:              GPUEnvironment,
 	cascade_world_to_shadows: GPUPtr(Mat4x4),
@@ -114,8 +114,8 @@ RenderState :: struct {
 	scene_resources:                 struct {
 		materials:          [dynamic]GPUMaterial,
 		materials_buffer:   gfx.GPUBuffer(GPUMaterial),
-		point_lights:       [256]GPU_Point_Light,
-		point_light_buffer: gfx.GPUBuffer(GPU_Point_Light),
+		point_lights:       [256]GPUPointLight,
+		point_light_buffer: gfx.GPUBuffer(GPUPointLight),
 	},
 	temp_resources:                  struct {
 		tony_mc_mapface_id:      ImageId,
@@ -456,7 +456,7 @@ init_buffers :: proc() {
 	init_irradiance_volume(ir_volume)
 
 	game.render_state.scene_resources.point_light_buffer = gfx.create_buffer(
-		GPU_Point_Light,
+		GPUPointLight,
 		len(game.render_state.scene_resources.point_lights),
 		{.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER},
 		.GPU_ONLY,
@@ -1032,7 +1032,7 @@ update_buffers :: proc() {
 	global_uniform_data.camera_pos = player != nil ? player.translation : {0, 0, 0}
 	global_uniform_data.sun_direction = game.state.environment.sun_direction
 
-	global_uniform_data.environment.num_point_lights = auto_cast len_entities(Point_Light)
+	global_uniform_data.environment.num_point_lights = auto_cast len_entities(PointLight)
 
 	global_uniform_data.cascade_world_to_shadows = current_frame_game().cascade_matrices_buffer.address
 	global_uniform_data.cascade_configs = current_frame_game().cascade_configs_buffer.address
@@ -1051,7 +1051,7 @@ update_buffers :: proc() {
 		)
 	}
 
-	for &point_light, i in get_entities(Point_Light) {
+	for &point_light, i in get_entities(PointLight) {
 		if i >= len(game.render_state.scene_resources.point_lights) do break
 		game.render_state.scene_resources.point_lights[i] = point_light_to_gpu(point_light)
 	}

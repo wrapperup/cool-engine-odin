@@ -1,23 +1,23 @@
 package game
 
 @shader_shared
-GPU_Point_Light :: struct {
+GPUPointLight :: struct {
 	color:     Vec3,
 	radius:    f32,
 	world_pos: Vec3,
 	lumens:    f32,
 }
 
-Point_Light :: struct {
+PointLight :: struct {
 	using entity: ^Entity,
 	color:        Vec3,
 	radius:       f32,
 	lumens:       f32,
 }
 
-point_light_to_gpu :: proc(light: Point_Light) -> GPU_Point_Light {
+point_light_to_gpu :: proc(light: PointLight) -> GPUPointLight {
     // odinfmt: disable
-	return GPU_Point_Light{
+	return GPUPointLight{
         color = light.color,
         radius = light.radius,
         world_pos = light.translation,
@@ -26,7 +26,7 @@ point_light_to_gpu :: proc(light: Point_Light) -> GPU_Point_Light {
     // odinfmt: enable
 }
 
-init_point_light :: proc(light: ^Point_Light, position: Vec3, color: Vec3, radius: f32, lumens: f32) {
+init_point_light :: proc(light: ^PointLight, position: Vec3, color: Vec3, radius: f32, lumens: f32) {
     light.translation = position
     light.color = color
     light.radius = radius

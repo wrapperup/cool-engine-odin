@@ -48,10 +48,17 @@ banned_types := []Type_Mapping {
 
 error_reported := false
 
-report_error :: proc(message: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
-    error_reported = true
+report_warning :: proc(message: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
+    report(message, "\x1b[31mWarning:\x1b[0m", node, file, suggestion)
+}
 
-    fmt.eprintln("\x1b[1m", node.pos.file, "(", node.pos.line, ":", node.pos.column, ")\x1b[22m \x1b[31mError:\x1b[0m ", message, sep = "")
+report_error :: proc(message: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
+    report(message, "\x1b[31mError:\x1b[0m", node, file, suggestion)
+    error_reported = true
+}
+
+report :: proc(message: string, level: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
+    fmt.eprintln("\x1b[1m", node.pos.file, "(", node.pos.line, ":", node.pos.column, ")\x1b[22m ", level, " ", message, sep = "")
 
     fmt.eprint("        ")
     file_src := file.src
@@ -230,19 +237,20 @@ get_type_string :: proc(expr: ^ast.Expr, file: ^ast.File) -> (type_name: string,
 }
 
 generate_shader_bindings :: proc(files: []^ast.File) {
-	// bind_structs: map[string]ShaderStruct
-	bind_structs: [dynamic]ShaderStruct
+	builder: strings.Builder
+	strings.builder_init(&builder)
+
+    strings.write_string(&builder, "//\n")
+    strings.write_string(&builder, "// This is a generated file, do not modify. See src/meta.odin\n")
+    strings.write_string(&builder, "//")
 
 	for file in files {
+        printed_header_once := false
 		for decl in file.decls {
 			value, ok := decl.derived_stmt.(^ast.Value_Decl)
 			if !ok do continue
 
-			if len(value.values) != 1 do continue
 			if len(value.attributes) <= 0 do continue
-
-			str_type, vok := value.values[0].derived_expr.(^ast.Struct_Type)
-			if !vok do continue
 
 			found := false
 			for attr in value.attributes {
@@ -256,71 +264,95 @@ generate_shader_bindings :: proc(files: []^ast.File) {
 
 			if !found do continue
 
+			if len(value.values) != 1 {
+                report_error("Declaration has multiple values. This is not supported with @shader_shared.", value, file)
+                continue
+            }
+			if len(value.names) != 1 {
+                report_error("Declaration has names. This is not supported with @shader_shared.", value, file)
+                continue
+            }
+
 			ident, nok := value.names[0].derived.(^ast.Ident)
-			if !nok do continue
+			if !nok {
+                report_error("Declaration name must be an identifier.", value.names[0], file)
+                continue
+            }
 
-			// fmt.println("Bind shader struct for", ident.name)
+            name := ident.name
 
-			bind_struct := ShaderStruct {
-				expr = str_type,
-				name = ident.name,
-                src_file = file,
-			}
+            if !printed_header_once {
+                strings.write_string(&builder, "\n\n")
+                strings.write_string(&builder, "//\n")
+                strings.write_string(&builder, "// Generated from ")
+                strings.write_string(&builder, file.fullpath)
+                strings.write_string(&builder, "\n")
+                strings.write_string(&builder, "//\n")
+                printed_header_once = true
+            }
 
-			append(&bind_structs, bind_struct)
+            #partial switch expr in value.values[0].derived_expr {
+            case ^ast.Struct_Type:
+                generate_bind_struct(&builder, name, expr, file)
+            case ^ast.Basic_Lit:
+                if value.type != nil {
+                    report_warning("Shader shared define will ignore the type.", value, file)
+                }
+                generate_bind_lit(&builder, name, expr, file)
+            }
 		}
 	}
 
-	builder: strings.Builder
-	strings.builder_init(&builder)
-
-	for bind_struct in bind_structs {
-		strings.write_string(&builder, "struct ")
-		strings.write_string(&builder, strip_gpu_name(bind_struct.name))
-		if len(bind_struct.expr.fields.list) > 0 {
-			strings.write_string(&builder, " {\n")
-
-			for field in bind_struct.expr.fields.list {
-				field_type, array_decl: string
-                if field.tag.text != "" {
-                    field_type = field.tag.text[1:len(field.tag.text)-1]
-                } else {
-                    field_type, array_decl = get_type_string(field.type, bind_struct.src_file)
-                }
-
-                for name in banned_types {
-                    if name.from == field_type {
-                        report_error("Type is not allowed in a shader struct.", &field.type.expr_base, bind_struct.src_file, name.to)
-                    }
-                }
-
-				field_name := field.names[0].derived_expr.(^ast.Ident).name
-
-				strings.write_string(&builder, "  ")
-				strings.write_string(&builder, field_type)
-				strings.write_string(&builder, " ")
-				strings.write_string(&builder, field_name)
-                if len(array_decl) > 0 {
-                    strings.write_string(&builder, array_decl)
-                }
-				strings.write_string(&builder, ";\n")
-			}
-
-			strings.write_string(&builder, "}")
-		}
-		strings.write_string(&builder, ";\n\n")
-	}
-
-	str := strings.to_string(builder)
-	str = strings.trim(str, "\n")
+    str := strings.to_string(builder)
+    str = strings.trim(str, "\n")
 
     if !error_reported {
         err_wef := os2.write_entire_file("shaders/generated.slang", transmute([]u8)str)
         assert(err_wef == nil)
     }
 }
+generate_bind_lit :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Basic_Lit, src_file: ^ast.File) {
+    fmt.sbprintln(builder, "#define", name, expr.tok.text)
+}
 
-ShaderStruct :: struct {
+generate_bind_struct :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Struct_Type, src_file: ^ast.File) {
+    strings.write_string(builder, "struct ")
+    strings.write_string(builder, strip_gpu_name(name))
+    if len(expr.fields.list) > 0 {
+        strings.write_string(builder, " {\n")
+
+        for field in expr.fields.list {
+            field_type, array_decl: string
+            if field.tag.text != "" {
+                field_type = field.tag.text[1:len(field.tag.text)-1]
+            } else {
+                field_type, array_decl = get_type_string(field.type, src_file)
+            }
+
+            for banned_name in banned_types {
+                if banned_name.from == field_type {
+                    report_error("Type is not allowed in a shader struct.", &field.type.expr_base, src_file, banned_name.to)
+                }
+            }
+
+            field_name := field.names[0].derived_expr.(^ast.Ident).name
+
+            strings.write_string(builder, "  ")
+            strings.write_string(builder, field_type)
+            strings.write_string(builder, " ")
+            strings.write_string(builder, field_name)
+            if len(array_decl) > 0 {
+                strings.write_string(builder, array_decl)
+            }
+            strings.write_string(builder, ";\n")
+        }
+
+        strings.write_string(builder, "}")
+    }
+    strings.write_string(builder, ";\n\n")
+}
+
+ShaderDecl :: struct {
 	expr: ^ast.Struct_Type,
 	name: string,
     src_file: ^ast.File,

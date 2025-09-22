@@ -185,13 +185,13 @@ main_game :: proc() {
 		test_mesh := new_entity(StaticMesh)
 		init_static_mesh(test_mesh, .sm_map_test, 0)
 
-		// test_mesh2 := new_entity(StaticMesh)
-		// init_static_mesh(test_mesh2, .sm_materialball2, 2)
+		test_mesh2 := new_entity(StaticMesh)
+		init_static_mesh(test_mesh2, .sm_materialball2, 2)
 
 		sound_source := new_entity(SoundSource)
 		init_sound_source(sound_source, .a_outdoors_birds, true, 0.1, false, 0.5)
 
-		// point_light := new_entity(Point_Light)
+		// point_light := new_entity(PointLight)
 		// init_point_light(point_light, {0, 4, 2}, {1, 0, 0}, 20, 100)
 
 		game.state = GameState {

@@ -1,10 +1,22 @@
-struct Point_Light {
+//
+// This is a generated file, do not modify. See src/meta.odin
+//
+
+//
+// Generated from C:\Repos\odin\vulkan-playground\src\entity_point_light.odin
+//
+struct PointLight {
   Vec3 color;
   f32 radius;
   Vec3 world_pos;
   f32 lumens;
 };
 
+
+
+//
+// Generated from C:\Repos\odin\vulkan-playground\src\gpu_types.odin
+//
 struct Vertex {
   float3 position;
   f32 uv_x;
@@ -19,6 +31,11 @@ struct SkeletonVertexAttribute {
   f32 weights[4];
 };
 
+
+
+//
+// Generated from C:\Repos\odin\vulkan-playground\src\renderer.odin
+//
 struct DrawPushConstants {
   GlobalData* global_data_buffer;
   Vertex* vertex_buffer;
@@ -67,7 +84,7 @@ struct Material {
 struct Environment {
   Mat4x4 world_to_volume;
   Sh_Coefficients* sh_volume;
-  Point_Light* point_lights;
+  PointLight* point_lights;
   u32 num_point_lights;
   ImageCube env_map;
   Image2D dfg;
@@ -93,6 +110,11 @@ struct GlobalData {
   Sampler default_sampler;
 };
 
+
+
+//
+// Generated from C:\Repos\odin\vulkan-playground\src\spherical_harmonics.odin
+//
 struct Sh_Coefficients {
   Vec4 coeffs[9];
 };
