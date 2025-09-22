@@ -373,6 +373,12 @@ main_meta :: proc() {
 generate_assets :: proc() {
     b: strings.Builder
 
+    bpln :: fmt.sbprintln
+
+    bpln(&b, "//")
+    bpln(&b, "// This is a generated file, do not modify. See src/meta.odin")
+    bpln(&b, "//\n")
+
     asset_files: [dynamic]os.File_Info
 
 	filepath.walk("assets", proc(info: os.File_Info, in_err: os.Error, user_data: rawptr) -> (err: os.Error, skip_dir: bool) { 
@@ -386,8 +392,6 @@ generate_assets :: proc() {
 
     working_directory, err_wd := os2.get_working_directory(context.temp_allocator)
     assert(err_wd == nil, "Can't get working directory")
-
-    bpln :: fmt.sbprintln
 
     bpln(&b, "package game")
     bpln(&b, "")
