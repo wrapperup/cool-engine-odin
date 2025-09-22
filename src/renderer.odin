@@ -1,6 +1,7 @@
 package game
 
 import "core:fmt"
+import "core:image"
 import "core:log"
 import "core:math"
 import "core:math/linalg"
@@ -17,11 +18,14 @@ MaterialId :: u32
 
 NUM_CASCADES: u32 : 3
 
-@(private = "file") GPUPtr :: gfx.GPUPtr
-@(private = "file") ImageId :: gfx.ImageId
-@(private = "file") SamplerId :: gfx.SamplerId
+@(private = "file")
+GPUPtr :: gfx.GPUPtr
+@(private = "file")
+ImageId :: gfx.ImageId
+@(private = "file")
+SamplerId :: gfx.SamplerId
 
-@shader_shared
+@(shader_shared)
 GPUDrawPushConstants :: struct {
 	global_data_buffer: GPUPtr(GPUGlobalData),
 	vertex_buffer:      GPUPtr(Vertex),
@@ -34,7 +38,7 @@ GPUDrawPushConstants :: struct {
 	shadow_sampler:     gfx.SamplerId `SamplerComparison`,
 }
 
-@shader_shared
+@(shader_shared)
 GPUDrawShadowDepthPushConstants :: struct {
 	vertex_buffer:  GPUPtr(Vertex),
 	model_matrices: GPUPtr(Mat4x4),
@@ -43,7 +47,7 @@ GPUDrawShadowDepthPushConstants :: struct {
 	cascade_index:  u32,
 }
 
-@shader_shared
+@(shader_shared)
 GPUSkinningPushConstants :: struct {
 	input_vertex_buffer:  GPUPtr(Vertex),
 	output_vertex_buffer: GPUPtr(Vertex),
@@ -52,46 +56,45 @@ GPUSkinningPushConstants :: struct {
 	vertex_count:         u32,
 }
 
-@shader_shared
+@(shader_shared)
 GPUSkyboxPushConstants :: struct {
 	vertex_buffer:      GPUPtr(Vertex),
 	global_data_buffer: GPUPtr(GPUGlobalData),
 }
 
-@shader_shared
+@(shader_shared)
 GPUPostProcessingPushConstants :: struct {
 	resolved_image:  ImageId `RWImage2D`,
 	tony_mc_mapface: ImageId `Image3D<Vec3>`,
 	sampler:         SamplerId `Sampler`,
 }
 
-@shader_shared
+@(shader_shared)
 GPUMaterial :: struct {
 	base_color_id:            ImageId `Image2D`,
 	normal_map_id:            ImageId `Image2D`,
 	ao_roughness_metallic_id: ImageId `Image2D`,
 }
 
-@shader_shared
+@(shader_shared)
 GPUEnvironment :: struct {
 	world_to_volume:  Mat4x4,
 	sh_volume:        GPUPtr(Sh_Coefficients),
 	point_lights:     GPUPtr(GPUPointLight),
 	num_point_lights: u32,
-
 	env_map:          ImageId `ImageCube`,
 	dfg:              ImageId `Image2D`,
 	env_sampler:      SamplerId `Sampler`,
 }
 
-@shader_shared
+@(shader_shared)
 GPUCascadeConfig :: struct {
 	split_dist: f32,
 	bias:       f32,
 	slope_bias: f32,
 }
 
-@shader_shared
+@(shader_shared)
 GPUGlobalData :: struct #max_field_align(16) {
 	environment:              GPUEnvironment,
 	cascade_world_to_shadows: GPUPtr(Mat4x4),
@@ -102,7 +105,6 @@ GPUGlobalData :: struct #max_field_align(16) {
 	sky_color:                Vec3,
 	camera_pos:               Vec3,
 	sun_direction:            Vec3,
-
 	default_sampler:          SamplerId `Sampler`,
 }
 
@@ -574,10 +576,6 @@ draw :: proc() {
 	}
 	// End shadow pass
 
-	// Clear
-	gfx.transition_image(cmd, &gfx.renderer().draw_image, .GENERAL)
-	background_pass(cmd)
-
 	// Begin mesh pass
 	gfx.transition_image(cmd, &gfx.renderer().draw_image, .COLOR_ATTACHMENT_OPTIMAL)
 	gfx.transition_image(cmd, &gfx.renderer().depth_image, .DEPTH_ATTACHMENT_OPTIMAL)
@@ -624,7 +622,7 @@ draw :: proc() {
 	// 		vk.CmdDrawIndexed(cmd, 6, u32(len(font_state.font_instances)), 0, 0, 0)
 	// 		clear(&font_state.font_instances)
 	//
-	// 		vk.CmdEndRendering(cmd)
+	// 		gfx.cmd_end_rendering(cmd)
 	// 	}
 	// }
 
@@ -716,7 +714,7 @@ skinning_pass :: proc(cmd: vk.CommandBuffer, instance: ^SkeletalMeshInstance) {
 		},
 	)
 
-	vk.CmdDispatch(cmd, u32(math.ceil(f32(instance.skel.buffers.vertex_count) / 64.0)), 1, 1)
+	gfx.cmd_dispatch(cmd, u32(math.ceil(f32(instance.skel.buffers.vertex_count) / 64.0)))
 }
 
 // TODO: Encode this as indirect draw args instead.
@@ -771,23 +769,29 @@ draw_skeletal_mesh :: proc(
 
 shadow_map_pass :: proc(cmd: vk.CommandBuffer, cascade: u32) {
 	image_view := game.render_state.shadow_depth_attach_image_views[cascade]
-	depth_attachment := gfx.init_attachment_info(image_view, &{depthStencil = {depth = 1.0}}, .DEPTH_ATTACHMENT_OPTIMAL)
+    extent := game.render_state.shadow_depth_image.extent;
 
-	width := game.render_state.shadow_depth_image.extent.width
-	height := game.render_state.shadow_depth_image.extent.height
+    width := extent.width
+	height := extent.height
 
-	render_info := gfx.init_rendering_info({width, height}, nil, &depth_attachment)
-	vk.CmdBeginRendering(cmd, &render_info)
-
+	gfx.cmd_begin_rendering(cmd,
+		area = {width, height},
+		depth_attachment = &{
+            view = image_view,
+            layout = .DEPTH_ATTACHMENT_OPTIMAL,
+            clear_value = &{
+                depthStencil = {depth = 1.0}
+            }, 
+        },
+	)
 	gfx.set_viewport_and_scissor(cmd, game.render_state.shadow_depth_image.extent)
 
 	gfx.cmd_bind_pipeline(cmd, game.render_state.mesh_shadow_pipeline)
 
 	for mesh_draw in current_frame_game().mesh_draws {
-		vk.CmdBindIndexBuffer(cmd, mesh_draw.index_buffer, 0, .UINT32)
+		gfx.cmd_bind_index_buffer(cmd, mesh_draw.index_buffer)
 
-		gfx.cmd_push_constants(
-			cmd,
+		gfx.cmd_push_constants(cmd,
 			GPUDrawShadowDepthPushConstants {
 				vertex_buffer = mesh_draw.vertex_buffer_address,
 				model_matrices = current_frame_game().model_matrices_buffer.address,
@@ -797,42 +801,31 @@ shadow_map_pass :: proc(cmd: vk.CommandBuffer, cascade: u32) {
 			},
 		)
 
-		vk.CmdDrawIndexed(cmd, mesh_draw.index_count, 1, 0, 0, 0)
+		gfx.cmd_draw_indexed(cmd, mesh_draw.index_count)
 	}
 
-	vk.CmdEndRendering(cmd)
-}
-
-background_pass :: proc(cmd: vk.CommandBuffer) {
-	clear_color := vk.ClearColorValue {
-		float32 = {0, 0, 0, 1},
-	}
-
-	clear_range := gfx.init_image_subresource_range({.COLOR})
-
-	vk.CmdClearColorImage(cmd, gfx.renderer().draw_image.image, .GENERAL, &clear_color, 1, &clear_range)
+	gfx.cmd_end_rendering(cmd)
 }
 
 geometry_pass :: proc(cmd: vk.CommandBuffer) {
-	// begin a render pass  connected to our draw image
-	color_attachment := gfx.init_attachment_info(gfx.renderer().draw_image.image_view, nil, .GENERAL)
-	depth_attachment := gfx.init_attachment_info(
-		gfx.renderer().depth_image.image_view,
-		&{depthStencil = {depth = 1.0}},
-		.DEPTH_ATTACHMENT_OPTIMAL,
-	)
-
-	// Start render pass.
-	render_info := gfx.init_rendering_info(gfx.renderer().draw_extent, &color_attachment, &depth_attachment)
-	vk.CmdBeginRendering(cmd, &render_info)
-
+	gfx.cmd_begin_rendering(cmd, 
+        area = gfx.r_ctx.draw_extent,
+        color_attachment = &{
+            view = gfx.r_ctx.draw_image.image_view,
+            layout = .GENERAL,
+        },
+        depth_attachment = &{
+            view = gfx.r_ctx.depth_image.image_view,
+            clear_value = &{depthStencil = {depth = 1.0 }},
+            layout = .DEPTH_ATTACHMENT_OPTIMAL,
+        }
+    )
 	gfx.set_viewport_and_scissor(cmd, gfx.renderer().draw_extent)
 
 	gfx.cmd_bind_pipeline(cmd, game.render_state.mesh_pipeline)
 
 	for mesh_draw in current_frame_game().mesh_draws {
-		vk.CmdBindIndexBuffer(cmd, mesh_draw.index_buffer, 0, .UINT32)
-
+		gfx.cmd_bind_index_buffer(cmd, mesh_draw.index_buffer)
 		gfx.cmd_push_constants(
 			cmd,
 			GPUDrawPushConstants {
@@ -848,30 +841,29 @@ geometry_pass :: proc(cmd: vk.CommandBuffer) {
 			},
 		)
 
-		vk.CmdDrawIndexed(cmd, mesh_draw.index_count, 1, 0, 0, 0)
+		gfx.cmd_draw_indexed(cmd, mesh_draw.index_count)
 	}
 
-	vk.CmdEndRendering(cmd)
+	gfx.cmd_end_rendering(cmd)
 }
 
 skybox_pass :: proc(cmd: vk.CommandBuffer) {
-	// begin a render pass  connected to our draw image
-	color_attachment := gfx.init_attachment_info(gfx.renderer().draw_image.image_view, nil, .COLOR_ATTACHMENT_OPTIMAL)
-	depth_attachment := gfx.init_attachment_info(
-		gfx.renderer().depth_image.image_view,
-		&{depthStencil = {depth = 1.0}},
-		.DEPTH_ATTACHMENT_OPTIMAL,
-	)
-
-	// Start render pass.
-	render_info := gfx.init_rendering_info(gfx.renderer().draw_extent, &color_attachment, &depth_attachment)
-	vk.CmdBeginRendering(cmd, &render_info)
-
+    gfx.cmd_begin_rendering(cmd,
+        area = gfx.r_ctx.draw_extent,
+        color_attachment = &{
+            view  = gfx.r_ctx.draw_image.image_view, 
+            layout = .COLOR_ATTACHMENT_OPTIMAL,
+        },
+        depth_attachment = &{
+            view = gfx.r_ctx.depth_image.image_view,
+            clear_value = &{depthStencil = {depth = 1.0}},
+            layout = .DEPTH_ATTACHMENT_OPTIMAL,
+        }
+    )
 	gfx.set_viewport_and_scissor(cmd, gfx.renderer().draw_extent)
 
 	gfx.cmd_bind_pipeline(cmd, game.render_state.skybox_pipeline)
-	vk.CmdBindIndexBuffer(cmd, game.render_state.skybox_mesh.index_buffer.buffer, 0, .UINT32)
-
+	gfx.cmd_bind_index_buffer(cmd, game.render_state.skybox_mesh.index_buffer.buffer)
 	gfx.cmd_push_constants(
 		cmd,
 		GPUSkyboxPushConstants {
@@ -880,8 +872,8 @@ skybox_pass :: proc(cmd: vk.CommandBuffer) {
 		},
 	)
 
-	vk.CmdDrawIndexed(cmd, game.render_state.skybox_mesh.index_count, 1, 0, 0, 0)
-	vk.CmdEndRendering(cmd)
+	gfx.cmd_draw_indexed(cmd, game.render_state.skybox_mesh.index_count)
+	gfx.cmd_end_rendering(cmd)
 }
 
 post_processing_pass :: proc(cmd: vk.CommandBuffer) {
