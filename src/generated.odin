@@ -1,3 +1,7 @@
+//
+// This is a generated file, do not modify. See src/meta.odin
+//
+
 package game
 
 // Assets
