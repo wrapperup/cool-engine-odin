@@ -1,34 +1,26 @@
 package game
 
-import "core:flags"
-import "core:fmt"
+import "core:strings"
 import "core:math"
 import "core:math/linalg"
 import "core:mem"
-import "core:os"
-import "core:reflect"
 import "core:slice"
-import "core:sys/windows"
-import "core:time"
 
-import vk "vendor:vulkan"
-
-import "../src/gfx"
 import ktx "deps:odin-libktx"
-import vma "deps:odin-vma"
 
-import impl "../src"
+@shader_shared
+Sh_Coefficients :: struct {
+    coeffs: [9]Vec4
+}
 
-Sh_Coefficients :: [9]Vec4
-
-process_sh_coefficients_from_cubemap_file :: proc(in_filename: cstring) -> Sh_Coefficients {
+process_sh_coefficients_from_cubemap_file :: proc(in_filename: string) -> Sh_Coefficients {
 	buffer, size := load_image_into_bytes(in_filename)
 	coeffs := process_sh_from_cubemap(buffer, size.x)
 
 	return coeffs
 }
 
-process_sh_coefficients_from_equirectangular_file :: proc(in_filename: cstring, loc := #caller_location) -> Sh_Coefficients {
+process_sh_coefficients_from_equirectangular_file :: proc(in_filename: string, loc := #caller_location) -> Sh_Coefficients {
 	buffer, size := load_image_into_bytes(in_filename, loc)
 	coeffs := process_sh_from_equirectangular(buffer, size.x)
 
@@ -123,24 +115,24 @@ process_sh_from_cubemap :: proc(faces: []Vec4, size: int) -> Sh_Coefficients {
 
 				color *= weight
 
-				sh[0] += color * weight1
+				sh.coeffs[0] += color * weight1
 
-				sh[1] += color * weight2 * tex_v.x
-				sh[2] += color * weight2 * tex_v.y
-				sh[3] += color * weight2 * tex_v.z
+				sh.coeffs[1] += color * weight2 * tex_v.x
+				sh.coeffs[2] += color * weight2 * tex_v.y
+				sh.coeffs[3] += color * weight2 * tex_v.z
 
-				sh[4] += color * weight3 * tex_v.x * tex_v.z
-				sh[5] += color * weight3 * tex_v.z * tex_v.y
-				sh[6] += color * weight3 * tex_v.y * tex_v.x
-				sh[7] += color * weight4 * (3.0 * tex_v.z * tex_v.z - 1.0)
-				sh[8] += color * weight5 * (tex_v.x * tex_v.x - tex_v.y * tex_v.y)
+				sh.coeffs[4] += color * weight3 * tex_v.x * tex_v.z
+				sh.coeffs[5] += color * weight3 * tex_v.z * tex_v.y
+				sh.coeffs[6] += color * weight3 * tex_v.y * tex_v.x
+				sh.coeffs[7] += color * weight4 * (3.0 * tex_v.z * tex_v.z - 1.0)
+				sh.coeffs[8] += color * weight5 * (tex_v.x * tex_v.x - tex_v.y * tex_v.y)
 
 				weight_accum += weight * 3.0
 			}
 		}
 	}
 
-	sh *= 4.0 * math.PI / weight_accum
+	sh.coeffs *= 4.0 * math.PI / weight_accum
 
 	return sh
 }
@@ -189,23 +181,23 @@ process_sh_from_equirectangular :: proc(equirectangular: []Vec4, width: int) -> 
 
 			color *= weight
 
-			sh[0] += color * weight1
+			sh.coeffs[0] += color * weight1
 
-			sh[1] += color * weight2 * tex_v.x
-			sh[2] += color * weight2 * tex_v.y
-			sh[3] += color * weight2 * tex_v.z
+			sh.coeffs[1] += color * weight2 * tex_v.x
+			sh.coeffs[2] += color * weight2 * tex_v.y
+			sh.coeffs[3] += color * weight2 * tex_v.z
 
-			sh[4] += color * weight3 * tex_v.x * tex_v.z
-			sh[5] += color * weight3 * tex_v.z * tex_v.y
-			sh[6] += color * weight3 * tex_v.y * tex_v.x
-			sh[7] += color * weight4 * (3.0 * tex_v.z * tex_v.z - 1.0)
-			sh[8] += color * weight5 * (tex_v.x * tex_v.x - tex_v.y * tex_v.y)
+			sh.coeffs[4] += color * weight3 * tex_v.x * tex_v.z
+			sh.coeffs[5] += color * weight3 * tex_v.z * tex_v.y
+			sh.coeffs[6] += color * weight3 * tex_v.y * tex_v.x
+			sh.coeffs[7] += color * weight4 * (3.0 * tex_v.z * tex_v.z - 1.0)
+			sh.coeffs[8] += color * weight5 * (tex_v.x * tex_v.x - tex_v.y * tex_v.y)
 
 			weight_accum += weight * 3.0
 		}
 	}
 
-	sh *= 4.0 * math.PI / weight_accum
+	sh.coeffs *= 4.0 * math.PI / weight_accum
 
 	return sh
 }
@@ -232,9 +224,11 @@ area_element :: proc(x, y: f32) -> f32 {
 	return math.atan2(x * y, math.sqrt(x * x + y * y + 1.0))
 }
 
-load_image_into_bytes :: proc(filename: cstring, loc := #caller_location) -> ([]Vec4, [2]int) {
+load_image_into_bytes :: proc(filename: string, loc := #caller_location) -> ([]Vec4, [2]int) {
 	ktx_texture: ^ktx.Texture2
-	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
+    filename_c := strings.clone_to_cstring(filename)
+    defer delete(filename_c)
+	ktx_result := ktx.Texture2_CreateFromNamedFile(filename_c, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 	assert(ktx_result == .SUCCESS, "Failed to load image.", loc)
 
 	is_compressed := ktx_texture.isCompressed

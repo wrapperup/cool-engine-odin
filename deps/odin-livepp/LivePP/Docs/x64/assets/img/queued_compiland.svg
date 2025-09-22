@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <defs>
+    <style>.canvas{fill: none; opacity: 0;}.light-defaultgrey-10{fill: #e4e4e4; opacity: 0.1;}.light-defaultgrey{fill: #e4e4e4; opacity: 1;}.cls-1{opacity:0.75;}</style>
+  </defs>
+  <title>BreakpointTemporaryAvailable</title>
+  <g id="canvas">
+    <path class="canvas" d="M16,16H0V0H16Z" />
+  </g>
+  <g id="level-1">
+    <g class="cls-1">
+      <path class="light-defaultgrey-10" d="M8,1.5A6.5,6.5,0,1,0,14.5,8,6.5,6.5,0,0,0,8,1.5Z" />
+      <path class="light-defaultgrey" d="M8,15a7,7,0,1,1,7-7A7,7,0,0,1,8,15ZM8,2a6,6,0,1,0,6,6A6,6,0,0,0,8,2Z" />
+    </g>
+    <path class="light-defaultgrey" d="M8,8h2V9H7.5L7,8.5V5H8Zm5,0A5,5,0,1,1,8,3,5.006,5.006,0,0,1,13,8ZM12,8a4,4,0,1,0-4,4A4,4,0,0,0,12,8Z" />
+  </g>
+</svg>

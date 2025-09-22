@@ -1,6 +1,7 @@
 package game
 
 import "core:fmt"
+import "core:log"
 import "core:os/os2"
 import "core:path/filepath"
 import "core:slice"
@@ -13,23 +14,114 @@ import sp "deps:odin-slang/slang"
 
 import "gfx"
 
-ShaderCreatePipelineCallback :: #type proc(shader_module: vk.ShaderModule) -> (vk.Pipeline, bool)
+ShaderManager :: struct {
+	graphics_shaders: [dynamic]Shader(gfx.GraphicsPipeline),
+	compute_shaders:  [dynamic]Shader(gfx.ComputePipeline),
+}
 
-Shader :: struct {
-	pipeline:                 vk.Pipeline,
+add_graphics_shader :: proc(
+	path: cstring,
+	pipeline_create_callback: proc(_: vk.ShaderModule) -> gfx.GraphicsPipeline,
+) -> ^gfx.GraphicsPipeline {
+	shader := init_shader(gfx.GraphicsPipeline, path, pipeline_create_callback)
+	append(&game.render_state.shader_manager.graphics_shaders, shader)
+
+	return shader.pipeline
+}
+
+add_compute_shader :: proc(
+	path: cstring,
+	pipeline_create_callback: proc(_: vk.ShaderModule) -> gfx.ComputePipeline,
+) -> ^gfx.ComputePipeline {
+	shader := init_shader(gfx.ComputePipeline, path, pipeline_create_callback)
+	append(&game.render_state.shader_manager.compute_shaders, shader)
+
+	return shader.pipeline
+}
+
+check_shader_hotreload :: proc() -> (needs_reload: bool) {
+	// TODO: SPEED: Maybe iter this across frames?
+	for &shader in game.render_state.shader_manager.graphics_shaders {
+		max_last_write_time: i64
+		last_write_time, _ := os2.last_write_time_by_name(string(shader.path))
+		max_last_write_time = last_write_time._nsec
+
+		for path in shader.extra_files {
+			last, _ := os2.last_write_time_by_name(string(path))
+			if last._nsec > max_last_write_time {
+				max_last_write_time = last._nsec
+			}
+		}
+
+		if shader.last_compile_time._nsec < max_last_write_time {
+			shader.needs_recompile = true
+			needs_reload = true
+		}
+	}
+
+	for &shader in game.render_state.shader_manager.compute_shaders {
+		max_last_write_time: i64
+		last_write_time, _ := os2.last_write_time_by_name(string(shader.path))
+		max_last_write_time = last_write_time._nsec
+
+		for path in shader.extra_files {
+			last, _ := os2.last_write_time_by_name(string(path))
+			if last._nsec > max_last_write_time {
+				max_last_write_time = last._nsec
+			}
+		}
+
+		if shader.last_compile_time._nsec < max_last_write_time {
+			shader.needs_recompile = true
+			needs_reload = true
+		}
+	}
+
+	return
+}
+
+hotreload_modified_shaders :: proc() -> bool {
+	// TODO: SPEED: Maybe iter this across frames?
+	for &shader in game.render_state.shader_manager.graphics_shaders {
+		if shader.needs_recompile {
+			ok := reload_shader_pipeline(&shader)
+
+			shader.last_compile_time = time.now()
+			shader.needs_recompile = false
+			return ok
+		}
+	}
+
+	for &shader in game.render_state.shader_manager.compute_shaders {
+		if shader.needs_recompile {
+			ok := reload_shader_pipeline(&shader)
+
+			shader.last_compile_time = time.now()
+			shader.needs_recompile = false
+			return ok
+		}
+	}
+
+	return false
+}
+
+// ================================================
+
+Shader :: struct($T: typeid) {
+	pipeline:                 ^T,
 	path:                     cstring,
 	extra_files:              []string,
 	last_compile_time:        time.Time,
 	needs_recompile:          bool,
-	pipeline_create_callback: ShaderCreatePipelineCallback,
+	pipeline_create_callback: proc(_: vk.ShaderModule) -> T,
 }
 
-init_shader :: proc(path: cstring, pipeline_create_callback: ShaderCreatePipelineCallback) -> Shader {
+init_shader :: proc($T: typeid, path: cstring, pipeline_create_callback: proc(_: vk.ShaderModule) -> T) -> Shader(T) {
 	assert(os2.exists(string(path)))
 
 	extra_files := get_dependency_file_paths(path)
 
-	shader := Shader {
+	shader := Shader(T) {
 		path                     = path,
 		extra_files              = extra_files,
 		last_compile_time        = time.now(),
@@ -43,21 +135,17 @@ init_shader :: proc(path: cstring, pipeline_create_callback: ShaderCreatePipelin
 	return shader
 }
 
-defer_destroy_shader :: proc(arena: ^gfx.VulkanArena, shader: Shader) {
-	gfx.defer_destroy(arena, shader.pipeline)
-}
-
 get_cached_shader_path :: proc(path: string) -> string {
 	return filepath.join({"shaders", ".cache", filepath.base(path)})
 }
 
-get_last_write_time :: proc(shader: ^Shader) -> time.Time {
+get_last_write_time :: proc(shader: ^Shader($T)) -> time.Time {
 	max_last_write_time: i64
-	last_write_time, ok := os2.last_write_time_by_name(string(shader.path))
+	last_write_time, _ := os2.last_write_time_by_name(string(shader.path))
 	max_last_write_time = last_write_time._nsec
 
 	for path in shader.extra_files {
-		last, k := os2.last_write_time_by_name(string(path))
+		last, _ := os2.last_write_time_by_name(string(path))
 		if last._nsec > max_last_write_time {
 			max_last_write_time = last._nsec
 		}
@@ -66,7 +154,7 @@ get_last_write_time :: proc(shader: ^Shader) -> time.Time {
 	return time.Time{max_last_write_time}
 }
 
-reload_shader_pipeline :: proc(shader: ^Shader) -> bool {
+reload_shader_pipeline :: proc(shader: ^Shader($T)) -> bool {
 	cached_path := get_cached_shader_path(string(shader.path))
 
 	use_cached_spirv := false
@@ -81,6 +169,8 @@ reload_shader_pipeline :: proc(shader: ^Shader) -> bool {
 		}
 	}
 
+	use_cached_spirv = false
+
 	code: []u8
 
 	if use_cached_spirv {
@@ -94,20 +184,26 @@ reload_shader_pipeline :: proc(shader: ^Shader) -> bool {
 		code = compile_slang_to_spirv(shader) or_return
 		err := os2.write_entire_file(string(cached_path), code)
 		if err != nil {
-			fmt.println("Warning: Shader couldn't be cached.", err, cached_path)
+			log.warn("Warning: Shader couldn't be cached.", err, cached_path)
 		}
 	}
 
 	shader_module, f_ok := gfx.load_shader_module_from_bytes(code)
 	assert(f_ok, "Failed to load shaders.")
 
-	pipeline := shader.pipeline_create_callback(shader_module) or_return
+	pipeline := shader.pipeline_create_callback(shader_module)
 
-	if shader.pipeline != 0 {
-		vk.DestroyPipeline(gfx.renderer().device, shader.pipeline, nil)
+	assert(pipeline.pipeline != 0)
+
+	if shader.pipeline != nil {
+		if shader.pipeline.pipeline != 0 {
+			vk.DestroyPipeline(gfx.r_ctx.device, shader.pipeline.pipeline, nil)
+		}
+		free(shader.pipeline)
 	}
 
-	shader.pipeline = pipeline
+	shader.pipeline = new(T)
+	shader.pipeline^ = pipeline
 
 	gfx.destroy_shader_module(shader_module)
 
@@ -115,46 +211,46 @@ reload_shader_pipeline :: proc(shader: ^Shader) -> bool {
 }
 
 slang_check :: #force_inline proc(#any_int result: int, loc := #caller_location) {
-	result := -sp.Result(result)
-	if sp.FAILED(result) {
-		code := sp.GET_RESULT_CODE(result)
-		facility := sp.GET_RESULT_FACILITY(result)
-		estr: string
-		switch sp.Result(result) {
-		case:
-			estr = "Unknown error"
-		case sp.E_NOT_IMPLEMENTED():
-			estr = "E_NOT_IMPLEMENTED"
-		case sp.E_NO_INTERFACE():
-			estr = "E_NO_INTERFACE"
-		case sp.E_ABORT():
-			estr = "E_ABORT"
-		case sp.E_INVALID_HANDLE():
-			estr = "E_INVALID_HANDLE"
-		case sp.E_INVALID_ARG():
-			estr = "E_INVALID_ARG"
-		case sp.E_OUT_OF_MEMORY():
-			estr = "E_OUT_OF_MEMORY"
-		case sp.E_BUFFER_TOO_SMALL():
-			estr = "E_BUFFER_TOO_SMALL"
-		case sp.E_UNINITIALIZED():
-			estr = "E_UNINITIALIZED"
-		case sp.E_PENDING():
-			estr = "E_PENDING"
-		case sp.E_CANNOT_OPEN():
-			estr = "E_CANNOT_OPEN"
-		case sp.E_NOT_FOUND():
-			estr = "E_NOT_FOUND"
-		case sp.E_INTERNAL_FAIL():
-			estr = "E_INTERNAL_FAIL"
-		case sp.E_NOT_AVAILABLE():
-			estr = "E_NOT_AVAILABLE"
-		case sp.E_TIME_OUT():
-			estr = "E_TIME_OUT"
-		}
-
-		fmt.panicf("Failed with error: %v (%v) Facility: %v", estr, code, facility, loc = loc)
-	}
+	// result := -sp.Result(result)
+	// if sp.FAILED(result) {
+	// 	code := sp.GET_RESULT_CODE(result)
+	// 	facility := sp.GET_RESULT_FACILITY(result)
+	// 	estr: string
+	// 	switch sp.Result(result) {
+	// 	case:
+	// 		estr = "Unknown error"
+	// 	case sp.E_NOT_IMPLEMENTED():
+	// 		estr = "E_NOT_IMPLEMENTED"
+	// 	case sp.E_NO_INTERFACE():
+	// 		estr = "E_NO_INTERFACE"
+	// 	case sp.E_ABORT():
+	// 		estr = "E_ABORT"
+	// 	case sp.E_INVALID_HANDLE():
+	// 		estr = "E_INVALID_HANDLE"
+	// 	case sp.E_INVALID_ARG():
+	// 		estr = "E_INVALID_ARG"
+	// 	case sp.E_OUT_OF_MEMORY():
+	// 		estr = "E_OUT_OF_MEMORY"
+	// 	case sp.E_BUFFER_TOO_SMALL():
+	// 		estr = "E_BUFFER_TOO_SMALL"
+	// 	case sp.E_UNINITIALIZED():
+	// 		estr = "E_UNINITIALIZED"
+	// 	case sp.E_PENDING():
+	// 		estr = "E_PENDING"
+	// 	case sp.E_CANNOT_OPEN():
+	// 		estr = "E_CANNOT_OPEN"
+	// 	case sp.E_NOT_FOUND():
+	// 		estr = "E_NOT_FOUND"
+	// 	case sp.E_INTERNAL_FAIL():
+	// 		estr = "E_INTERNAL_FAIL"
+	// 	case sp.E_NOT_AVAILABLE():
+	// 		estr = "E_NOT_AVAILABLE"
+	// 	case sp.E_TIME_OUT():
+	// 		estr = "E_TIME_OUT"
+	// 	}
+	//
+	// 	fmt.panicf("Failed with error: %v (%v) Facility: %v", estr, code, facility, loc = loc)
+	// }
 }
 
 diagnostics_check :: #force_inline proc(diagnostics: ^sp.IBlob, loc := #caller_location) {
@@ -164,50 +260,56 @@ diagnostics_check :: #force_inline proc(diagnostics: ^sp.IBlob, loc := #caller_l
 	}
 }
 
+options: []sp.CompilerOptionEntry = {
+	{name = .VulkanUseEntryPointName, value = {kind = .Int, intValue0 = 1}},
+	{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}},
+}
+
+target_desc: sp.TargetDesc
+session_desc: sp.SessionDesc
+
 init_slang_session :: proc() -> ^sp.ISession {
-	using sp
-
-
-	target_options := [?]CompilerOptionEntry{{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}}}
-	target_desc := TargetDesc {
-		structureSize            = size_of(TargetDesc),
-		format                   = .SPIRV,
-		flags                    = {.GENERATE_SPIRV_DIRECTLY},
-		profile                  = game.render_state.global_session->findProfile("sm_6_0"),
+	target_desc = {
+		structureSize               = size_of(sp.TargetDesc),
+		format                      = .SPIRV,
+		flags                       = {.GENERATE_SPIRV_DIRECTLY},
+		profile                     = game.render_state.global_session->findProfile("sm_6_0"),
 		forceGLSLScalarBufferLayout = true,
-		compilerOptionEntries    = &target_options[0],
-		compilerOptionEntryCount = len(target_options),
+		compilerOptionEntries       = &options[0],
+		compilerOptionEntryCount    = u32(len(options)),
 	}
+	#assert(size_of(sp.TargetDesc) == 48)
 
-	session_options := [?]CompilerOptionEntry {
-		{name = .VulkanUseEntryPointName, value = {kind = .Int, intValue0 = 1}},
-		{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}},
-		{name = .DisableWarning, value = {kind = .String, stringValue0 = "39001"}},
-	}
-	session_desc := SessionDesc {
-		structureSize            = size_of(SessionDesc),
+	session_desc = {
+		structureSize            = size_of(sp.SessionDesc),
 		targets                  = &target_desc,
 		targetCount              = 1,
 		defaultMatrixLayoutMode  = .COLUMN_MAJOR,
-		compilerOptionEntries    = &session_options[0],
-		compilerOptionEntryCount = len(session_options),
+		compilerOptionEntries    = &options[0],
+		compilerOptionEntryCount = u32(len(options)),
 	}
-	session: ^ISession
+
+	#assert(size_of(sp.SessionDesc) == 96)
+	session: ^sp.ISession
+	global_session := game.render_state.global_session
 	slang_check(game.render_state.global_session->createSession(session_desc, &session))
 	return session
 }
 
+safe_release :: proc(unknown: ^sp.IUnknown) {
+	if unknown != nil {
+		unknown->release()
+	}
+}
+
 get_dependency_file_paths :: proc(root_path: cstring, allocator := context.allocator) -> []string {
-	using sp
-
 	session := init_slang_session()
-	defer session->release()
+	defer safe_release(session)
 
-	diagnostics: ^IBlob
-	module: ^IModule = session->loadModule(root_path, &diagnostics)
+	diagnostics: ^sp.IBlob
+	module: ^sp.IModule = session->loadModule(root_path, &diagnostics)
 	diagnostics_check(diagnostics)
 	assert(module != nil)
-	defer module->release()
 
 	count := module->getDependencyFileCount()
 
@@ -221,35 +323,31 @@ get_dependency_file_paths :: proc(root_path: cstring, allocator := context.alloc
 	return file_paths
 }
 
-compile_slang_to_spirv :: proc(shader: ^Shader) -> (compiled_code: []u8, ok: bool) {
-	start_compile_time := time.tick_now()
-
-	using sp
-	code, diagnostics: ^IBlob
-	r: Result
+compile_slang_to_spirv :: proc(shader: ^Shader($T)) -> (compiled_code: []u8, ok: bool) {
+	diagnostics: ^sp.IBlob
+	r: sp.Result
 
 	session := init_slang_session()
-	defer session->release()
+	defer safe_release(session)
 
-	blob: ^IBlob
-
-	module: ^IModule = session->loadModule(shader.path, &diagnostics)
+	module: ^sp.IModule = session->loadModule(shader.path, &diagnostics)
 	diagnostics_check(diagnostics)
 	if module == nil {
-		fmt.println("Shader", shader.path, "doesn't exist.")
+		log.error("Shader", shader.path, "doesn't exist.")
 		return
 	}
-	defer module->release()
 
-	components: [dynamic]^IComponentType = {module}
+	components: [dynamic]^sp.IComponentType
 	defer delete(components)
 
-	linked_program: ^IComponentType
+	append(&components, module)
+
+	linked_program: ^sp.IComponentType
 	r = session->createCompositeComponentType(&components[0], len(components), &linked_program, &diagnostics)
 	diagnostics_check(diagnostics)
 	slang_check(r)
 
-	target_code: ^IBlob
+	target_code: ^sp.IBlob
 	r = linked_program->getTargetCode(0, &target_code, &diagnostics)
 	diagnostics_check(diagnostics)
 	slang_check(r)

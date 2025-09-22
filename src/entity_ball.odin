@@ -1,15 +1,8 @@
 package game
 
-import "base:runtime"
-import "core:fmt"
-import "core:math"
-import "core:math/linalg"
-import "core:math/rand"
+import "core:log"
 
-import im "deps:odin-imgui"
 import px "deps:physx-odin"
-
-import "gfx"
 
 Ball :: struct {
 	using entity:       ^Entity,
@@ -90,5 +83,5 @@ update_ball_fixed :: proc(ball: ^Ball) {
 }
 
 on_ball_collide :: proc(ball: ^Ball) {
-	fmt.println("hi", ball)
+	log.info("hi", ball)
 }

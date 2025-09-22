@@ -1,0 +1,2796 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="keywords" content="">
+
+    <title>Live++ for Windows - Documentation</title>
+
+    <!-- Styles -->
+    <link href="assets/css/theDocs.all.min.css" rel="stylesheet">
+    <link href="assets/css/custom.css" rel="stylesheet">
+    <link href="assets/css/skin/skin-orange.css" rel="stylesheet">
+    <link href="assets/css/prism-vsc-dark-plus.css" rel="stylesheet">
+
+    <!-- Fonts -->
+    <link href="assets/css/fonts.css" rel="stylesheet">
+
+    <!-- Favicons -->
+    <link rel="icon" href="assets/img/favicon.png">
+    <link rel="shortcut icon" href="favicon.ico">
+  </head>
+
+  <body data-spy="scroll" data-target=".sidebar" data-offset="200">
+    <header class="site-header">
+
+      <!-- Top navbar & branding -->
+      <nav class="navbar navbar-default">
+        <div class="container-fluid">
+
+          <!-- Toggle buttons and brand -->
+          <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar" aria-expanded="true" aria-controls="navbar">
+              <span class="glyphicon glyphicon-option-vertical"></span>
+            </button>
+
+            <button type="button" class="navbar-toggle for-sidebar" data-toggle="offcanvas">
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
+
+            <div class="logo-bar">
+              <img src="assets/img/logo.svg" alt="Live++ logo" width="48" height="48" />
+              <span>Live++ for Windows - Documentation</span>
+            </div>
+          </div>
+          <!-- END Toggle buttons and brand -->
+
+          <!-- Top navbar -->
+          <div id="navbar" class="navbar-collapse collapse" aria-expanded="true" role="banner">
+            <ul class="nav navbar-nav navbar-right">
+              <li class="active"><a href="documentation.html">Documentation</a></li>
+              <li><a href="faq.html">FAQ</a></li>
+            </ul>
+          </div>
+          <!-- END Top navbar -->
+
+        </div>
+      </nav>
+      <!-- END Top navbar & branding -->
+      
+    </header>
+
+    <main class="container-fluid">
+      <div class="row">
+
+        <!-- Sidebar -->
+        <aside class="col-lg-2 col-md-3 col-sm-3 sidebar">
+          <ul class="nav sidenav sticky">
+            <li>
+              <a href="#quickstart_guide">Quickstart guide</a>
+              <ul>
+                <li><a href="#examples">Examples</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#installation">Installation</a>
+              <ul>
+                <li><a href="#directory_structure">Directory structure</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#architecture">Architecture</a>
+              <ul>
+                <li><a href="#broker">Broker</a></li>
+                <li><a href="#agent">Agent</a></li>
+                <li><a href="#bridge">Bridge</a></li>
+                <li><a href="#communication">Communication</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#project_setup">Project setup</a>
+              <ul>
+                <li><a href="#compiler_settings">Compiler settings</a></li>
+                <ul>
+                  <li><a href="#compiler_settings_MSVC">MSVC/Visual Studio</a></li>
+                </ul>
+                <ul>
+                  <li><a href="#compiler_settings_clang_cl">Clang-cl</a></li>
+                </ul>
+                <ul>
+                  <li><a href="#compiler_settings_clang++">Clang++</a></li>
+                </ul>
+                <li><a href="#linker_settings">Linker settings</a></li>
+                <ul>
+                  <li><a href="#linker_settings_MSVC">MSVC/Visual Studio</a></li>
+                </ul>
+                <ul>
+                  <li><a href="#linker_settings_lld_link">lld-link</a></li>
+                </ul>
+                <li><a href="#incompatible_settings">Incompatible settings</a></li>
+                <li><a href="#required_files">Required files</a></li>
+                <li><a href="#supported_setups">Supported setups</a></li>
+                <ul>
+                  <li><a href="#FASTBuild">FASTBuild</a></li>
+                  <li><a href="#IncrediBuild">IncrediBuild</a></li>
+                  <li><a href="#distributed_builds">Distributed builds</a></li>
+                </ul>
+              </ul>
+            </li>
+            <li>
+              <a href="#usage">Usage</a>
+              <ul>                
+                <li><a href="#usage_agents">Agents</a></li>
+                <ul>
+                  <li><a href="#creating_default_agent">Creating a default agent</a></li>
+                  <li><a href="#creating_synchronized_agent">Creating a synchronized agent</a></li>
+                </ul>
+                <li><a href="#enabling_livepp">Enabling Live++</a></li>
+                <li><a href="#dynamically_loaded_modules">Dynamically loaded modules</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#tools">Tools</a>
+              <ul>
+                <li><a href="#tools_hot_reload">Hot-Reload</a></li>
+                <ul>
+                  <li><a href="#unity_file_splitting">Unity splitting</a></li>
+                  <li><a href="#halted_processes">Halted processes</a></li>
+                  <li><a href="#natvis_visualizations">Natvis visualizations</a></li>
+                </ul>
+                <li><a href="#tools_hot_restart">Hot-Restart</a></li>
+                <ul>
+                  <li><a href="#hot_restart_request">Requesting a Hot-Restart</a></li>
+                  <li><a href="#hot_restart_default_agents">Default agents</a></li>
+                  <li><a href="#hot_restart_synchronized_agents">Synchronized agents</a></li>
+                </ul>
+                <li><a href="#tools_hot_fix">Hot-Fix</a></li>
+                <li><a href="#tools_hot_deoptimize">Hot-Deoptimize</a></li>
+
+                <li><a href="#multi_process_editing">Multi-process editing</a></li>
+                <li><a href="#networked_editing">Networked editing</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#licensing">Licensing</a>
+              <ul>
+                <li><a href="#licensing_activation">Activation</a></li>
+                <li><a href="#licensing_deactivation">Deactivation</a></li>
+                <li><a href="#licensing_trial">Free trial</a></li>
+                <li><a href="#licensing_command_line_tools">Command-line tools</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#gui">GUI</a>
+              <ul>
+                <li><a href="#gui_views_targets">Targets</a></li>
+                <li><a href="#gui_views_processes">Processes</a></li>
+                <li><a href="#gui_views_modules">Modules</a></li>
+                <li><a href="#gui_views_compilands">Compilands</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#global_preferences">Global preferences</a>
+              <ul>
+                <li><a href="#global_preferences_ui">UI</a></li>
+                <li><a href="#global_preferences_logging">Logging</a></li>
+                <li><a href="#global_preferences_network">Network</a></li>
+                <li><a href="#global_preferences_notifications">Notifications</a></li>
+                <li><a href="#global_preferences_hot_reload">Hot-Reload</a></li>
+                <li><a href="#global_preferences_hot_restart">Hot-Restart</a></li>
+                <li><a href="#global_preferences_ide">IDE</a></li>
+                <li><a href="#global_preferences_licensing">Licensing</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#project_preferences">Project preferences</a>
+              <ul>
+                <li><a href="#project_preferences_general">General</a></li>
+                <li><a href="#project_preferences_hot_reload">Hot-Reload</a></li>
+                <li><a href="#project_preferences_compiler">Compiler</a></li>
+                <li><a href="#project_preferences_linker">Linker</a></li>
+                <li><a href="#project_preferences_exceptions">Exceptions</a></li>
+                <li><a href="#project_preferences_continuous_compilation">Continuous compilation</a></li>
+                <li><a href="#project_preferences_virtual_drive">Virtual drive</a></li>
+                <li><a href="#project_preferences_unity_splitting">Unity splitting</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#API">API</a>
+              <ul>
+                <li><a href="#API_naming_convention">Naming convention</a></li>
+                <li><a href="#API_flavours">Flavours</a></li>
+                <li><a href="#API_versioning">Versioning</a></li>
+                <li><a href="#API_agent_validation">Agent validation</a></li>
+                <li><a href="#API_connection_callback">Connection callback</a></li>
+                <li><a href="#API_hooks">Hooks</a></li>
+                <ul>
+                  <li><a href="#API_compile_hooks">Compile hooks</a></li>
+                  <li><a href="#API_link_hooks">Link hooks</a></li>
+                  <li><a href="#API_hot_reload_hooks">Hot-Reload hooks</a></li>
+                  <li><a href="#API_global_hot_reload_hooks">Global Hot-Reload hooks</a></li>
+                </ul>
+                <li><a href="#API_structural_change">Structural changes</a></li>
+                <li><a href="#API_applying_preferences">Applying preferences</a></li>
+                <li><a href="#API_logging_to_the_UI">Logging to the UI</a></li>
+              </ul>
+            </li>
+            <li>
+            </li>
+            <li>
+              <a href="#limitations">Limitations</a>
+              <ul>
+                <li><a href="#limitation_overhead">Overhead</a></li>
+                <li><a href="#limitation_breakpoints">Breakpoints in Visual Studio</a></li>
+                <li><a href="#limitation_global_variables">Global variables in the debugger</a></li>
+                <li><a href="#limitation_functions_on_the_stack">Functions on the stack</a></li>
+                <li><a href="#limitation_thread_local_storage">Thread-local storage</a></li>
+                <li><a href="#limitation_clang_dynamic_initializers">Dynamic initializers in Clang</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#known_issues">Known issues</a>
+              <ul>
+                <li><a href="#known_fastbuild_clang">FASTBuild with Clang</a></li>
+                <li><a href="#known_issues_external">'/external:I' requires '/external:W'</a></li>
+                <li><a href="#known_issues_include">INCLUDE missing in PDB</a></li>
+                <li><a href="#known_reloading_in_halted_processes">Hot-reload in halted processes</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#troubleshooting">Troubleshooting</a>
+              <ul>
+                <li><a href="#troubleshooting_missing_compilands">Missing compilands</a></li>
+                <li><a href="#troubleshooting_verbose_compiling">Verbose compiling</a></li>
+                <li><a href="#troubleshooting_verbose_linking">Verbose linking</a></li>
+              </ul>
+            </li>
+            <li>
+              <a href="#3rd_party_libraries">3rd-party libraries</a>
+            </li>
+          </ul>
+        </aside>
+        <!-- END Sidebar -->
+
+
+        <!-- Main content -->
+        <article class="col-lg-10 col-md-9 col-sm-9 main-content" role="main" style="padding-left: 70px">
+
+          <header>
+            <h1 id="quickstart_guide">Quickstart guide</h1>
+            <p class="lead">If you want to try Live++ in one of your projects straight away and deal with the details later, simply follow these steps:</p>
+            <ol>
+              <li>Make sure the <strong>LivePP</strong> folder is stored in a location within your project hierarchy.</li>
+              <li>Set up <a href="#compiler_settings">compiler options</a> and <a href="#linker_settings">linker options</a> for your project.</li>
+              <li>Create a default agent and enable Live++ for all loaded modules using the following code:</li>
+
+<pre><code class="language-cpp">
+// include the API for Windows, 64-bit, C++
+#include "LivePP/API/x64/LPP_API_x64_CPP.h"
+
+int main(void)
+{
+  // create a default agent, loading the Live++ agent from the given path, e.g. "ThirdParty/LivePP"
+  lpp::LppDefaultAgent lppAgent = lpp::LppCreateDefaultAgent(nullptr, absoluteOrRelativePathWithoutTrailingSlash);
+
+  // bail out in case the agent is not valid
+  if (!lpp::LppIsValidDefaultAgent(&lppAgent))
+  {
+    return 1;
+  }
+
+  // enable Live++ for all loaded modules
+  lppAgent.EnableModule(lpp::LppGetCurrentModulePath(), lpp::LPP_MODULES_OPTION_ALL_IMPORT_MODULES, nullptr, nullptr);
+
+  // run the application
+  // ...
+  Application::Exec();
+
+  // destroy the Live++ agent
+  lpp::LppDestroyDefaultAgent(&lppAgent);
+
+  return 0;
+}
+</code></pre>
+              <li>Start your application, modify your source files with your application of choice, save your changes, and hit <kbd><kbd>ctrl</kbd> + <kbd>alt</kbd> + <kbd>F11</kbd></kbd> to invoke the Live++ hot-reload.</li>
+            </ol>
+          </header>
+
+          <section>
+            <h2 id="examples">Examples</h2>
+            <p class="lead">Alternatively, take a look at the examples that ship with Live++ (available as a <a href="../../releases.html" target="_blank">separate download</a>). They come with ready-made solutions and projects for Visual Studio 2017, 2019, and 2022, and demonstrate the various features that Live++ has to offer, allowing you to experiment without having to set up anything yourself.</p>
+          </section>
+
+          <header>
+            <h1 id="installation">Installation</h1>
+            <p class="lead">Live++ doesn't require a lengthy installation process. It is completely self-contained: just copy the whole directory tree to any location on your hard drive. Naturally, you may upload the Live++ folders to any version control system you use to keep track of your project.</p>
+          </header>
+
+          <section>
+            <h2 id="directory_structure">Directory structure</h2>
+            <p>This is an example of a Live++ build's directory structure:</p>
+            <div class="file-tree">
+              <ul>
+                <li class="is-folder open">
+                  LivePP<i>Main Live++ folder</i>
+                  <ul>
+                    <li class="is-folder open">
+                      Agent<i>Agents loaded into target applications</i>
+                      <ul>
+                        <li class="is-folder open">
+                          x64<i>Agents for Windows, 64-bit</i>
+                          <ul>
+                            <li class="is-file">LPP_Agent_Bridge_x64.exe<i>Helper process for communicating between Agent and Broker</i></li>
+                            <li class="is-file">LPP_Agent_Bridge_x64.pdb<i>Public PDB containing debug symbols</i></li>
+                            <li class="is-file">LPP_Agent_x64_CPP.dll<i>Agent for Windows, 64-bit, C++</i></li>
+                            <li class="is-file">LPP_Agent_x64_CPP.pdb<i>Public PDB containing debug symbols</i></li>
+                            <li class="is-file">LPP_Agent_x86_CPP.dll<i>Agent for Windows, 32-bit, C++</i></li>
+                            <li class="is-file">LPP_Agent_x86_CPP.pdb<i>Public PDB containing debug symbols</i></li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder open">
+                      API<i>APIs for different platforms and languages</i>
+                      <ul>
+                        <li class="is-folder open">
+                          x64<i>APIs for Windows, 64-bit</i>
+                          <ul>
+                            <li class="is-file"><strong>LPP_API_x64_CPP.h</strong><i><strong>Platform-specific header file for supporting Windows, 64-bit, C++</strong></i></li>
+                            <li class="is-file">LPP_API.h<i>Main API header file used by platform-specific API files (never included by clients)</i></li>
+                            <li class="is-file">LPP_API_Helpers.h<i>Auxiliary header file used by platform-specific API files (never included by clients)</i></li>
+                            <li class="is-file">LPP_API_Hooks.h<i>Auxiliary header file used by platform-specific API files (never included by clients)</i></li>
+                            <li class="is-file">LPP_API_Options.h<i>Auxiliary header file used by platform-specific API files (never included by clients)</i></li>
+                            <li class="is-file">LPP_API_Preferences.h<i>Auxiliary header file used by platform-specific API files (never included by clients)</i></li>
+                            <li class="is-file">LPP_API_Version_x64_CPP.h<i>Auxiliary header file used by platform-specific API files (never included by clients)</i></li>
+                            <li class="is-file">version_x64_CPP.txt<i>Versioning file for Windows, 64-bit, C++</i></li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder open">
+                      Broker
+                      <ul>
+                        <li class="is-folder open">
+                          Plugins<i>Plugins for different platforms and languages</i>
+                          <ul>
+                            <li class="is-file">LPP_Broker_x64_CPP.dll<i>Plugin for supporting Windows, 64-bit, C++</i></li>
+                            <li class="is-file">LPP_Broker_x64_CPP.pdb<i>Public PDB containing debug symbols</i></li>
+                            <li class="is-file">LPP_Weak_Symbols_x64_CPP.obj<i>Weak symbols helper file supporting Windows, 64-bit, C++</i></li>
+                            <li class="is-file">LPP_Weak_Symbols_x86_CPP.obj<i>Weak symbols helper file supporting Windows, 32-bit, C++</i></li>
+                          </ul>
+                        </li>
+                        <li class="is-file">dbghelp.dll<i>64-bit helper DLL used by the Broker</i></li>
+                        <li class="is-file">LPP_Broker.exe<i>Main Live++ Broker application</i></li>
+                        <li class="is-file">LPP_Broker.pdb<i>Public PDB containing debug symbols</i></li>
+                        <li class="is-file">srcsrv.dll<i>64-bit helper DLL used by the Broker</i></li>
+                        <li class="is-file">symsrv.dll<i>64-bit helper DLL used by the Broker</i></li>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder open">
+                      CLI<i>Command-line tools</i>
+                      <ul>
+                        <li class="is-file">LPP_License_x64_CPP.exe<i>Allows the activation and deactivation of licenses for Windows, 64-bit, C++</i></li>
+                        <li class="is-file">LPP_License_x64_CPP.pdb<i>Public PDB containing debug symbols</i></li>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder closed">
+                      Docs<i>This documentation</i>
+                      <ul>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder open">
+                      EULA
+                      <ul>
+                        <li class="is-file">LPP_EULA.pdf<i>End User License Agreement</i></li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+
+                <li class="is-folder open">
+                  Examples_x64
+                  <ul>
+                    <li class="is-folder closed">
+                      build<i>Visual Studio 2017, 2019, and 2022 solutions and projects</i>
+                      <ul>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder closed">
+                      FASTBuild<i>FASTBuild</i>
+                      <ul>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder closed">
+                      LLVM<i>clang-cl and lld-link</i>
+                      <ul>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder closed">
+                      readme<i>README files describing the examples</i>
+                      <ul>
+                      </ul>
+                    </li>
+
+                    <li class="is-folder closed">
+                      src<i>C++ source code used by the examples</i>
+                      <ul>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <header>
+            <h1 id="architecture">Architecture</h1>
+            <p class="lead">To keep the impact on target applications as low as possible and enable features like networked hot-reload, Live++ is split into several processes and modules.</p>
+          </header>
+
+          <section>
+            <h2 id="broker">Broker</h2>
+            <p>The Broker is Live++'s main application process. It operates as a server which Live++'s Agents connect to. It is a long-running application that should be started once and kept running: there's no need to restart it every time you close or re-open the target application(s). Additionally, the Broker stores internal caches of Live++'s required files such as those in .pdb and .obj format, greatly improving loading times where only parts of an application have changed between restarts.</p>
+            <p>For local connections, the Broker will be started automatically as soon as the Live++ Agent is loaded into the target application.</p>
+
+            <p>Because the Broker acts as a server listening for incoming connections on a specific port, multiple Brokers are only allowed to run simultaneously as long as each of them uses a different port for communication, which can be configured in the <a href="#global_preferences_network">global preferences</a>.</p>
+
+            <h2 id="agent">Agent</h2>
+            <p>The Agent is responsible for carrying out tasks as dictated by the Broker or Bridge. The Agent ships as a small shared library (e.g. .dll on Windows and Xbox) which is loaded into the target application when creating any of the available agents through the corresponding API.</p>
+            <p>This approach makes it possible to use Live++ on modules that are loaded into completely arbitrary target applications, even applications which do not know anything about Live++ and do not have any hot-reload capabilities built-in, such as <a href="https://docs.unity3d.com/Manual/NativePlugins.html" target="_blank">Unity Native plug-ins</a>, <a href="https://help.autodesk.com/view/MAYAUL/2022/ENU/?guid=Maya_SDK_A_First_Plugin_cpp_HelloWorldComplete_html" target="_blank">Autodesk Maya plug-ins</a>, and countless others.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"13_ArbitraryTarget"</strong> that demonstrates this.</p>
+            </div>
+
+            <h2 id="bridge">Bridge</h2>
+            <p>On certain platforms (e.g. Windows and Xbox), the Bridge acts as an intermediate process between Agent and Broker, and is required for providing features like networked hot-reload, since the Broker does not necessarily run on the same machine as the Agent. However, the Bridge should be completely transparent to you as a user.</p>
+
+            <h2 id="communication">Communication</h2>
+            <p>Agent and Bridge communicate with each other via Named Duplex Pipes, since they always run on the same machine.</p>
+            <p>Bridge and Broker communicate with each other via TCP/IP using the host name or IP address configured in the <a href="#global_preferences_network">global preferences</a> on port 12216.</p>
+          </section>
+
+          <header>
+            <h1 id="project_setup">Project setup</h1>
+            <p class="lead">Live++ does not require any special project setup, except for a few compiler and linker settings. It is perfectly fine to use any mix of static libraries (.lib) and dynamic libraries (.dll) in your projects and solutions. Live++ will automatically extract the needed information from all object files and executables involved.</p>
+          </header>
+            
+          <section>
+            <h2 id="compiler_settings">Compiler settings</h2>
+            <h3 id="compiler_settings_MSVC">MSVC/Visual Studio</h3>
+            <p>These compiler settings must be enabled in the configuration properties of each project which uses Live++:</p>
+            <p><span class="label label-default label-custom-MM">C/C++ -> General -> Debug Information Format</span> must be set to either <span class="label label-default-MM label-custom-MM">C7 compatible (/Z7)</span> or <span class="label label-default-MM label-custom-MM">Program Database (/Zi)</span></p>
+            <p><span class="label label-default label-custom-MM">C/C++ -> Code Generation -> Enable Minimal Rebuild</span> must be set to <span class="label label-default-MM label-custom-MM">No (/Gm-)</span></p>
+
+            <p>x86/Win32 projects additionally require the following compiler settings:</p>
+            <p><span class="label label-default label-custom-MM">C/C++ -> Code Generation -> Create Hotpatchable Image</span> must be set to <span class="label label-default-MM label-custom-MM">Yes (/hotpatch)</span></p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Though not strictly necessary, we recommend using both <a href="https://docs.microsoft.com/en-us/cpp/build/reference/gy-enable-function-level-linking" target="_blank">/Gy (Enable Function-Level Linking)</a> and <a href="https://docs.microsoft.com/en-us/cpp/build/reference/gw-optimize-global-data" target="_blank">/Gw (Optimize Global Data)</a> compiler options, to make the patch executable and PDB as small as possible.</p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Hint</h4>
+              <p>Recent versions of Visual Studio 2022 (version 17.11 and above) introduced a new option under <span class="label label-default label-custom-MM">Tools -> Options... -> Debugging -> General -> Enable Hot Reload</span> called <span class="label label-default label-custom-MM">Automatically apply changes on continue (Native only)</span>, which will bring up a dialog saying "Hot Reload - Not supported by project" when changing code while debugging. We recommend either disabling this particular option only, or disabling Visual Studio's Hot Reload/Edit and Continue functionality entirely.</p>
+            </div>
+
+            <h3 id="compiler_settings_clang_cl">Clang-cl</h3>
+            <p>Code compiled using <strong>clang-cl</strong> needs to have the following options set:</p>
+            <p><span class="label label-default label-custom-MM">-Z7</span> - Enable CodeView debug information in object files</p>
+            <p><span class="label label-default label-custom-MM">-hotpatch</span> - Create hotpatchable image</p>
+            <p><span class="label label-default label-custom-MM">-Gy</span> - Put each function into its own section</p>
+            <p><span class="label label-default label-custom-MM">-Xclang -mno-constructor-aliases</span> - Disable an internal optimization that folds/aliases constructors and destructors</p>
+
+            <h3 id="compiler_settings_clang++">Clang++</h3>
+            <p>Since <strong>clang++</strong> does not understand MSVC/Visual Studio compiler options, code compiled using <strong>clang++</strong> needs to have the following options set:</p>
+            <p><span class="label label-default label-custom-MM">-g</span> - Generate source-level debug information</p>
+            <p><span class="label label-default label-custom-MM">-gcodeview</span> - Generate CodeView debug information</p>
+            <p><span class="label label-default label-custom-MM">-fms-hotpatch</span> - Ensure that all functions can be hotpatched at runtime</p>
+            <p><span class="label label-default label-custom-MM">-ffunction-sections</span> - Put each function into its own section</p>
+            <p><span class="label label-default label-custom-MM">-Xclang -mno-constructor-aliases</span> - Disable an internal optimization that folds/aliases constructors and destructors</p>
+
+
+            <h2 id="linker_settings">Linker settings</h2>
+            <h3 id="linker_settings_MSVC">MSVC/Visual Studio</h3>
+            <p>These linker settings must be enabled in the configuration properties of each project that uses Live++:</p>
+            <p><span class="label label-default label-custom-MM">Linker -> General -> Create Hotpatchable Image</span> must be set to <span class="label label-default-MM label-custom-MM">Enabled (/FUNCTIONPADMIN)</span></p>
+            <p><span class="label label-default label-custom-MM">Linker -> Optimization -> References</span> must be set to <span class="label label-default-MM label-custom-MM">No (/OPT:NOREF)</span></p>
+            <p><span class="label label-default label-custom-MM">Linker -> Optimization -> Enable COMDAT Folding</span> must be set to <span class="label label-default-MM label-custom-MM">No (/OPT:NOICF)</span></p>
+            <p><span class="label label-default label-custom-MM">Linker -> Debugging -> Generate Debug Info</span> must be set to <span class="label label-default-MM label-custom-MM">Generate Debug Information optimized for sharing and publishing (/DEBUG:FULL)</span></p>
+
+            <h3 id="linker_settings_lld_link">lld-link</h3>
+            <p><strong>lld-link</strong> is fully compatible with the MSVC/Visual Studio linker options. Therefore, code linked using <strong>lld-link</strong> must use the same options as above.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"09_ClangLLD"</strong> that demonstrates how to use Clang as your compiler and LLD as your linker.</p>
+            </div>
+
+
+            <h2 id="incompatible_settings">Incompatible settings</h2>
+            <p>While Live++ allows you to build code with almost any combination of compiler and linker options, turning on <span class="label label-default label-custom-MM">C/C++ -> Optimization -> Whole Program Optimization</span> or any kind of Link Time Code Generation (LTCG) or Link Time Optimization (LTO) is not supported. Object files built using LTCG/LTO store information in an unsupported proprietary format and cannot be used by Live++.</p>
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Live++ will automatically detect incompatible compiler and linker settings and output an error accordingly.</p>
+            </div>
+
+            <h2 id="required_files">Required files</h2>
+            <p>
+              In order to load and reconstruct the necessary information for a module, Live++ needs the following files to be present:
+              <ul>
+                <li>
+                  <strong>PDB files for all Live++-enabled modules:</strong><br/>PDB files contain useful information about executable image sections, public symbols, and the translation units and toolchains involved.
+                </li>
+                <li>
+                  <strong>Object files (.obj) that were linked into Live++-enabled modules:</strong><br/>Almost all of the symbol information needed by Live++ is extracted and reconstructed from object files.
+                </li>
+                <li>
+                  <strong>Source files (.cpp &amp; .h) used to compile the above-mentioned object files.</strong>
+                </li>
+              </ul>
+              You may find your project uses libraries which you don't have the source code for (e.g. 3rd-party code) or the object files for (e.g. Visual Studio's C &amp; C++ runtimes). This is not an issue: Live++ will simply ignore the corresponding translation units.
+            </p>
+
+            <h2 id="supported_setups">Supported setups</h2>
+            <p>
+              Live++ fully supports .exe, .dll, and .lib projects, makefile-based projects, and custom setups and build systems. From a technical point of view, Live++ does not care about what type of project it is used in. In fact, Live++ does not even know about the project type at all.<br/>
+              Nevertheless, different project types will exhibit different behaviours between coding sessions:
+              <ul>
+                <li>
+                  <strong>Application (.exe) projects:</strong><br/>
+                  Live++ will recompile .obj files using the original compiler command-line options and generate a patch to be loaded into the address space of the running process, run-time linking against existing symbols. The .exe will be compiled and linked again by the native toolchain automatically between two Live++ sessions.
+                </li>
+                <li>
+                  <strong>Dynamic library (.dll) projects:</strong><br/>
+                  Similar to application projects, individual .obj files will be recompiled. The .dll will be automatically compiled and linked again by the native toolchain between sessions.
+                </li>
+                <li>
+                  <strong>Static library (.lib) projects:</strong><br/>
+                  Similar to application projects, individual .obj files that are part of a .lib file will be recompiled. However, Live++ does not link static libraries that contain these .obj files. Between two Live++ sessions, the native toolchain will first compile and link all .lib files containing recompiled object files and then re-link all applications and dynamic libraries that consume these .lib files.
+                </li>
+                <li>
+                  <strong>Makefile-based projects:</strong><br/>
+                  Similar to any of the above, depending on what the makefile contains.
+                </li>
+                <li>
+                  <strong>Custom setups and build systems:</strong><br/>
+                  Similar to any of the above, depending on what is built using your setup.
+                </li>
+              </ul>
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>In addition to Visual Studio, Live++ has also been tested with
+                <a href="https://www.fastbuild.org/docs/home.html" target="_blank">FASTBuild</a>, <a href="https://www.incredibuild.com/" target="_blank">IncrediBuild</a>,
+                <a href="https://www.snsystems.com/tech-blog/2014/01/06/building-with-the-network/" target="_blank">SN-DBS</a>, various in-house (distributed) build systems, and build systems used by other IDEs such as <a href="https://www.jetbrains.com/clion/download/#section=windows" target="_blank">CLion</a>, <a href="https://www.jetbrains.com/rider/download/#section=windows" target="_blank">Rider</a>, or <a href="https://code.visualstudio.com/" target="_blank">Visual Studio Code</a>. Depending on how your build is structured, you may need to configure some settings first to ensure Live++ finds all the necessary files and toolchains.</p>
+            </div>
+
+
+            <h3 id="FASTBuild">FASTBuild</h3>
+            <p>
+              When using FASTBuild as your build system, no special configuration is necessary.
+            </p>
+            <p>
+              The only exception to this rule is when using distributed compilation in conjunction with the <a href="https://learn.microsoft.com/en-us/cpp/build/reference/fi-name-forced-include-file" target="_blank">/FI compiler option</a>. In this case, FASTBuild will preprocess individual translation units locally and then distribute them among remote agents, however removing the /FI option when doing so. As a result, this /FI option will be missing from the produced PDB file, possibly making recompilation using Live++ fail.
+            </p>
+            <p>
+              In this case, the /FI option has to be supplied to Live++ via the additional command-line options that can be specified in the <a href=#project_preferences_compiler>project preferences</a>.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>11_FASTBuild</strong> that demonstrates this.</p>
+            </div>
+
+
+            <h3 id="IncrediBuild">IncrediBuild</h3>
+            <p>
+              When using distributed builds in conjunction with precompiled header files, IncrediBuild may generate several individual PDBs (e.g. <strong>C:\Project\SourceFile_cpp_ib_1.pdb, C:\Project\SourceFile_cpp_ib_2.pdb, etc.</strong>) that all use the same precompiled header (e.g. <strong>C:\Project\PCH.pch</strong>) that was built against a different PDB. Strictly speaking, this is neither allowed nor supported by Microsoft's compiler toolchain, and will lead to Live++ yielding <a href="https://docs.microsoft.com/en-us/cpp/error-messages/compiler-errors-2/compiler-error-c2858" target="_blank">error C2858</a> when trying to recompile.
+            </p>
+            <p>
+              In this case, you need to make use of the <a href="#project_preferences_compiler">"Force use of precompiled header PDBs"</a> setting in order to force Live++ to use the same PDB as the corresponding PCH when recompiling files.
+            </p>
+
+
+            <h3 id="distributed_builds">Distributed builds</h3>
+            <p>
+              When using distributed compilation, the build system will copy the compiler executable and all required auxiliary files to a remote machine, start the compilation process on the remote machine, and copy the output back to the machine that initiated the build. In this case, the PDB file that is used by Live++ in order to find the compiler and linker executables will contain paths on remote machines, e.g. <strong>C:\Users\Jane\AppData\Local\Temp\.fbuild.tmp\worker\toolchain.130589cdf35aed3b\cl.exe</strong>.
+            </p>
+            <p>
+              Since this path is not available when recompiling files using Live++, you must make use of the <a href="#project_preferences_compiler">"Override compiler path"</a> setting and tell Live++ where a local compiler can be found.          
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>
+                This applies to all build systems that support distributed/remote compilation, such as <a href="https://www.fastbuild.org/docs/home.html" target="_blank">FASTBuild</a>, <a href="https://www.incredibuild.com/" target="_blank">IncrediBuild</a>, and 
+                <a href="https://www.snsystems.com/tech-blog/2014/01/06/building-with-the-network/" target="_blank">SN-DBS</a>.
+              </p>
+            </div>
+          </section>
+
+          <header>
+            <h1 id="usage">Usage</h1>
+            <p class="lead">Using Live++ is very simple: change any of the source files which are part of a running application or DLL, save the changes, and press the Live++ shortcut <kbd><kbd>ctrl</kbd> + <kbd>alt</kbd> + <kbd>F11</kbd></kbd>.</p>
+          </header>
+
+          <section>
+            <h2 id="usage_agents">Agents</h2>
+            <p>Depending on your requirements, there are currently two different agents to choose from. While most of the APIs are shared between all agents, some of them offer additional APIs for fine-grained control. Agents can be created and destroyed using the following APIs:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>APIs for creating default agents</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">lpp::LppDefaultAgent lpp::LppCreateDefaultAgent(const LppLocalPreferences* const localPreferences, const wchar_t* const absoluteOrRelativePathWithoutTrailingSlash);</code>
+                    </strong></td>
+                    <td>Creates a default agent using optional local preferences.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">lpp::LppDefaultAgent lpp::LppCreateDefaultAgentWithPreferences(const LppLocalPreferences* const localPreferences, const wchar_t* const absoluteOrRelativePathWithoutTrailingSlash, const LppProjectPreferences* const projectPreferences);</code>
+                    </strong></td>
+                    <td>Creates a default agent with the given project preferences and optional local preferences.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">lpp::LppDefaultAgent lpp::LppCreateDefaultAgentWithPreferencesFromFile(const LppLocalPreferences* const localPreferences, const wchar_t* const absoluteOrRelativePathWithoutTrailingSlash, const wchar_t* const absoluteOrRelativePathToProjectPreferences);</code>
+                    </strong></td>
+                    <td>Creates a default agent using optional local preferences, loading project preferences from the given path.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">void lpp::LppDestroyDefaultAgent(LppDefaultAgent* agent);</code>
+                    </strong></td>
+                    <td>Destroys the given default agent.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>APIs for creating synchronized agents</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">lpp::LppSynchronizedAgent lpp::LppCreateSynchronizedAgent(const LppLocalPreferences* const localPreferences, const wchar_t* const absoluteOrRelativePathWithoutTrailingSlash);</code>
+                    </strong></td>
+                    <td>Creates a synchronized agent using optional local preferences.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">lpp::LppSynchronizedAgent lpp::LppCreateSynchronizedAgentWithPreferences(const LppLocalPreferences* const localPreferences, const wchar_t* const absoluteOrRelativePathWithoutTrailingSlash, const LppProjectPreferences* const projectPreferences);</code>
+                    </strong></td>
+                    <td>Creates a synchronized agent with the given project preferences and optional local preferences.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">lpp::LppSynchronizedAgent lpp::LppCreateSynchronizedAgentWithPreferencesFromFile(const LppLocalPreferences* const localPreferences, const wchar_t* const absoluteOrRelativePathWithoutTrailingSlash, const wchar_t* const absoluteOrRelativePathToProjectPreferences);</code>
+                    </strong></td>
+                    <td>Creates a synchronized agent using optional local preferences, loading project preferences from the given path.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">void lpp::LppDestroySynchronizedAgent(LppSynchronizedAgent* agent);</code>
+                    </strong></td>
+                    <td>Destroys the given synchronized agent.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+
+            <h3 id="creating_default_agent">Creating a default agent</h3>
+            <p>For most applications and projects, the first thing to do is to create a default agent:</p>
+<pre><code class="language-cpp">
+// include the API for Windows, 64-bit, C++
+#include "LivePP/API/x64/LPP_API_x64_CPP.h"
+
+int main(void)
+{
+  // create a default agent, loading the Live++ agent from the given path, e.g. "ThirdParty/LivePP"
+  lpp::LppDefaultAgent lppAgent = lpp::LppCreateDefaultAgent(nullptr, absoluteOrRelativePathWithoutTrailingSlash);
+
+  // bail out in case the agent is not valid
+  if (!lpp::LppIsValidDefaultAgent(&lppAgent))
+  {
+    return 1;
+  }
+
+  // enable Live++ for certain modules
+  // ...
+
+  // run the application
+  // ...
+  Application::Exec();
+
+  // destroy the Live++ agent
+  lpp::LppDestroyDefaultAgent(&lppAgent);
+
+  return 0;
+}
+</code></pre>
+
+            <p>Internally, this loads the correct shared library for the requested platform and language, and performs a few integrity checks before filling the returned object with all available APIs. The returned <code class="language-cpp code-in-text">LppDefaultAgent</code> object is a platform-independent type that stores APIs in the shared library using function pointers.</p>
+
+            <p>Note how in the example code above, the default agent does not need to know anything about a main loop, engine frames, or similar.
+              The advantage of this approach is that it integrates beautifully with applications that don't follow the typical <strong>Update, Render, Present</strong> loop like games and game engines do, and therefore works with event-based applications e.g. built using <a href="https://www.qt.io" target="_blank">Qt</a>.
+              One disadvantage of this approach is that you cannot control at which point in time Live++ applies its code patches. If you need this kind of control, use a synchronized agent instead.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>
+                On certain platforms (e.g. Windows and Xbox), the Agent will automatically spawn the <a href="#bridge">Bridge</a> helper process - there is no need to start it manually.
+              </p>
+            </div>
+
+            <h3 id="creating_synchronized_agent">Creating a synchronized agent</h3>
+            <p>Particularly useful for frame-based applications, a synchronized agent allows you to control <strong>when</strong> and <strong>how</strong> hot-reload and hot-restart requests are handled:</p>
+<pre><code class="language-cpp">
+// include the API for Windows, 64-bit, C++
+#include "LivePP/API/x64/LPP_API_x64_CPP.h"
+
+int main(void)
+{
+  // create a synchronized agent, loading the Live++ agent from the given path, e.g. "ThirdParty/LivePP"
+  lpp::LppSynchronizedAgent lppAgent = lpp::LppCreateSynchronizedAgent(nullptr, absoluteOrRelativePathWithoutTrailingSlash);
+
+  // bail out in case the agent is not valid
+  if (!lpp::LppIsValidSynchronizedAgent(&lppAgent))
+  {
+    return 1;
+  }
+
+  // enable Live++ for certain modules
+  // ...
+
+  // run the main loop
+  while (MainLoop::NextFrame())
+  {
+    // listen to hot-reload and hot-restart requests
+    if (lppAgent.WantsReload(lpp::LPP_RELOAD_OPTION_SYNCHRONIZE_WITH_RELOAD))
+    {
+      // client code can do whatever it wants here, e.g. synchronize across several threads, the network, etc.
+      // ...
+      lppAgent.Reload(lpp::LPP_RELOAD_BEHAVIOUR_WAIT_UNTIL_CHANGES_ARE_APPLIED);
+    }
+
+    if (lppAgent.WantsRestart())
+    {
+      // client code can do whatever it wants here, e.g. finish logging, abandon threads, etc.
+      // ...
+      lppAgent.Restart(lpp::LPP_RESTART_BEHAVIOUR_INSTANT_TERMINATION, 0u, nullptr);
+    }
+
+    MainLoop::Update();
+    MainLoop::Render();
+    MainLoop::Present();
+  }
+
+  // destroy the Live++ agent
+  lpp::LppDestroySynchronizedAgent(&lppAgent);
+
+  return 0;
+}
+</code></pre>
+
+            <p>Similar to a default agent, the returned <code class="language-cpp code-in-text">LppSynchronizedAgent</code> object is a platform-independent type that stores APIs in the shared library using function pointers.</p>
+
+            <p>
+              Synchronized agents can be used to ensure that code patches only happen at a certain point during a frame, e.g. either at the start or end of a frame. This is crucial when supporting <a href="#API_structural_change">structural changes</a>, since this prevents objects allocated using an old memory layout being accessed using new code that expects a different memory layout.
+            </p>
+            <p>
+              Furthermore, using a synchronized agent also makes sure that functions won't be patched mid-frame, which could cause slight behavourial drift between e.g. objects that were updated using the old code and those that were updated using the new code. The following example illustrates this:
+<pre><code class="language-cpp">
+void UpdateNumber(float deltaTime, size_t index)
+{
+  g_numbers[index] += 1.0f*deltaTime;
+}
+
+void Update(float deltaTime)
+{
+  for (size_t i = 0u; i < numberCount; ++i)
+  {
+    UpdateNumber(deltaTime, i);
+  }
+}</code></pre>
+            </p>
+            <p>
+              Consider what happens when <code class="language-cpp code-in-text">void UpdateNumber(float deltaTime, size_t index)</code> is changed while the loop in <code class="language-cpp code-in-text">void Update(float deltaTime)</code> is executing. In this case, some of the numbers would be updated using the old code, while the remainder - those processed after the change - would be updated using the new code. This is probably not an issue in the majority of cases, but if it is, synchronized agents can ensure that your process is held until all code patches are applied.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Whether you use a synchronized agent or not, the actual patching of executable code is always done in a safe manner by Live++. This means the CPU will never see an instruction torn in two at the machine code level.</p>
+            </div>
+
+
+            <h2 id="enabling_livepp">Enabling Live++</h2>
+            <p>After creating an agent, you must tell Live++ which modules it should be enabled for. This can be done with the following Agent APIs:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">void Agent::EnableModule(const wchar_t* const relativeOrFullPath, LppModulesOption options, void* callbackContext, LppFilterFunction* callback);</code>
+                    </strong></td>
+                    <td>Enables Live++ for the given module (.exe or .dll) with the given options, filtering modules using an optional callback function and context.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">void Agent::EnableModules(const wchar_t* const* const arrayOfRelativeOrFullPaths, size_t count, LppModulesOption options, void* callbackContext, LppFilterFunction* callback);</code>
+                    </strong></td>
+                    <td>Enables Live++ for the given modules (any mix of .exe and .dll) with the given options, filtering modules using an optional callback function and context.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">typedef bool LppFilterFunction(void* context, const wchar_t* const path);</code>
+                    </strong></td>
+                    <td>Filter function called with a user-supplied context argument and a module path. Functions need to return <code class="language-cpp code-in-text">true</code> if a module should be loaded, <code class="language-cpp code-in-text">false</code> if not.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Important</h4>
+              <p>
+                When working with DLLs, it is crucial to <strong>never</strong> call any of these APIs in your DllMain entry point. <br/>Live++ needs to perform a few operations that are <a href="https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices" target="_blank">not supported by the operating system</a> while DLLs are being loaded, which could lead to a deadlock.
+              </p>
+            </div>
+
+            <p>When calling these APIs, you must ensure the module(s) in question are already loaded into the process. The APIs themselves are non-blocking, thread-safe, and can be called from any thread at any time. Expected paths can either be absolute paths, or paths relative to the module that calls these APIs.</p>
+            <p>The <code class="language-cpp code-in-text">LppModulesOption</code> enum offers the following options:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">LPP_MODULES_OPTION_NONE</code>
+                    </strong></td>
+                    <td>Enables Live++ for the given module only.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">LPP_MODULES_OPTION_ALL_IMPORT_MODULES</code>
+                    </strong></td>
+                    <td>Enables Live++ for the given module as well as all its <a href="https://learn.microsoft.com/en-us/cpp/build/linking-an-executable-to-a-dll?view=msvc-170#implicit-linking" target="_blank">import modules</a>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>When using filter function callbacks, only modules for which the filter function returned <code class="language-cpp code-in-text">true</code> will be enabled in Live++.</p>
+
+            <p>Additionally, there is one more API that makes it straightforward to enable Live++ for the current/calling module, since its return value can be directly passed to APIs that expect a path to a module:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">const char* lpp::LppGetCurrentModulePathANSI(void);</code>
+                    </strong></td>
+                    <td>Returns the fully qualified path of the current module, e.g. <strong>"C:\Dir\App.exe"</strong>.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">const wchar_t* lpp::LppGetCurrentModulePath(void);</code>
+                    </strong></td>
+                    <td>Returns the fully qualified path of the current module, e.g. <strong>"C:\Dir\App.exe"</strong>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Hint</h4>
+              <p>
+                Even if not strictly necessary, it is recommended to enable Live++ as early as possible in your application, ideally right at the start of your main entry point. This allows the Broker to start loading and analyzing your files concurrent with your application, maximizing startup performance. Even on AAA-sized projects, the performance impact on the target application should be minimal.
+              </p>
+            </div>
+
+            <p>
+              Note that Live++ starts reading and analyzing files after any of the <code class="language-cpp code-in-text">Enable*</code> APIs have been called, but the time at which you call these APIs is totally up to you. If you feel that Live++ creates unwanted wait times on your machine (e.g. due to very large PDBs or non-SSD drives) and you don't want to sit through them on each application startup, it is perfectly fine to load Live++ only when it is needed.<br/>
+              
+              In this case, you might find it beneficial to only load and enable Live++ manually, using a keyboard shortcut, in-game console, debug menu, etc.
+            </p>
+
+
+            <h2 id="dynamically_loaded_modules">Dynamically loaded modules</h2>
+            <p>Should you dynamically load and unload modules at runtime, you have to tell Live++ that modules need to be disabled before unloading them. This can be done with several Agent APIs:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">void Agent::DisableModule(const wchar_t* const relativeOrFullPath, LppModulesOption options, void* callbackContext, LppFilterFunction* callback);</code>
+                    </strong></td>
+                    <td>Disables Live++ for the given module (.exe or .dll) with the given options, filtering modules using an optional callback function and context.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">void Agent::DisableModules(const wchar_t* const* const arrayOfRelativeOrFullPaths, size_t count, LppModulesOption options, void* callbackContext, LppFilterFunction* callback);</code>
+                    </strong></td>
+                    <td>Disables Live++ for the given modules (any mix of .exe and .dll) with the given options, filtering modules using an optional callback function and context.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>Any modules disabled by these APIs must still be loaded into the process when the API is called. Again, the APIs themselves are non-blocking, thread-safe, and can be called from any thread at any time. Expected paths can either be absolute paths, or paths relative to the module that calls these APIs.</p>
+
+            <p>When using any of the above APIs, make sure to use the same <code class="language-cpp code-in-text">LppModulesOption options</code> that have been used when enabling the modules, otherwise e.g. import modules will not be disabled.</p>
+
+            <p>Additionally, Agents offer an API that makes Live++ enable and disable modules automatically when they are loaded or unloaded, respectively:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">void Agent::EnableAutomaticHandlingOfDynamicallyLoadedModules(void* callbackContext, LppFilterFunction* callback);</code>
+                    </strong></td>
+                    <td>Makes Live++ handle dynamically loaded modules automatically: enabling them on load, disabling them on unload. All modules are filtered using an optional callback function and context.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>Similar to other APIs, when using filter function callbacks, only modules for which the filter function returned <code class="language-cpp code-in-text">true</code> will be enabled in Live++. Using a filter function gives you fine-grained control over which modules should be enabled and disabled automatically. Both arguments are optional, so passing <code class="language-cpp code-in-text">nullptr</code> will not perform any filtering.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>12_DynamicallyLoadedDLLs</strong> that demonstrates this.</p>
+            </div>            
+          </section>
+
+
+          <header>
+            <h1 id="tools">Tools</h1>
+          </header>
+
+          <section>
+            <h2 id="tools_hot_reload">Hot-Reload</h2>
+            <p>After modifying any source code files, save them and press <kbd><kbd>ctrl</kbd> + <kbd>alt</kbd> + <kbd>F11</kbd></kbd>. This shortcut works regardless of whether the Live++ application currently has focus or not.</p>
+            <p>Alternatively, you can invoke <strong>"Hot-reload changes"</strong> from the Tools menu:</p>
+            <p>
+              <img src="assets/img/tools_menu.png" alt="Live++ tools menu">
+            </p>
+
+            <p>Furthermore, agents also offer an API to schedule hot-reload operations at any point in time:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><strong>
+                      <code class="language-cpp">void Agent::ScheduleReload(void);</code>
+                    </strong></td>
+                    <td>Schedules a hot-reload operation, making <code class="language-cpp code-in-text">WantsReload()</code> return true as soon as possible.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>This is useful when you want to listen to your own shortcuts, or invoke Live++ hot-reload from custom debug menus, or similar.</p>
+            <p>Internally, the operation triggers the background compilation process. If compilation is successful it loads the new code into your application, linking it against existing code. Naturally, any functions which are not part of the original executable will also be linked correctly.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Hint</h4>
+              <p>Compiler and linker output is always logged to both the <strong>Log</strong> tab in the Broker UI as well as the IDE's output window, such as Visual Studio or Rider. This enables you to go to the location of an error by either double-clicking on the line in the output window or by hitting <kbd>F8</kbd>. Alternatively, double-clicking on the corresponding line of an error in the <strong>Log</strong> tab in the Broker UI will also highlight the line and make the IDE go to the location of the error:</p>
+              <p>
+                <img src="assets/img/double_click_on_log.png" alt="Live++ Broker UI">
+              </p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>01_HotReload</strong> that demonstrates this.</p>
+            </div>
+
+
+            <h3 id="unity_file_splitting">Unity splitting</h3>
+            <p>
+              Live++ will automatically detect and split unity/jumbo/blob files which are part of any registered module. For all such unity files, Live++ will split all included .cpp files into their own .obj file and use these for reconstruction and recompilation, as shown in the following example:
+            </p>
+            <p>
+<pre><code class="language-cpp">
+// these are the contents of Unity.cpp:
+#include "FileA.cpp"
+#include "FileB.cpp"
+#include "FileC.cpp"
+</code></pre>
+              In this example, Unity.cpp will be split into <strong>Unity.obj.lpp_split.FileA.obj</strong>, <strong>Unity.obj.lpp_split.FileB.obj</strong>, and <strong>Unity.obj.lpp_split.FileC.obj</strong>. This means that when a source file is changed and recompilation is triggered, Live++ only needs to recompile one smaller file instead of the main unity file. This results in much faster iteration times. The <strong>Compilands</strong> view also distinguishes between single-file, unity, and split compilands:
+            </p>
+            <p>
+              <img src="assets/img/unity_compilands.png" alt="Live++ Unity compilands">
+            </p>
+            <p>
+              Unity splitting can be controlled on a per-project basis by making use of the <a href="#project_preferences_unity_splitting">"Enable splitting of unity/jumbo/blob/amalgamated files"</a> setting. If you want more fine-grained control, you can enable unity splitting on a per-compiland basis, by setting <strong>LPP_FORCE_UNITY_SPLITTING</strong> as a preprocessor define in the command-line options for all compilands that you want to be split.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Unity splitting only has to be performed the first time any of the .cpp files included by a unity file is touched. Although this leads to the recompilation of every translation unit included by the unity file, in many cases this operation is as fast as recompiling the entire unity file, especially on modern multi-core machines.</p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"04_UnitySplitting"</strong> that demonstrates this.</p>
+            </div>
+
+
+            <h3 id="halted_processes">Halted processes</h3>
+            <p>
+              Normally, Live++ will automatically gather modified files and start compilation in the background as soon as a hot-reload operation is scheduled. However, when a Live++-enabled process is held in the debugger (e.g. at a breakpoint), the process does not make any progress, so Live++ cannot communicate with it.
+            </p>
+
+            <h4>Visual Studio and Rider debugger</h4>
+            <p>
+              When debugging with Visual Studio or Rider, Live++ will attempt to automate the actions necessary to put the process into a mode where it can continue to communicate with Live++. If successful, the Broker UI log will read <strong>"Automated ... debugger attached to process with PID XXXXX"</strong>; Live++ will then compile your changes and install code patches. Afterwards, the process will once again be held at the same instruction in the debugger.
+            </p>
+
+            <h4>Other debuggers</h4>
+            <p>
+              If automation was unsuccessful, or if you are using other debuggers such as WinDbg, the UI log will read <strong>"Waiting for target process with PID XXXX. Hit 'Continue' (F5 in Visual Studio) if the process is being held in the debugger"</strong> upon scheduling a hot-reload operation. Resume your application and Live++ will compile and install any changes you made. Your process will still not execute new instructions until compilation is finished. Once patches have been installed by Live++, your process will automatically continue execution.
+            </p>
+            <p>
+              The full sequence of events in this case is outlined below:
+              <ol>
+                <li>The debugger encounters a breakpoint and halts the process.</li>
+                <li>Debugging commences as usual.</li>
+                <li>You make one or several changes to the code currently being debugged/executed and invoke Live++ hot-reload.</li>
+                <li>Live++ picks up modified files and waits for you to continue the process in the debugger.</li>
+                <li>You continue the process, e.g. by pressing F5.</li>
+                <li>Your process is still halted, but this time by Live++.</li>
+                <li>Live++ compiles your changes, installs code patches and lets your process continue.</li>
+                <li>Your process <a href="#limitation_functions_on_the_stack">continues execution where it left off</a>.</li>
+              </ol>
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>
+                In this scenario, Live++ does not call any <a href="#API_hooks">hooks</a> you might have installed, because that could lead to a deadlock.
+              </p>
+            </div>
+
+
+            <h3 id="natvis_visualizations">Natvis visualizations</h3>
+            <p>
+              Natvis visualizations are <a href="https://docs.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects" target="_blank">visualization rules for custom types</a>, understood by the Visual Studio debugger.
+            </p>
+            <p>
+              Usually, <strong>.natvis</strong> files will be picked up by the debugger automatically for patches created by Live++. However, should that not be the case, it often helps to place these files into the <a href="https://docs.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects#BKMK_natvis_location" target="_blank">user-specific or system-wide Natvis directory</a>.
+            </p>
+            <p>
+              Furthermore, when compiling with Clang it is sometimes necessary to specify <strong>-fstandalone-debug</strong> as additional compiler option in the <a href="#project_preferences_compiler">project preferences</a> to ensure that Natvis information is not stripped from patches.
+            </p>
+          </section>
+
+
+          <section>
+            <h2 id="tools_hot_restart">Hot-Restart</h2>
+            <p>In order to combat build and link times that occur when closing and restarting an application, Live++ offers a mechanism for restarting applications while keeping loaded data and internal caches persistent.</p>
+            <p>Once an application has entered its main loop, it has to be restarted in order to see the effect of changes made to e.g startup functions, which are called before entering the main loop. In this case, this usually entails the following sequence of events:</p>
+            <ol>
+              <li>
+                The user closes the application.
+              </li>
+              <li>
+                The build system links the executable.
+              </li>
+              <li>
+                The user starts the application again.
+              </li>
+              <li>
+                Modules are enabled in Live++. This loads debug data from PDBs and builds internal caches.
+              </li>
+            </ol>
+
+            <p>Steps 2. and 4. can take a significant amount of time, especially on AAA projects. By making use of the Hot-Restart functionality provided by Live++, the situation can be improved considerably:</p>
+            <ol>
+              <li>
+                Live++ tells all interested processes to prepare for a restart.
+              </li>
+              <li>
+                The processes run optional code in case they want to perform some kind of cleanup.
+              </li>
+              <li>
+                Live++ restarts all interested processes, keeping all data loaded from PDBs as well as internal caches alive.
+              </li>
+              <li>
+                Modules are enabled in Live++. This reuses existing debug data and caches, and installs previously compiled patches.
+              </li>
+            </ol>
+            <p>Notice how link times and Live++ loading times are almost completely eliminated when using the Hot-Restart mechanism.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"08_HotRestart"</strong> that demonstrates this.</p>
+            </div>
+
+
+            <h3 id="hot_restart_request">Requesting a Hot-Restart</h3>
+            <p>There are four options for requesting a Hot-Restart:</p>
+            <ul>
+              <li>
+                <p>Press the default shortcut <kbd><kbd>ctrl</kbd> + <kbd>alt</kbd> + <kbd>R</kbd></kbd>. This shortcut works regardless of whether the Live++ application currently has focus or not.</p>
+              </li>
+              <li>
+                <p>Execute <strong>"Hot-restart processes"</strong> from the Tools menu:</p>
+                <p>
+                  <img src="assets/img/tools_menu.png" alt="Live++ tools menu">
+                </p>
+                <p>This sends a hot-restart request to all processes currently registered with the Broker.</p>
+              </li>
+              <li>
+                <p>Select one or more processes in the <strong>Processes</strong> view in the Broker, right-click to open a context menu, and select <strong>"Hot-Restart selected processes"</strong>:</p>
+                <p>
+                  <img src="assets/img/processes_context_menu.png" alt="Processes view context menu">
+                </p>
+                <p>This lets you hot-restart individual processes, which can be useful in client/server scenarios.</p>
+              </li>
+              <li>
+                <p>Furthermore, agents also offer an API to schedule hot-restart operations at any point in time:</p>
+
+                <div class="table-responsive">
+                  <table class="table table-bordered table-striped">
+                    <thead>
+                      <tr>
+                        <th>API</th>
+                        <th>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td width="50%"><strong>
+                          <code class="language-cpp">void Agent::ScheduleRestart(LppRestartOption option);</code>
+                        </strong></td>
+                        <td>Schedules a hot-restart operation, making <code class="language-cpp code-in-text">WantsRestart()</code> return true as soon as possible.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>This is useful when you want to listen to your own shortcuts, or invoke Live++ hot-restarts from custom debug menus, or similar.</p>
+              </li>
+            </ul>
+
+
+            <h3 id="hot_restart_default_agents">Default agents</h3>
+            <p>When using a <a href="#creating_default_agent">default agent</a>, the internal implementation takes care of responding to hot-restart requests automatically.</p>
+
+
+            <h3 id="hot_restart_synchronized_agents">Synchronized agents</h3>
+            <p>When using a <a href="#creating_synchronized_agent">synchronized agent</a>, you have to respond to hot-restart requests by making use of the following APIs:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">bool Agent::WantsRestart(void);</code>
+                    </strong></td>
+                    <td>Returns whether Live++ wants to hot-restart the process.</td>
+                  </tr>
+                  <tr>
+                    <td width="70%"><strong>
+                      <code class="language-cpp">void Agent::Restart(LppRestartBehaviour behaviour, unsigned int exitCode, const wchar_t* const commandLineArguments);</code>
+                    </strong></td>
+                    <td>Restarts the process, respecting the given behaviour. Does not return.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Preparing for a restart</h3>
+            <p>
+              After a hot-restart has been requested, Live++ informs all interested processes that they should prepare for a restart. Your application is responsible for calling <code class="language-cpp code-in-text">bool WantsRestart()</code> periodically (e.g. each frame), which will return true once a restart is requested. You can perform any optional cleanup (e.g. flush files) before initiating a restart.
+            </p>
+            <h3>Initiating a restart</h3>
+            <p>
+              As soon as your application has finished performing optional cleanup tasks, it is your responsibility to call <code class="language-cpp code-in-text">void Restart(LppRestartBehaviour behaviour, unsigned int exitCode, const wchar_t* const commandLineArguments)</code>. This signals Live++ that the process should be restarted, and thus exits the process. The <code class="language-cpp code-in-text">const wchar_t* const commandLineArguments</code> parameter is optional and will be passed to the restarted process. Using <code class="language-cpp code-in-text">nullptr</code> will restart the process with the original command-line environment.
+            </p>
+            <p>
+              Any Visual Studio or Rider debugger attached to one of the restarted processes will automatically be reattached to the corresponding process by Live++ after the hot-restart operation has completed.
+            </p>
+            <p>
+              The behaviour upon exiting depends on the <code class="language-cpp code-in-text">LppRestartBehaviour</code> argument, as shown in the following table:
+            </p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>Restart behaviour</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%">LPP_RESTART_BEHAVIOUR_DEFAULT_EXIT</td>
+                    <td>Calls <a href="https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-exitprocess" target="_blank">ExitProcess()</a> with the given exit code.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%">LPP_RESTART_BEHAVIOUR_EXIT_WITH_FLUSH</td>
+                    <td>Calls <a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/exit-exit-exit" target="_blank">exit()</a> with the given exit code.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%">LPP_RESTART_BEHAVIOUR_EXIT_WITHOUT_FLUSH</td>
+                    <td>Calls <a href="https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/exit-exit-exit" target="_blank">_Exit()</a> with the given exit code.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%">LPP_RESTART_BEHAVIOUR_INSTANT_TERMINATION</td>
+                    <td>Calls <a href="https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess" target="_blank">TerminateProcess()</a> with the given exit code.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Hint</h4>
+              <p>After requesting a restart, your application is allowed up to 10 seconds to perform optional cleanup tasks and call <code class="language-cpp code-in-text">void Restart(LppRestartBehaviour behaviour, unsigned int exitCode, const wchar_t* const commandLineArguments)</code>. Should this time span be exceeded, Live++ will abandon the restart for this process.</p>
+            </div>
+          </section>
+
+
+          <section>
+            <h2 id="tools_hot_fix">Hot-Fix</h2>
+            <p>
+              Live++ offers powerful out-of-the-box error recovery via a custom <a href="https://docs.microsoft.com/en-us/windows/desktop/debug/vectored-exception-handling" target="_blank">Vectored Exception Handler (VEH)</a> that uses <a href="https://docs.microsoft.com/en-us/windows/desktop/debug/structured-exception-handling" target="_blank">Structured Exception Handling (SEH)</a> behind the scenes. Paired with the hot-reload capabilities of Live++, this often allows graceful recovery from otherwise fatal errors such as access violations, division by zero, and others. When using Live++'s exception handler, every time a process raises an unhandled exception (e.g. caused by an access violation), it will invoke this handler.
+            </p>
+            <p>
+              In case a debugger such as Visual Studio or Rider is attached to the process, it will always get the first chance to handle an exception - this is ensured by the operating system.
+            </p>
+            <p>
+              <img src="assets/img/exception_handler_vs.png" alt="Visual Studio exception handler">
+            </p>
+            <p>
+              Continuing the process in the debugger will invoke Live++'s exception handler, which opens a dialog in the Broker that lets you decide how to deal with this exception:
+            </p>
+            <p>
+              <img src="assets/img/exception_handler_broker.png" alt="Live++ exception handler">
+            </p>
+            <p>
+              Double-clicking a line in the shown call stack will open the corresponding source file at this location in Visual Studio or Rider.
+            </p>            
+            <p>
+              The options offered by the exception handler are as follows:
+              <ul>
+                <li>
+                  <strong>"Disable instruction":</strong><br/>
+                  Completely disables the faulting machine instruction. This is a useful option if the exception comes from one of your own modules/source files that can be recompiled, but should never be used for e.g. 3rd-party code such as the Visual Studio Runtime.
+                </li>
+                <li>
+                  <strong>"Ignore instruction":</strong><br/>
+                  Ignores the faulting machine instruction once. The next time the corresponding function is called, the instruction will cause the same exception unless the code has been recompiled in the meantime.
+                </li>
+                <li>
+                  <strong>"Leave function":</strong><br/>
+                  Leaves the current function, continuing execution at the parent function. Additionally, if full SEH information is available, the stack will be unwound and local variables will have their destructors called.
+                </li>
+                <li>
+                  <strong>"Continue execution":</strong><br/>
+                  Ignores this exception once and continues execution. This hands the exception to the next installed exception handler, if any. After the final installed exception handler has had a chance to handle the exception, the process will either stop in the debugger (if one is attached), or terminate.
+                </li>
+              </ul>
+            </p>
+
+            <p>
+              While the exception handler dialog is shown, you can change and recompile code using Live++ as usual. Note, however, that although new code will be installed in the background, process execution must <a href="#limitation_functions_on_the_stack">continue from the point of failure</a>, so you must still decide how to handle the exception in question.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>
+                In this scenario, Live++ does not call any <a href="#API_hooks">hooks</a> when recompiling code, because that could lead to a deadlock.
+              </p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Hint</h4>
+              <p>
+                In order to make SEH information available in your executable, you need to enable the following compiler setting:
+              </p>
+              <p><span class="label label-default label-custom-MM">C/C++ -> Code Generation -> Enable C++ Exceptions -> Yes with SEH Exceptions (/EHa)</span></p>
+              <p>
+                SEH information is only required to unwind the stack when leaving the current function. If the exception handler does not have SEH exception information, it will still operate without any problems, but stack unwinding will not be performed.
+              </p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"03_HotFixCrashRecovery"</strong> that demonstrates this.</p>
+            </div>
+          </section>
+
+
+          <section>
+            <h2 id="tools_hot_deoptimize">Hot-Deoptimize</h2>
+            <p>
+              Deoptimizing code on the fly helps you strike a balance between the debugability of your application and its iteration times. Unoptimized debug builds are much easier to debug than optimized retail builds, but are often too slow to use during development. On the other hand, optimized builds offer much better performance, but are much harder to debug.
+            </p>
+            <p>
+              In order to alleviate this, Live++ offers capabilities that make it easy to deoptimize code, debug the code, and go back to a fully optimized build - all in a running application.
+            </p>
+            <p>
+              The options offered by Live++ are as follows:
+              <ul>
+                <li>
+                  Select one or more files in the <strong>Compilands</strong> view in the Broker, right-click to open a context menu, and select <strong>"Toggle optimizations for selected compilands"</strong> to deoptimize the selected compilands instantly.
+                </li>
+                <li>Alternatively, compilands can be queued for later deoptimization by selecting <strong>"Queue selected compilands for deoptimization"</strong>. Deoptimization of queued compilands can be initiated by selecting the <strong>"Deoptimize queued"</strong> action.
+                  <p>
+                    <img src="assets/img/compilands_context_menu.png" alt="Compiland view context menu">
+                  </p>
+                </li>
+                <li>
+                  You can toggle the optimization state of the currently opened file by pressing the default shortcut <kbd><kbd>ctrl</kbd> + <kbd>alt</kbd> + <kbd>O</kbd></kbd> in Visual Studio or Rider.
+                </li>
+                <li>
+                  You can also toggle a file's optimization state by putting the macro <strong>LPP_DISABLE_OPTIMIZATIONS</strong> at the top of a file and hot-reloading the changes. The disadvantage of this approach is that the Live++ API <strong>"LivePP/API/x64/LPP_API_x64_CPP.h"</strong> needs to be visible in this file, and the deoptimized state cannot be tracked in the <strong>Compilands</strong> view.
+                </li>
+                <li>
+                  Queued compilands can be dequeued again by selecting <strong>"Queue selected compilands for deoptimization"</strong> in the context menu.
+                </li>
+                <li>
+                  Once you want to revert all compilands back to their original optimization state, select the <strong>"Reoptimize all"</strong> action.
+                </li>
+              </ul>
+            </p>
+            <p>
+              Source files that are currently in a deoptimized state will be denoted by a <img src="assets/img/deoptimized_compiland.svg" alt="Deoptimized compiland symbol" width="20" height="20"> symbol in the <strong>Compilands</strong> view, source files that are currently in a queued state will be denoted by a <img src="assets/img/queued_compiland.svg" alt="Queued compiland symbol" width="20" height="20"> symbol, respectively:
+            </p>
+            <p>
+              <img src="assets/img/compilands_deoptimized.png" alt="Compiland view deoptimized compilands">
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"05_ToggleOptimizations"</strong> that demonstrates this.</p>
+            </div>
+          </section>
+
+
+          <section>
+            <h2 id="multi_process_editing">Multi-process editing</h2>
+            <p>With certain client/server and editor/game setups, it is tremendously helpful to be able to hot-reload changes into multiple processes or several instances of the same application at once. With Live++, this works out-of-the-box and does not require any kind of special setup.</p>
+            <p>The <strong>Processes</strong> view in the Broker shows all processes currently registered with Live++:</p>
+            <p>
+              <img src="assets/img/processes.png" alt="Processes view">
+            </p>
+            <p>
+              All operations supported by Live++ will be carried out for affected or selected processes, no matter how many are registered. Live++ automatically makes sure that changes to any source files which are part of multiple modules or applications are compiled and hot-reloaded into all affected processes.
+            </p>
+            <p>
+              Additionally, Live++ will automatically inject all code changes into any subsequent instances of a Live++ application during load, resulting in new behaviour, even though the executable was never linked or changed on disk in the meantime. Subsequent changes to the code will then get hot-reloaded into all running processes, no matter at which point in time they were started.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"07_MultipleProcesses"</strong> that demonstrates this.</p>
+            </div>
+          </section>
+
+
+          <section>
+            <h2 id="networked_editing">Networked editing</h2>
+            <p>Similar to <a href="#multi_process_editing">multi-process editing</a>, there is no special code setup needed in order to make Live++ work for remote processes running on any machine. The only requirement is that those remote processes connect to the local Broker via a LAN connection, which needs to be configured as follows:</p>
+            <ul>
+              <li>
+                <p>Start the Broker on a local machine and note its host name or IP address shown in the window title, e.g. 192.168.8.147:</p>
+                <p>
+                  <img src="assets/img/broker_window_title.png" alt="Live++ Broker window title">
+                </p>
+              </li>
+              <li>
+                <p>Open the Broker on a remote machine, go to <span class="label label-default label-custom-MM">Edit -> Global preferences -> Network</span>, enter the host name or IP address of the local machine that runs the Broker, and press <strong>"Save"</strong>:</p>
+                <p>
+                  <img src="assets/img/global_preferences_network.png" alt="Global preferences network">
+                </p>
+                <p>This will save the global preferences on the remote machine and only needs to be done once for each remote machine.</p>
+              </li>
+            </ul>
+
+            <p>
+              In order for networked editing to work, applications on local machines must be started first, followed by applications on remote machines. However, Live++ will work with any mix of local and remote processes, and several instances of the same application on any machine.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Since most of the information required by Live++ will only be available on the local machine, code changes will only be picked up and compiled on the local machine.</p>
+            </div>            
+
+            <p>
+              Connected machines and processes can be verified in the <strong>Targets</strong> and <strong>Processes</strong> views, respectively:              
+            </p>
+            <p>
+              <img src="assets/img/targets.png" alt="Broker targets view">
+            </p>
+            <p>
+              <img src="assets/img/processes.png" alt="Broker processes view">
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"10_NetworkedEditing"</strong> that demonstrates this.</p>
+            </div>
+          </section>
+
+
+          <header>
+            <h1 id="licensing">Licensing</h1>
+          </header>
+
+          <section>
+            <h2 id="licensing_activation">Activation</h2>
+            <p>
+              Before you can use Live++, you first need to activate a license on your machine. In order to do this, start the Broker, select <span class="label label-default label-custom-MM">Licensing -> Activate...</span> from the main menu, and choose the platform and language for which you wish to activate a license, e.g. <strong>Windows, C++</strong>. This will open a dialog where you need to enter an activation code as well as a user ID:
+            </p>
+            <p>
+              <img src="assets/img/activate_license.png" alt="Broker license activation">
+            </p>
+            <p>The activation code was delivered to you upon purchasing Live++, and is a 12-character key in the form XXXX-XXXX-XXXX.</p>
+            <p>
+              The user ID can be freely chosen and identifies your license within the pool of licenses associated with the given activation code. This is needed in case you ever have to deactivate a license offline, e.g. because your machine was re-installed without deactivating an existing license first. Examples of common user IDs are <strong>"Jane home office"</strong> or <strong>"John laptop"</strong>.
+            </p>
+            <p>After pressing <strong>"OK"</strong> in the dialog, Live++ will try to contact the activation server using the data you entered. If the given activation code is valid, Live++ will generate a license that is tied to your machine and can only be used by you. In all other cases, an error will be displayed instead.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Please contact support should you run into problems connecting to the activation server due to company firewalls or proxy servers.</p>
+            </div>
+
+            <h2 id="licensing_deactivation">Deactivation</h2>
+            <p>
+              Should you need to deactivate a license, e.g. because your machine needs to be re-installed or you want to retire a license so that one of your co-workers can use it, navigate to <span class="label label-default label-custom-MM">Licensing -> Deactivate...</span> in the Broker main menu, and choose the platform and language for which you wish to deactivate a license, e.g. <strong>Windows, C++</strong>. This will deactivate your license on the activation server.
+            </p>
+
+
+            <h2 id="licensing_trial">Free trial</h2>
+            <p>
+              If you don't have a license yet and want to try the free 30-day trial, invoke the Live++ hot-reload and the following dialog will pop up:
+            </p>
+            <p>
+              <img src="assets/img/licensing.png" alt="Licensing">
+            </p>
+            <p>
+              Selecting <span class="label label-default label-custom-MM">Try trial</span> in this dialog will cause Live++ to pull a trial license from the activation server.
+            </p>
+
+
+            <h2 id="licensing_command_line_tools">Command-line tools</h2>
+            <p>
+              It is also possible to automate license activation and deactivation using the command-line tools found in the <strong>CLI</strong> directory of your Live++ installation. There is one tool for each combination of platform and language; for example, <strong>"LPP_License_x64_CPP.exe"</strong> is responsible for license management for <strong>Windows, C++</strong>.
+            </p>
+            <p>Each tool understands the <strong>"--activate"</strong> and <strong>"--deactivate"</strong> options for license activation and deactivation, respectively. Consult the integrated <strong>"-h"</strong> help option for more information.</p>
+            <p>
+              <img src="assets/img/command_line_tools.png" alt="Command-line tools">
+            </p>
+          </section>
+
+
+          <header>
+            <h1 id="gui">GUI</h1>
+            <p class="lead">Live++'s Broker GUI consists of several different dockable and floatable windows and views that provide an overview of registered targets, processes, modules and compilands.</p>
+          </header>
+
+          <section>
+            <h2 id="gui_views_targets">Targets</h2>
+            <p>
+              The <strong>Targets</strong> view shows all connected local and remote machines, their platform, IP address, and number of registered processes.
+            </p>
+            <p>
+              <img src="assets/img/targets.png" alt="Targets view">
+            </p>
+
+
+            <h2 id="gui_views_processes">Processes</h2>
+            <p>
+              The <strong>Processes</strong> view shows all registered processes, their target, process ID, full path to the executable, and the command-line the process was started with.
+            </p>
+            <p>
+              <img src="assets/img/processes.png" alt="Processes view">
+            </p>
+            <p>
+              Additionally, the <strong>Processes</strong> view also offers a context menu on right-click with the following options:
+            </p>
+            <p>
+              <img src="assets/img/processes_context_menu.png" alt="Processes view context menu">
+            </p>
+            <ul>
+              <li>
+                <strong>"Show log files for selected local processes...":</strong><br/>
+                Shows the log files associated with the selected processes in Windows Explorer.
+              </li>
+              <li>
+                <strong>"Open log files for selected local processes...":</strong><br/>
+                Opens the log files associated with the selected processes using the corresponding default application.
+              </li>
+              <li>
+                <strong>"Hot-Restart selected processes":</strong><br/>
+                Sends a hot-restart request to the selected processes.
+              </li>
+            </ul>
+
+
+            <h2 id="gui_views_modules">Modules</h2>
+            <p>
+              The <strong>Modules</strong> view shows all loaded modules, the ID of the process they are loaded into, their size, and the address range into which they are loaded.
+            </p>
+            <p>
+              <img src="assets/img/modules.png" alt="Targets view">
+            </p>
+
+
+            <h2 id="gui_views_compilands">Compilands</h2>
+            <p>
+              The <strong>Compilands</strong> view shows all modules and their compilands in a hierarchical tree, along with each compiland's source path.
+            </p>
+            <p>
+              <img src="assets/img/compilands_open.png" alt="Targets view">
+            </p>
+            <p>
+              Double-clicking on a compiland in the tree view will open the corresponding source file in a running instance of Visual Studio or Rider.
+            </p>
+            <p>
+              Additionally, the <strong>Compilands</strong> view also offers a context menu on right-click with the following options:
+            </p>
+            <p>
+              <img src="assets/img/compilands_context_menu.png" alt="Compilands view context menu">
+            </p>
+            <ul>
+              <li>
+                <strong>"Show details...":</strong><br/>
+                Shows the details of a compiland in a separate dialog.
+              </li>
+              <li>
+                <strong>"Open compilands in external application...":</strong><br/>
+                Opens the source files of selected compilands using the corresponding default application.
+              </li>
+              <li>
+                <strong>"Toggle optimizations for selected compilands":</strong><br/>
+                Toggles the optimization state of selected compilands.
+              </li>
+              <li>
+                <strong>"Queue selected compilands for deoptimization":</strong><br/>
+                Queues selected compilands for later deoptimization.
+              </li>
+            </ul>
+            <p>
+              The <strong>Compiland details</strong> dialog provides detailed information about each compiland, such as the PDB path, compiler path and command-line used for recompiling.
+            </p>
+            <p>
+              <img src="assets/img/compiland_details.png" alt="Compiland details dialog">
+            </p>
+          </section>
+
+
+          <header>
+            <h1 id="global_preferences">Global preferences</h1>
+            <p class="lead">Global preferences can be configured by selecting <span class="label label-default label-custom-MM">Edit -> Global preferences...</span> in the Broker main menu. They offer a few global settings that let you customize the Broker's appearance and behaviour and are always saved at <strong>global_preferences.json</strong> in the Broker directory.</p>
+            <p class="lead">
+              You can define default settings by providing an optional <strong>global_preferences_default.json</strong> file and override settings by providing an optional <strong>global_preferences_override.json</strong> file in the same directory. Live++ will load files in the following order:
+            </p>
+            <ul class="lead">
+              <li>global_preferences_default.json</li>
+              <li>global_preferences.json</li>
+              <li>global_preferences_override.json</li>
+            </ul>
+            <p class="lead">
+              This behaviour is useful in cases where you want to set meaningful default values and/or force values of specific preferences for the whole team, while still allowing individual people to configure the remaining preferences as they see fit.
+            </p>
+          </header>
+
+          <section>
+            <h2 id="global_preferences_ui">UI</h2>
+            <p>
+              <img src="assets/img/global_preferences_ui.png" alt="Global preferences UI">
+            </p>
+            <ul>
+              <li>
+                <strong>"Initial window state:"</strong><br/>
+                Lets you choose whether the Broker starts at its normal size, maximized, or in the system tray.
+              </li>
+              <li>
+                <strong>"Style:"</strong><br/>
+                Lets you choose between a light and dark style.
+              </li>
+              <li>
+                <strong>"Show error on version mismatch:"</strong><br/>
+                When this is enabled, the Broker will show an error in a modal dialog if the API version between an Agent and the Broker does not match.
+              </li>
+              <li>
+                <strong>"Show animated icon in notification area:"</strong><br/>
+                When this is enabled, the icon in the notification area will be animated while an operation is in progress.
+              </li>
+              <li>
+                <strong>"Show colorized icon in notification area:"</strong><br/>
+                When this is enabled, the icon in the notification area will be colorized depending on whether the last operation was successful or resulted in an error.
+              </li>
+              <li>
+                <strong>"Show progress in task bar:"</strong><br/>
+                When this is enabled, the task bar will be animated while an operation is in progress.
+              </li>
+            </ul>
+
+            <h2 id="global_preferences_logging">Logging</h2>
+            <p>
+              <img src="assets/img/global_preferences_logging.png" alt="Global preferences logging">
+            </p>
+      			<ul>
+              <li>
+                <strong>"Verbosity in UI log:"</strong><br/>
+                Customize whether you want default or detailed log output.
+              </li>              
+      			  <li>
+                <strong>"Print timestamps in UI log:"</strong><br/>
+                Customize whether you want the UI log to output timestamps.
+              </li>
+              <li>
+                <strong>"Enable word wrap in UI log:"</strong><br/>
+                Customize whether you want the UI log to use word-wrapping.
+              </li>
+            </ul>
+
+            <h2 id="global_preferences_network">Network</h2>
+            <p>
+              <img src="assets/img/global_preferences_network.png" alt="Global preferences network">
+            </p>
+			      <ul>
+              <li>
+                <strong>"Broker to connect to:"</strong><br/>
+                Processes running on a local machine should always use either <strong>127.0.0.1</strong> or <strong>localhost</strong>. Processes running on remote machines need to have the <a href="#networked_editing">Broker IP configured</a> accordingly.
+              </li>
+              <li>
+                <strong>"Communication port:"</strong><br/>
+                The port used for the TCP/IP connection between the Bridge and the Broker.
+              </li>
+              <li>
+                <strong>"Timeout in milliseconds when connecting the Bridge to the Broker:"</strong><br/>
+                The timeout to consider when the Bridge connects to the Broker.
+              </li>
+            </ul>
+
+
+            <h2 id="global_preferences_notifications">Notifications</h2>
+            <p>
+              <img src="assets/img/global_preferences_notifications.png" alt="Global preferences notifications">
+            </p>
+            <p>
+              Paths to files can either be absolute paths, or paths relative to the Broker.
+            </p>
+            <ul>
+              <li>
+				        <strong>"Enable notifications:"</strong><br/>
+					       When this is enabled, Live++ will show toast notifications for completed operations.
+				      </li>
+              <li>
+                <strong>"Focus broker window upon:"</strong><br/>
+                Lets you choose when the broker window should become focused: never, on hot-reload or hot-restart operations, on errors, on successful operations, or always.
+				      </li>
+				      <li>
+      					<strong>"Play sound upon success:"</strong>, <strong>"Sound to play upon success:"</strong><br/>
+      					Lets you specify a .WAV file that will be played whenever compilation was successful.
+				      </li>
+				      <li>
+      					<strong>"Play sound upon error:"</strong>, <strong>"Sound to play upon error:"</strong><br/>
+      					Lets you specify a .WAV file that will be played whenever compilation has failed.
+				      </li>
+			      </ul>
+
+
+            <h2 id="global_preferences_hot_reload">Hot-Reload</h2>
+            <p>
+              <img src="assets/img/global_preferences_hot_reload.png" alt="Global preferences hot-reload">
+            </p>
+      			<ul>
+              <li>
+                <strong>"Timeout in milliseconds:"</strong><br/>
+                The timeout in milliseconds used when scheduling a hot-reload operation. Agents that take longer to respond than the timeout will abandon their hot-reload operation.
+              </li>
+      				<li>
+      					<strong>"Load incomplete modules:"</strong><br/>
+      					When this is enabled, incomplete modules will be loaded and shown in the <strong>Compilands</strong> view, allowing you to inspect any defects such as missing linker options.
+      				</li>
+      				<li>
+      					<strong>"Load incomplete compilands:"</strong><br/>
+      					When this is enabled, incomplete compilands will be loaded and shown in the <strong>Compilands</strong> view, allowing you to inspect any defects such as missing compiler options.
+				      </li>
+				      <li>
+      					<strong>"Delete patch files upon process exit:"</strong><br/>
+      					When this is enabled, files belonging to a Live++ patch will be deleted as soon as the corresponding process exits.
+				      </li>
+				      <li>
+      					<strong>"Clear log upon Hot-Reload:"</strong><br/>
+      					When this is enabled, the UI log will be cleared upon hot-reload.
+				      </li>
+				      <li>
+      					<strong>"Shortcut to invoke Hot-Reload:"</strong><br/>
+      					Lets you configure the shortcut for invoking hot-reload.
+				      </li>
+			       </ul>
+
+
+            <h2 id="global_preferences_hot_restart">Hot-Restart</h2>
+            <p>
+              <img src="assets/img/global_preferences_hot_restart.png" alt="Global preferences hot-restart">
+            </p>
+            <ul>
+              <li>
+                <strong>"Timeout in milliseconds:"</strong><br/>
+                The timeout in milliseconds used when scheduling a hot-restart operation. Agents that take longer to respond than the timeout will abandon their hot-restart operation.
+              </li>
+              <li>
+                <strong>"Shortcut to invoke Hot-Restart:"</strong><br/>
+                Lets you configure the shortcut for invoking hot-restart.
+              </li>
+            </ul>
+
+
+            <h2 id="global_preferences_ide">IDE</h2>
+            <p>
+              <img src="assets/img/global_preferences_ide.png" alt="Global preferences IDE">
+            </p>
+      			<ul>
+      				<li>
+      					<strong>"Show modal dialog in Visual Studio:"</strong><br/>
+      					When this is enabled, a modal dialog will be shown in Visual Studio during hot-reload operations. This prohibits interactions with the Visual Studio debugger while any Live++ operation is in progress.
+      				  
+      				  <p>
+      					 <img src="assets/img/vs_modal_dialog.png" alt="Modal dialog in Visual Studio">
+      					</p>      				  
+      				</li>
+      				<li>
+      					<strong>"Keep breakpoints enabled during hot-reload:"</strong><br/>
+      					When this is enabled, breakpoints will be kept enabled during a hot-reload operation. Normally, breakpoints in Visual Studio and Rider are temporarily disabled during a hot-reload operation to avoid halting the process accidentally.
+      				</li>
+      				<li>				  
+      					<strong>"Shortcut to toggle optimizations of current file open in IDE:"</strong><br/>
+      					Lets you configure the shortcut for toggling optimizations of the file currently opened in Visual Studio or Rider.
+      				</li>
+      			</ul>
+
+
+            <h2 id="global_preferences_licensing">Licensing</h2>
+            <p>
+              <img src="assets/img/global_preferences_licensing.png" alt="Global preferences licensing">
+            </p>
+      			<ul>
+      				<li>
+      					<strong>"Show warning when licenses are about to expire:"</strong><br/>
+      					When this is enabled, the Broker will show a warning whenever your current license is about to expire.
+      				</li>
+      				<li>				  
+      					<strong>"Warn when number of remaining days reaches:"</strong><br/>
+      					Lets you configure how many days' warning you will receive when the license is about to expire.
+      				</li>
+      			</ul>
+          </section>
+
+
+          <header>
+            <h1 id="project_preferences">Project preferences</h1>
+            <p class="lead">Project preferences can be configured by selecting <span class="label label-default label-custom-MM">Edit -> Project preferences...</span> in the Broker main menu. They offer project-specific settings that let you customize Live++'s behaviour and are stored in a .json file of your choice.</p>
+          </header>
+
+          <section>
+            <h2 id="project_preferences_general">General</h2>
+            <p>
+              If you want to use project preferences, you have two options:
+            </p>
+            <ul>
+              <li>
+                Pass the project-specific .json file as an argument when <a href="#usage_agents">creating agents</a> as shown in the following example:
+
+<pre><code class="language-cpp">
+// create a synchronized Live++ agent, loading the required project preferences.
+// the path to load the preferences from can be absolute, or relative to this application.
+lpp::LppSynchronizedAgent lppAgent = lpp::LppCreateSynchronizedAgentWithPreferencesFromFile(nullptr, L"ThirdParty/LivePP", L"Preferences/continuous_compilation.json");
+</code></pre>
+              </li>
+              <li>
+                Fill in the desired preferences by first creating a default <code class="language-cpp code-in-text">lpp::LppProjectPreferences</code> instance, and then pass it as an argument when <a href="#usage_agents">creating agents</a> as shown in the following example:
+
+<pre><code class="language-cpp">
+// disable unity splitting in the preferences
+lpp::LppProjectPreferences prefs = lpp::LppCreateDefaultProjectPreferences();
+prefs.unitySplitting.isEnabled = false;
+
+// create a default Live++ agent with the project preferences
+lpp::LppDefaultAgent lppAgent = lpp::LppCreateDefaultAgentWithPreferences(nullptr, L"ThirdParty/LivePP", &prefs);
+</code></pre>
+              </li>
+            </ul>
+            <p>
+              If you pass neither a path to a .json file nor a preferences instance when creating an agent, Live++ will assume default values for all project preferences.
+            </p>
+
+            <p>
+              <img src="assets/img/project_preferences_general.png" alt="Project preferences general">
+            </p>
+            <ul>
+              <li>
+                <strong>"Spawn Broker automatically for local connections:"</strong><br/>
+                When this is enabled, the Agent will automatically spawn the Broker for local connections as soon as the Agent is loaded into the target application.
+              </li>
+              <li>
+                <strong>"Show error when Bridge fails to connect to Broker:"</strong><br/>
+                When this is enabled, the Bridge will report an error in case it cannot connect to the Broker.
+              </li>
+              <li>
+                <strong>"Directory to Broker:"</strong><br/>
+                Specifies the directory to the Broker from which it is spawned by the Agent. The directory can either be absolute, or relative to the Agent.
+              </li>
+            </ul>
+
+            <h2 id="project_preferences_hot_reload">Hot-Reload</h2>
+            <p>
+              <img src="assets/img/project_preferences_hot_reload.png" alt="Project preferences hot-reload">
+            </p>
+            <ul>
+              <li>
+                <strong>"Timeout in milliseconds when capturing toolchain environments:"</strong><br/>
+                The timeout in milliseconds used when capturing the Visual Studio compiler and linker environments. Batch files that take longer to execute than the timeout will be aborted automatically.
+              </li>
+              <li>
+                <strong>"File extensions considered for object files:"</strong><br/>
+                A list of file extensions to be considered for object files. Other file extensions will be ignored.
+              </li>
+              <li>
+                <strong>"File extensions considered for library files:"</strong><br/>
+                A list of file extensions to be considered for library files. Other file extensions will be ignored.
+              </li>
+              <li>
+                <strong>"Filters considered for source files:"</strong><br/>
+                A list of strings separated by semicolons used for filtering source files. Source files that contain one of the filters are ignored completely. Filter checks are performed using lower-case source paths.
+              </li>
+              <li>
+                <strong>"Enable pre-build step:"</strong><br/>
+                Lets you decide if Live++ should perform a pre-build step on each hot-reload operation.
+              </li>
+              <li>
+                <strong>"Pre-build step executable:"</strong><br/>
+                Lets you select the executable that is called when performing the pre-build step.
+              </li>
+              <li>
+                <strong>"Pre-build step working directory:"</strong><br/>
+                Lets you select the working directory that is used when performing the pre-build step.
+              </li>
+              <li>
+                <strong>"Pre-build step command-line options:"</strong><br/>
+                Lets you specify the command-line options that are passed to the executable called when performing the pre-build step.
+              </li>
+              <li>
+                <strong>"Call compile hooks for halted processes:"</strong><br/>
+                Lets you decide if Live++ should call compile hooks for halted processes.
+              </li>
+              <li>
+                <strong>"Call link hooks for halted processes:"</strong><br/>
+                Lets you decide if Live++ should call link hooks for halted processes.
+              </li>
+              <li>
+                <strong>"Call hot-reload hooks for halted processes:"</strong><br/>
+                Lets you decide if Live++ should call hot-reload hooks for halted processes.
+              </li>
+            </ul>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Allowing Live++ to call hooks for halted processes is a potentially dangerous operation, since it might lead to a deadlock. For halted processes, Live++ always calls hooks from its receiver thread while all other threads in the process are suspended. Should any of the hooks try to lock a synchronization primitive such as a mutex while a suspended thread holds onto the same primitive, a deadlock will occur.</p>
+              <p>Therefore, your hook implementation has to work under the assumption that any thread could be suspended at any time.</p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"14_PreBuildStep"</strong> that demonstrates how to set up pre-build steps.  </p>
+            </div>
+
+
+            <h2 id="project_preferences_compiler">Compiler</h2>
+            <p>
+              <img src="assets/img/project_preferences_compiler.png" alt="Project preferences compiler">
+            </p>
+            <p>
+              Paths to files can either be absolute paths, or paths relative to the Broker.
+            </p>
+            <ul>
+              <li>
+                <strong>"Capture compiler toolchain environment:"</strong><br/>
+                Lets you decide if Live++ should search for and use the vcvars*.bat compiler toolchain environment. Disabling this setting can be useful for custom build systems.
+              </li>
+              <li>
+                <strong>"Override compiler path:"</strong><br/>
+                Lets you override the compiler path that was found in the PDB, so Live++ will use this compiler instead when recompiling files. Only needed in rare cases when using custom build systems.
+              </li>
+              <li>
+                <strong>"Use overridden compiler path only as fallback:"</strong><br/>
+                When this is enabled, the overridden compiler path will only be used if the compiler detected in the PDB is not available.
+              </li>
+              <li>
+                <strong>"Additional command-line options:"</strong><br/>
+                Lets you pass additional options to the compiler when creating a patch.
+              </li>
+              <li>
+                <strong>"Force use of precompiled header PDBs:"</strong><br/>
+                When this is enabled, it forces Live++ to make each translation unit use the same PDB as the corresponding precompiled header when recompiling. This is mostly intended as a workaround for compiler error C2858, experienced when using Incredibuild with remote agents and precompiled header files.
+              </li>
+              <li>
+                <strong>"Remove "-showIncludes" compiler option:"</strong><br/>
+                When this is enabled, the <strong>-showIncludes</strong> compiler option used by some build systems will be removed when recompiling code.
+              </li>
+              <li>
+                <strong>"Remove "-sourceDependencies" compiler option:"</strong><br/>
+                When this is enabled, the <strong>-sourceDependencies</strong> compiler option used by some build systems will be removed when recompiling code.
+              </li>
+            </ul>
+
+
+            <h2 id="project_preferences_linker">Linker</h2>
+            <p>
+              <img src="assets/img/project_preferences_linker.png" alt="Project preferences linker">
+            </p>
+            <p>
+              Paths to files can either be absolute paths, or paths relative to the Broker.
+            </p>
+      			<ul>
+      				<li>
+      					<strong>"Capture linker toolchain environment:"</strong><br/>
+      					Lets you decide if Live++ should search for and use the vcvars*.bat linker toolchain environment. Disabling this setting can be useful for custom build systems.
+      				</li>
+      				<li>
+      					<strong>"Override linker path:"</strong>, <strong>"Overridden linker path:"</strong><br/>
+      					Lets you override the linker path that was found in the PDB, so Live++ will use this linker instead when recompiling files. Only needed in rare cases when using custom build systems.
+      				</li>
+      				<li>
+      					<strong>"Use overridden linker path only as fallback:"</strong><br/>
+      					When this is enabled, the overridden linker path will only be used if the linker detected in the PDB is not available.
+      				</li>
+      				<li>
+      					<strong>"Additional command-line options:"</strong><br/>
+      					Lets you pass additional options to the linker when creating a patch.
+      				</li>
+              <li>
+                <strong>"Suppress creation of import library (/NOIMPLIB):"</strong><br/>
+                When creating patch DLLs, some linkers insist on creating an import library even for DLLs that do not export any symbols. While Live++ does not require these import libraries, some older linkers do not understand the <strong>/NOIMPLIB</strong> option.
+              </li>
+      			</ul>
+
+
+            <h2 id="project_preferences_exceptions">Exceptions</h2>
+            <p>
+              <img src="assets/img/project_preferences_exceptions.png" alt="Project preferences exceptions">
+            </p>
+            <ul>
+              <li>
+                <strong>"Enable exception handler:"</strong><br/>
+                When this is enabled, Live++ will install an exception handler for <a href="#tools_hot_fix">Hot-Fix</a> functionality.
+              </li>
+              <li>
+                <strong>"Install exception handler as:"</strong><br/>
+                Lets you choose whether the exception handler should be installed as <a href="https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-addvectoredexceptionhandler" target="_blank">first or last handler</a>.
+              </li>
+            </ul>
+
+
+            <h2 id="project_preferences_continuous_compilation">Continuous compilation</h2>
+            <p>
+              <img src="assets/img/project_preferences_continuous_compilation.png" alt="Project preferences continuous compilation">
+            </p>
+            <p>
+              Directories can either be absolute directories, or directories relative to the Broker.
+            </p>
+            <ul>
+              <li>
+                <strong>"Enable continuous compilation:"</strong><br/>
+                When continuous compilation is enabled, Live++ waits for change notifications in the given directory (and its sub-directories) and automatically compiles any changes once the timeout has expired.
+              </li>
+              <li>
+                <strong>"Directory to watch:"</strong><br/>
+                Lets you set the directory that is being watched for changes when using continuous compilation.
+              </li>
+              <li>
+                <strong>"Timeout in milliseconds when listening for changes:"</strong><br/>
+                When listening for change notifications, Live++ will wait for subsequent changes until the timeout is reached.
+              </li>
+            </ul>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>Live++ triggers the compilation process when a change to <strong>any</strong> file in the directory to watch is detected, which might not necessarily be a file that is part of the build. Be sure to choose the directory to watch accordingly.</p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"02_ContinuousCompilation"</strong> that demonstrates this.</p>
+            </div>
+
+
+            <h2 id="project_preferences_virtual_drive">Virtual drive</h2>
+            <p>
+              Some build systems temporarily set up a virtual drive when building code, so that all tools used during a build can refer to the same path. However, the PDB files of the compiled modules will then contain paths on this virtual drive, which may no longer be available when starting the application and using Live++. The following options let you set up a virtual drive:
+            </p>
+            <p>
+              <img src="assets/img/project_preferences_virtual_drive.png" alt="Project preferences virtual drive">
+            </p>
+            <ul>
+              <li>
+                <strong>"Drive:"</strong><br/>
+                Lets you specify the letter of the virtual drive that will be mapped to the given directory. The letter must be followed by a colon, e.g. "Z:" (without quotes).
+              </li>
+              <li>
+                <strong>"Directory:"</strong><br/>
+                Lets you set the directory that is mapped to the drive letter given above, e.g. <strong>C:\MyPath</strong>.
+              </li>
+            </ul>
+
+
+            <h2 id="project_preferences_unity_splitting">Unity splitting</h2>
+            <p>
+              <img src="assets/img/project_preferences_unity_splitting.png" alt="Project preferences unity splitting">
+            </p>
+            <ul>
+              <li>
+                <strong>"Enable splitting of unity/jumbo/blob/amalgamated files"</strong><br/>
+                When this is enabled, Live++ will perform splitting of unity files.
+              </li>
+              <li>
+                <strong>"Split when number of source files reaches:"</strong><br/>
+                Specifies the minimum number of .cpp files that must be included in a unity file before Live++ attempts to split it, e.g. if this threshold is set to 3, only unity files including 3 or more .cpp files will be split.
+              </li>
+              <li>
+                <strong>"C/C++ file extensions considered for splitting:"</strong><br/>
+                A list of file extensions which are treated as C/C++ files when splitting unity files.
+              </li>
+            </ul>
+          </section>
+
+
+          <header>
+            <h1 id="API">API</h1>
+            <p class="lead">Live++ is pretty good at figuring things out, but it cannot do magic. The API lets you provide it with the help it needs to make certain scenarios work, and ships as several header files that can be used from both C and C++. However, client code only ever needs to include <a href="#directory_structure">one particular header file</a> for any platform and language.
+            </p>
+          </header>
+
+          <section>
+            <h2 id="API_naming_convention">Naming convention</h2>
+            <p>
+              In general, all API symbols share a common prefix. All macros begin with <strong>LPP_</strong>, while functions begin with <strong>Lpp</strong>. In C++, all functions are part of the <strong>lpp</strong> namespace to further reduce the chance of name clashes.
+            </p>
+
+
+            <h2 id="API_flavours">Flavours</h2>
+            <p>
+              All APIs which expect directories or paths are available in two flavours: ANSI versions taking a <code class="language-cpp code-in-text">const char*</code> argument, and wide-character versions taking a <code class="language-cpp code-in-text">const wchar_t*</code> argument.
+            </p>
+
+
+            <h2 id="API_versioning">Versioning</h2>
+            <p>Live++ uses a simple versioning scheme to ensure that header files and the DLL are never out of sync. To achieve this, the header file defines the version of the API it expects to be exported by the DLL, e.g.:</p>
+<pre><code class="language-cpp">
+#define LPP_VERSION "2.0.0"
+</code></pre>
+
+            <p>Internally, the DLL exposes a function that returns the API version it was built against, e.g.:</p>
+<pre><code class="language-cpp">
+LPP_API const char* LppGetVersion(void);
+</code></pre>
+
+            <p>In addition, the DLL internally offers a function that performs the version check and returns whether the API and DLL versions match:</p>
+<pre><code class="language-cpp">
+LPP_API bool LppCheckVersion(const char* const expectedVersion);
+</code></pre>
+
+            <p>When <a href="#creating_default_agent">creating an agent</a>, these checks are automatically performed for you to ensure that the API and DLL versions always match.</p>
+
+
+            <h2 id="API_agent_validation">Agent validation</h2>
+            <p>
+              If you want to check whether creating agents was successful, you can use the following APIs:              
+            </p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="60%"><code class="language-cpp">bool lpp::LppIsValidDefaultAgent(const LppDefaultAgent* const agent);</code></td>
+                    <td>Returns whether the given default agent is valid.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="60%"><code class="language-cpp">bool lpp::LppIsValidSynchronizedAgent(const LppSynchronizedAgent* const agent);</code></td>
+                    <td>Returns whether the given synchronized agent is valid.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+
+            <h2 id="API_connection_callback">Connection callback</h2>
+            <p>
+              For deeper integration with your codebase or engine, you might want to use the following optional API for checking whether connecting the Agent, Bridge and Broker was successful:
+            </p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="60%"><code class="language-cpp">typedef void LppOnConnectionCallback(void* context, lpp::LppConnectionStatus status);</code></td>
+                    <td>Callback function type.</td>
+                  </tr>
+
+                  <tr>
+                    <td width="60%"><code class="language-cpp">void Agent::OnConnection(void* context, lpp::LppOnConnectionCallback* callback);</code></td>
+
+                    <td>Calls the given callback with a user-supplied context and connection status after an attempt has been made to connect the Agent to the Bridge/Broker.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>
+              Note that this API is non-blocking and thread-safe. Live++ will always invoke the callback once with the final connection status, no matter if the API was called before or after a connection attempt has been made internally.
+            </p>
+
+
+            <h2 id="API_hooks">Hooks</h2>
+            <p>
+              Hooks allow you to more deeply integrate Live++ into your engine/framework/application by showing progress bars, message boxes etc. while compilation is in progress. Hooks can also be used to output compile and link information and errors, and support structural changes.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>
+                Should the process be <a href="#halted_processes">held in the debugger</a> (e.g. at a breakpoint), Live++ does not call any hooks you might have installed, unless you opt-in via the <a href=#project_preferences_hot_reload>project preferences</a>.
+              </p>
+            </div>
+
+
+            <h3 id="API_compile_hooks">Compile hooks</h3>
+            <p>Compile hooks allow you to hook into the hot-reload compilation process and get notified about different stages of the compilation process. The following compile hooks are supported:</p>
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void PrecompileHook(lpp::LppPrecompileHookId, const wchar_t* const recompiledModulePath, unsigned int filesToCompileCount);</code></td>
+                    <td>Registers a hook that is called before compilation starts.<br/>Registered with the <code class="language-cpp">LPP_PRECOMPILE_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void PostcompileHook(lpp::LppPostcompileHookId, const wchar_t* const recompiledModulePath, unsigned int filesToCompileCount);</code></td>
+                    <td>Registers a hook that is called after compilation has finished.<br/>Registered with the <code class="language-cpp">LPP_POSTCOMPILE_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void CompileStartHook(lpp::LppCompileStartHookId, const wchar_t* const recompiledModulePath, const wchar_t* const recompiledSourcePath);</code></td>
+                    <td>Registers a hook that is called when compilation of a file starts.<br/>Registered with the <code class="language-cpp">LPP_COMPILE_START_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void CompileSuccessHook(lpp::LppCompileSuccessHookId, const wchar_t* const recompiledModulePath, const wchar_t* const recompiledSourcePath);</code></td>
+                    <td>Registers a hook that is called when compilation of a file was successful.<br/>Registered with the <code class="language-cpp">LPP_COMPILE_SUCCESS_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void CompileErrorHook(lpp::LppCompileErrorHookId, const wchar_t* const recompiledModulePath, const wchar_t* const recompiledSourcePath, const wchar_t* const compilerOutput);</code></td>
+                    <td>Registers a hook that is called when compilation of a file failed.<br/>Registered with the <code class="language-cpp">LPP_COMPILE_ERROR_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Since most hooks expect similar function signatures, the different <code class="language-cpp code-in-text">lpp::Lpp*HookId</code> values expected as first arguments only serve to provide additional type-safety and protection.
+            </p>
+            <p>
+              The <code class="language-cpp code-in-text">const wchar_t* const recompiledModulePath</code> and <code class="language-cpp code-in-text">const wchar_t* const recompiledSourcePath</code> arguments provide absolute paths to the recompiled module and source file, respectively.
+            </p>
+
+
+            <h3 id="API_link_hooks">Link hooks</h3>
+            <p>Link hooks allow you to hook into the hot-reload link process and get notified about different stages of the linking process. The following link hooks are supported:</p>
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void LinkStartHook(lpp::LppLinkStartHookId, const wchar_t* const recompiledModulePath);</code></td>
+                    <td>Registers a hook that is called when linking starts.<br/>Registered with the <code class="language-cpp">LPP_LINK_START_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void LinkSuccessHook(lpp::LppLinkSuccessHookId, const wchar_t* const recompiledModulePath);</code></td>
+                    <td>Registers a hook that is called when linking was successful.<br/>Registered with the <code class="language-cpp">LPP_LINK_SUCCESS_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void LinkErrorHook(lpp::LppLinkErrorHookId, const wchar_t* const recompiledModulePath, const wchar_t* const linkerOutput);</code></td>
+                    <td>Registers a hook that is called when linking failed.<br/>Registered with the <code class="language-cpp">LPP_LINK_ERROR_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Since most hooks expect similar function signatures, the different <code class="language-cpp code-in-text">lpp::Lpp*HookId</code> values expected as first arguments only serve to provide additional type-safety and protection.
+            </p>
+            <p>
+              The <code class="language-cpp code-in-text">const wchar_t* const recompiledModulePath</code> arguments provide absolute paths to the recompiled module.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>Live++ ships with an example named <strong>"06_Hooks"</strong> that demonstrates hooks.</p>
+            </div>
+
+
+            <h3 id="API_hot_reload_hooks">Hot-Reload hooks</h3>
+            <p>Hot-Reload hooks allow you to hook into the hot-reload process and get notified about different stages of the patch operation. The following hot-reload hooks are supported:</p>
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void PrePatchHook(lpp::LppHotReloadPrepatchHookId, const wchar_t* const recompiledModulePath, const wchar_t* const* const modifiedFiles, unsigned int modifiedFilesCount, const wchar_t* const* const modifiedClassLayouts, unsigned int modifiedClassLayoutsCount);</code></td>
+                    <td>Registers a hook that is called before a patch is loaded into the target application.<br/>Registered with the <code class="language-cpp">LPP_HOTRELOAD_PREPATCH_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void PostPatchHook(lpp::LppHotReloadPostpatchHookId, const wchar_t* const recompiledModulePath, const wchar_t* const* const modifiedFiles, unsigned int modifiedFilesCount, const wchar_t* const* const modifiedClassLayouts, unsigned int modifiedClassLayoutsCount);</code></td>
+                    <td>Registers a hook that is called after a patch has been loaded into the target application.<br/>Registered with the <code class="language-cpp">LPP_HOTRELOAD_POSTPATCH_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>
+              Since both hooks expect the same function signatures, the different <code class="language-cpp code-in-text">lpp::Lpp*HookId</code> values expected as first arguments only serve to provide additional type-safety and protection.
+            </p>
+            <p>
+              The <code class="language-cpp code-in-text">const wchar_t* const recompiledModulePath</code> arguments provide absolute paths to the recompiled module.
+            </p>
+            <p>
+              The <code class="language-cpp code-in-text">const wchar_t* const* const modifiedFiles, unsigned int modifiedFilesCount</code> arguments provide an array of absolute paths of modified files.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>The <code class="language-cpp code-in-text">const wchar_t* const* const modifiedClassLayouts, unsigned int modifiedClassLayoutsCount</code> arguments are eventually intended to provide an array of names of modified class layouts, but this functionality is not available yet.</p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>By making use of the <code class="language-cpp code-in-text">const wchar_t* const* const modifiedFiles, unsigned int modifiedFilesCount</code> arguments, all examples that ship with Live++ contain pre-patch and post-patch hooks that support tearing down and rebuilding class instances when certain files are modified.</p>
+            </div>
+
+
+            <h3 id="API_global_hot_reload_hooks">Global Hot-Reload hooks</h3>
+            <p>Global Hot-Reload hooks allow you to hook into the hot-reload process and get notified about the start and end of the hot-reload operation. The following global hot-reload hooks are supported:</p>
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void GlobalHotReloadStart(lpp::LppGlobalHotReloadStartHookId);</code></td>
+                    <td>Registers a global hook that is called after a hot-reload operation has started.<br/>Registered with the <code class="language-cpp">LPP_GLOBAL_HOTRELOAD_START_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void GlobalHotReloadEnd(lpp::LppGlobalHotReloadEndHookId);</code></td>
+                    <td>Registers a global hook that is called before a hot-reload operation has finished.<br/>Registered with the <code class="language-cpp">LPP_GLOBAL_HOTRELOAD_END_HOOK(functionName)</code> macro.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>
+              Since both hooks expect the same function signatures, the different <code class="language-cpp code-in-text">lpp::Lpp*HookId</code> values expected as first arguments only serve to provide additional type-safety and protection.
+            </p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              Unlike other hooks, these hooks are considered global. This means that they will always be called whenever a change in any registered module is detected, no matter which module actually contains the hook.
+            </div>
+
+
+            <h2 id="API_structural_change">Structural changes</h2>
+            <p>The following operations are considered "structural changes":
+              <ul>
+                <li>Changing the memory layout of a class declaration, which includes:</li>
+                  <ul>
+                    <li>adding or removing base classes</li>
+                    <li>adding or removing non-static data members</li>
+                    <li>changing the order of non-static data members</li>
+                  </ul>
+                <li>Changing the layout or contents of virtual function tables, which includes:</li>
+                  <ul>
+                    <li>adding or removing polymorphic base classes</li>
+                    <li>adding or removing virtual functions</li>
+                    <li>changing the order of virtual functions</li>
+                    <li>changing the signature of a virtual function</li>
+                  </ul>
+              </ul>
+            </p>
+            <p>
+              When making structural changes to existing code and data, Live++ has to make sure that new code can correctly work with existing data allocated and stored in an old memory layout. In order to do so, existing objects must have their data migrated from the old into the new memory layout, which can be achieved by using <a href="#API_hot_reload_hooks">pre-patch and post-patch hot-reload hooks</a>.
+            </p>            
+            <p>Hook statements can be put anywhere in the global scope and will be called automatically. You can add as many hooks as you like in whatever translation units you see fit: there is no limit to the number of hooks, or the number of files you can put hooks into.</p>
+            <p>The following is a simplified example of how to perform data migration between patches:</p>
+            
+<pre><code class="language-cpp">
+void MyOwnPrePatchHook(lpp::LppHotReloadPrepatchHookId, const wchar_t* const, const wchar_t* const* const, unsigned int, const wchar_t* const* const, unsigned int)
+{
+  serialization::SerializeAndDeleteObjects(g_allObjects, g_buffer);
+}
+
+void MyOwnPostPatchHook(lpp::LppHotReloadPostpatchHookId, const wchar_t* const, const wchar_t* const* const, unsigned int, const wchar_t* const* const, unsigned int)
+{
+  serialization::CreateAndSerializeObjects(g_allObjects, g_buffer);
+}
+
+LPP_HOTRELOAD_PREPATCH_HOOK(MyOwnPrePatchHook);
+LPP_HOTRELOAD_POSTPATCH_HOOK(MyOwnPostPatchHook);
+</code></pre>
+            <p>The basic idea is always the same:
+              <ol>
+                <li>Serialize the data members of existing objects into memory.</li>
+                <li>Delete the objects.</li>
+                <li>Re-create the objects using the new class layout.</li>
+                <li>Serialize the data members from memory to the new objects.</li>
+              </ol>
+            </p>
+            <p>How difficult or easy this is will depend on the setup and engine you use. You could also consider other alternatives, such as restarting or reloading the current level in a post-patch hook. You are free to use hooks however you see fit, to allow for unusual use-cases such as this.</p>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Important</h4>
+              <p>It is strongly advised to use a <a href="#creating_synchronized_agent">synchronized agent</a> to ensure that some objects don't have their memory layout changed while still being used. Keep in mind that objects created on the stack cannot be migrated to a new class layout.</p>
+            </div>
+
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Example</h4>
+              <p>All examples that ship with Live++ contain hot-reload hooks that support data migration when certain files are modified.</p>
+            </div>
+
+
+            <h2 id="API_applying_preferences">Applying preferences</h2>
+            <p>If you wish, you may use the following APIs to apply Live++ global preferences programmatically:</p>
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="70%"><code class="language-cpp">void Agent::SetBoolPreferences(LppBoolPreferences preferences, bool value);</code></td>
+                    <td>Sets any bool preference from the <code class="language-cpp code-in-text">LppBoolPreferences</code> enum.</td>
+                  </tr>
+                  <tr>
+                    <td width="70%"><code class="language-cpp">void Agent::SetIntPreferences(LppIntPreferences preferences, int value);</code></td>
+                    <td>Sets any integer preference from the <code class="language-cpp code-in-text">LppIntPreferences</code> enum.</td>
+                  </tr>
+                  <tr>
+                    <td width="70%"><code class="language-cpp">void Agent::SetStringPreferences(LppStringPreferences preferences, const char* const value);</code></td>
+                    <td>Sets any string preference from the <code class="language-cpp code-in-text">LppStringPreferences</code> enum.</td>
+                  </tr>
+                  <tr>
+                    <td width="70%"><code class="language-cpp">void Agent::SetShortcutPreferences(LppShortcutPreferences preferences, int virtualKeyCode, int modifiers);</code></td>
+                    <td>Sets any shortcut preference from the <code class="language-cpp code-in-text">LppShortcutPreferences</code> enum.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>
+              Each enumerator value in the <code class="language-cpp code-in-text">LppBoolPreferences</code>, <code class="language-cpp code-in-text">LppIntPreferences</code>, <code class="language-cpp code-in-text">LppStringPreferences</code> and <code class="language-cpp code-in-text">LppShortcutPreferences</code> enums corresponds to exactly one option of the <a href="#global_preferences">global preferences</a>. The enums are contained in <strong>LPP_API_Preferences.h</strong>, with enum values having self-explanatory names.
+            </p>
+
+
+            <h2 id="API_logging_to_the_UI">Logging to the UI</h2>
+            <p>Live++ allows you to log messages to the Broker UI using the following APIs:</p>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-striped">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void Agent::LogMessageANSI(const char* const message);</code></td>
+                    <td>Sends a log to the Broker UI.</td>
+                  </tr>
+                  <tr>
+                    <td width="50%"><code class="language-cpp">void Agent::LogMessage(const wchar_t* const message);</code></td>
+                    <td>Sends a log to the Broker UI.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+
+          <header>
+            <h1 id="limitations">Limitations</h1>
+            <p class="lead">The current version of Live++ has a few minor limitations which you should be aware of. Bear in mind, however, that unless noted otherwise these are not fundamental limitations of the Live++ infrastructure, but features which are planned but not yet available. Live++ will eventually lift these restrictions in a future update.</p>
+          </header>
+
+          <section>
+            <h2 id="limitation_overhead">Overhead</h2>
+            <p>
+              As long as no Live++ code patch has been built and installed, the only runtime overhead caused by Live++ is due to the <a href="#linker_settings">/FUNCTIONPADMIN linker option</a> that inserts a few unused bytes before each function. However, the performance implication of this should be marginal, if measurable at all.
+            </p>
+            <p>
+              For modules built with <a href="https://docs.microsoft.com/en-us/cpp/build/reference/incremental-link-incrementally" target="_blank">incremental linking</a>, Live++ will automatically make use of the incremental linking thunks and patch function addresses directly. In this case, functions patched using Live++ do not cause any additional overhead at all.
+            </p>
+            <p>
+              In all other cases, functions are patched using the hotpatch technique, which involves one short 2-byte jump as well as one relative jump to the new function.
+            </p>
+
+
+            <h2 id="limitation_breakpoints">Breakpoints in Visual Studio</h2>
+            <p>
+              When setting a new breakpoint in a source file that has been hot-reloaded by Live++, the Visual Studio debugger will try to apply this breakpoint to all patches which contain the corresponding source file. This can quickly become confusing, especially after adding new lines of code to an existing source file:
+            </p>
+            <p>
+              <img src="assets/img/visual_studio_breakpoints.png" alt="Visual Studio breakpoints">
+            </p>
+            <p>
+              As can be seen in the image above, setting a new breakpoint at <strong>line 20 in Cube.cpp</strong> will make the debugger set additional breakpoints in <strong>lines 21 and 22</strong> as well. Even though the breakpoints will work as expected since the old code is never actually hit, the red dots in the indicator margin can be misleading.
+            </p>
+            <p>
+              To alleviate this, it is recommended to enable <span class="label label-default label-custom-MM">Require source files to exactly match the original version</span> under <span class="label label-default label-custom-MM">Tools -> Options... -> Debugging -> General</span> in Visual Studio.
+            </p>
+
+
+            <h2 id="limitation_global_variables">Global variables in the debugger</h2>
+            <p>
+              When breaking into the debugger in any source file that has been hot-reloaded, debuggers typically won't be able to show the value of global and static variables. This is caused by the fact that these variables live in the original executable, whereas patch code is injected from dynamic libraries.              
+            </p>
+            <p>
+              To work around this, both Visual Studio and Rider support a <a href="https://learn.microsoft.com/en-us/visualstudio/debugger/context-operator-cpp" target="_blank">Context Operator</a> which allows to convey the module context to the debugger.
+            </p>
+            <p>
+              To give an example, a global variable named <code class="language-cpp">g_globalInteger</code> contained in a namespace named <code class="language-cpp">globalNamespace</code> in an application named <code class="language-cpp">MyApplication.exe</code> can be added to the watch window as <code class="language-cpp">{,,MyApplication.exe}globalNamespace::g_globalInteger</code>.
+            </p>
+
+
+            <h2 id="limitation_functions_on_the_stack">Functions on the stack</h2>
+            <p>
+              Because of how code patching in Live++ works, functions currently on the stack need to be re-entered before any of their code changes can be observed. In practice this is almost never a problem, and allows Live++ to correctly handle inline functions, introduce new stack variables into functions, and so on.
+            </p>
+            <div class="callout callout-info-MM" role="alert">
+              <h4>Note</h4>
+              <p>This is a limitation inherent to the patching mechanism used by Live++ and cannot be changed.</p>
+            </div>
+
+
+            <h2 id="limitation_thread_local_storage">Thread-local storage</h2>
+            <p><strong>Using</strong> thread-local storage variables is fine, but <strong>introducing new</strong> global or static variables in thread-local storage is currently not supported.
+            </p>
+
+
+            <h2 id="limitation_clang_dynamic_initializers">Dynamic initializers in Clang</h2>
+            <p>When compiling with Clang, introducing new global or static variables that require a dynamic initializer is not supported. The dynamic initializer will not be called in patches recompiled with Live++.
+            </p>
+          </section>
+
+
+          <header>
+            <h1 id="known_issues">Known issues</h1>
+          </header>
+
+          <section>
+            <h2 id="known_fastbuild_clang">FASTBuild with Clang</h2>
+            <p>
+              When using FASTBuild with Clang, FASTBuild will remove all <code class="language-cpp">-I</code> command-line arguments during source file preprocessing, most likely leading to missing includes during recompiles.
+            </p>
+            <p>
+              This seems to be caused by an <a href="https://github.com/fastbuild/fastbuild/blob/178c7512ed4d3594bfad22bed967a5d557fc88b9/Code/Tools/FBuild/FBuildCore/ExeDrivers/Compiler/CompilerDriver_GCCClang.cpp#L81" target="_blank">obsolete check in FASTBuild</a> when using Clang. As a workaround, do not specify <code class="language-cpp">.CompilerFamily = 'clang'</code> in the .bff script, or build FASTBuild from source without the obsolete check.
+            </p>
+
+
+            <h2 id="known_issues_external">'/external:I' requires '/external:W'</h2>
+            <p>
+              In certain versions of Visual Studio, the toolchain does not correctly store the external include environment in the PDB file, as <a href="https://developercommunity.visualstudio.com/t/trying-to-recompile-individual-files-with-pch-enab/1491579#T-N1618164" target="_blank">acknowledged by Microsoft</a>.
+            </p>
+            <p>
+              Since the <strong>/external:I</strong> is ignored by the compiler in that case, it will most likely lead to missing includes during recompiles. As a workaround, specify <strong>/external:W0</strong> as additional compiler option in the <a href="#project_preferences_compiler">project preferences</a>.
+            </p>
+
+
+            <h2 id="known_issues_include">INCLUDE missing in PDB</h2>
+            <p>
+              Similar to the bug mentioned above, certain versions of Visual Studio also do not capture and store the INCLUDE environment in the PDB file, as <a href="https://developercommunity.visualstudio.com/t/trying-to-recompile-individual-files-with-pch-enab/1491579#T-N1618164" target="_blank">acknowledged by Microsoft</a>.
+            </p>
+            <p>
+              Again, this will lead to missing includes during recompiles. As a workaround, specify the required include paths as additional compiler options in the <a href="#project_preferences_compiler">project preferences</a>.
+            </p>
+
+
+            <h2 id="known_reloading_in_halted_processes">Hot-reload in halted processes</h2>
+            <p>
+              Introduced in Visual Studio 2022 (version 17.11), the debugger now caches a CONTEXT structure internally, leading to the <a href="https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadcontext" target="_blank">GetThreadContext() Win32 API</a> returning bogus values for the instruction pointer, as <a href="https://developercommunity.visualstudio.com/t/VS2022-debugger-doesnt-adjust-RIP-corre/10801166" target="_blank">acknowledged by Microsoft</a>.
+            </p>
+            <p>
+              Unfortunately, Live++ relies on knowledge about the instruction pointer of the hot-reloaded process while that process is being debugged. A workaround has been implemented in Live++ 2.8.0, but we still urge Microsoft to fix this behaviour, as breaking an unrelated Win32 API seems to be rather impactful.
+            </p>
+          </section>
+
+          <header>
+            <h1 id="troubleshooting">Troubleshooting</h1>
+            <p class="lead">In case you run into any problems while using Live++, there are a few features specifically tailored at troubleshooting.</p>
+          </header>
+
+          <section>
+            <h2 id="troubleshooting_missing_compilands">Missing compilands</h2>
+            <p>
+              When integrating Live++ into your application for the first time, you might run into situations where not all compiler and linker options have been set up correctly, or some translation units or dynamic libraries were not loaded and enabled by Live++. Since incomplete translation units and modules by default don't show up in the <strong>Compilands</strong> view, it might be hard to keep track of which compilands failed to load.
+            </p>
+            <p>
+              To help with this, enable the two options <strong>"Load incomplete modules"</strong> and <strong>"Load incomplete compilands"</strong> under <span class="label label-default label-custom-MM">Global preferences -> Hot-Reload</span>. When these settings are active, Live++ will list all translation units and modules in the <strong>Compilands</strong> view, whether they failed to load or not.
+            </p>
+            <p>
+              <img src="assets/img/compilands_view_all.png" alt="Compilands view all">
+            </p>            
+            <p>
+              Furthermore, right-clicking on any translation unit or module and selecting <span class="label label-default label-custom-MM">Show details...</span> will bring up a dialog that shows all information stored for this particular translation unit or module, along with all its identified defects:
+            </p>
+            <p>
+              <img src="assets/img/module_defects.png" alt="Module defects">
+            </p>
+            <p>
+              <img src="assets/img/compiland_defects.png" alt="Compiland defects">
+            </p>
+
+
+            <h2 id="troubleshooting_verbose_compiling">Verbose compiling</h2>
+            <p>
+              In certain situations, recompiling changes through Live++ might fail. This could be due to missing project preferences, exotic build setups, or a bug in Live++. Turning on verbose compiling under <span class="label label-default label-custom-MM">Debug -> Toggle verbose compiling</span> will help you diagnose such issues.
+            </p>
+            <p>
+              When verbose compiling is enabled, Live++ will output the following information when recompiling any file:
+              <ul>
+                <li>Compiler path</li>
+                <li>Compiler working directory</li>
+                <li>Compiler command-line options</li>
+                <li>Included files</li>
+              </ul>
+              Additionally, compilation will be performed in verbose mode if supported by the used toolchain.
+            </p>
+
+
+            <h2 id="troubleshooting_verbose_linking">Verbose linking</h2>
+            <p>
+              Similar to verbose compiling, verbose linking found under <span class="label label-default label-custom-MM">Debug -> Toggle verbose linking</span> will help you diagnose issues that could lead to Live++ failing to link a patch. 
+            </p>
+            <p>
+              When verbose linking is enabled, Live++ will output the following information when linking any patch:
+              <ul>
+                <li>Linker path</li>
+                <li>Linker working directory</li>
+                <li>Linker command-line options</li>
+              </ul>
+              Additionally, linking will be performed in verbose mode if supported by the used toolchain, which will output used static libraries as well as translation units being pulled into a patch.
+            </p>
+          </section>
+
+
+          <section>
+            <h1 id="3rd_party_libraries">3rd-party libraries</h1>
+
+            <pre>
+json.h
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to http://unlicense.org/
+            </pre>
+
+            <pre>
+Intel® X86 Encoder Decoder (Intel® XED)
+
+Copyright (c) 2023 Intel Corporation
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+            </pre>
+
+            <pre>
+xxHash Library
+Copyright (c) 2012-2020 Yann Collet
+All rights reserved.
+
+BSD 2-Clause License (https://www.opensource.org/licenses/bsd-license.php)
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this
+  list of conditions and the following disclaimer in the documentation and/or
+  other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.       
+            </pre>
+          </section>
+
+        </article>
+        <!-- END Main content -->
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="container-fluid">
+        <a id="scroll-up" href="#"><i class="fa fa-angle-up"></i></a>
+
+        <div class="row">
+          <div class="col-md-6 col-sm-6">
+            <p>Copyright &copy; 2017-2024, Molecular Matters GmbH. All rights reserved.</p>
+          </div>
+          <div class="col-md-6 col-sm-6">
+            <ul class="footer-menu">
+              <li><a href="mailto:support@molecular-matters.com">Contact us</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </footer>
+    <!-- END Footer -->
+
+    <!-- Scripts -->
+    <script src="assets/js/theDocs.all.min.js"></script>
+  </body>
+</html>

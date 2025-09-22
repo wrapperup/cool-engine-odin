@@ -1,6 +1,5 @@
 package gfx
 
-import "base:runtime"
 import "core:fmt"
 import vk "vendor:vulkan"
 
@@ -115,7 +114,7 @@ create_pool :: proc(
 
 	reserve(&pool_sizes, len(pool_ratios))
 
-	for ratio, i in pool_ratios {
+	for ratio in pool_ratios {
 		append(&pool_sizes, vk.DescriptorPoolSize{type = ratio.type, descriptorCount = u32(f32(ratio.ratio) * f32(set_count))})
 	}
 
@@ -225,10 +224,14 @@ DescriptorWrite :: struct {
 }
 
 is_image_descriptor_type :: proc(ty: vk.DescriptorType) -> bool {
-	return ty == .STORAGE_IMAGE || ty == .SAMPLER || ty == .SAMPLED_IMAGE || ty == .COMBINED_IMAGE_SAMPLER
+	return ty == .STORAGE_IMAGE || ty == .SAMPLED_IMAGE || ty == .SAMPLER
 }
 
-write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite) {
+is_sampler_descriptor_type :: proc(ty: vk.DescriptorType) -> bool {
+	return ty == .SAMPLER
+}
+
+write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []DescriptorWrite, loc := #caller_location) {
 	// Collect writes in the convenient format into vk's.
 	descriptor_writes: [dynamic]vk.WriteDescriptorSet
 	image_infos: [dynamic]vk.DescriptorImageInfo
@@ -236,7 +239,14 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 
 	for write in writes {
 		if is_image_descriptor_type(write.type) {
-			assert(write.buffer == 0, "Descriptor write is an image type, but the buffer field was set.")
+			assert(write.buffer == 0, "Descriptor write is an image type, but the buffer field was set.", loc = loc)
+
+            if write.type == .SAMPLER {
+                assert(write.sampler != 0, fmt.tprint("Descriptor write has a null sampler! array_index:", write.array_index), loc = loc)
+            } else {
+                assert(write.image_layout != .UNDEFINED, "Descriptor write has a null image layout!", loc = loc)
+                assert(write.image_view != 0, "Descriptor write has a null image view!", loc = loc)
+            }
 
 			image_info := vk.DescriptorImageInfo {
 				imageLayout = write.image_layout,
@@ -258,7 +268,7 @@ write_descriptor_set :: proc(descriptor_set: vk.DescriptorSet, writes: []Descrip
 			}
 
 			append(&descriptor_writes, descriptor_write)
-		} else {
+        } else {
 			assert(write.image_layout == .UNDEFINED, "Descriptor write is a buffer type, but the image_layout field was set.")
 			assert(write.image_view == 0, "Descriptor write is a buffer type, but the image_view field was set.")
 			assert(write.sampler == 0, "Descriptor write is a buffer type, but the sampler field was set.")

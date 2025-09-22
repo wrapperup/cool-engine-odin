@@ -6,14 +6,6 @@ struct SkelVertexAttribute {
   float weights[4];
 };
 
-struct SkinningPushConstants {
-  Vertex *input_vertex_buffer;
-  Vertex *output_vertex_buffer;
-  Mat4x4 *joint_matrices;
-  SkelVertexAttribute *attrs;
-	uint vertex_count;
-};
-
 [vk_push_constant]
 SkinningPushConstants pc;
 

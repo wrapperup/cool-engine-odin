@@ -2,11 +2,6 @@ package game
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:/math/linalg/hlsl"
-import "core:fmt"
-import "core:math/linalg"
-import "core:slice"
-import "core:testing"
 
 RawSparseSet :: struct {
 	sparse: runtime.Raw_Map,

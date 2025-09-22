@@ -3,16 +3,16 @@ package gfx
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
 
-import "core:fmt"
-
 GPUImage :: struct {
-	image:        vk.Image,
-	image_view:   vk.ImageView,
-	allocation:   vma.Allocation,
-	extent:       vk.Extent3D,
-	format:       vk.Format,
-	mip_levels:   u32,
-	array_layers: u32,
+	image:          vk.Image,
+	image_view:     vk.ImageView,
+	allocation:     vma.Allocation,
+	extent:         vk.Extent3D,
+	format:         vk.Format,
+	mip_levels:     u32,
+	array_layers:   u32,
+	current_layout: vk.ImageLayout,
+	usage:          vk.ImageUsageFlags,
 }
 
 // This allocates on the GPU, make sure to call `destroy_image` or add to the deletion queue when you are finished with the image.
@@ -52,6 +52,7 @@ create_gpu_image :: proc(
 		format       = format,
 		mip_levels   = mip_levels,
 		array_layers = array_layers,
+		usage        = image_usage_flags,
 	}
 
 	vk_check(vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil))
@@ -140,7 +141,7 @@ create_sampler :: proc(
 	return sampler
 }
 
-transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image, current_layout: vk.ImageLayout, new_layout: vk.ImageLayout) {
+transition_vk_image :: proc(cmd: vk.CommandBuffer, image: vk.Image, current_layout: vk.ImageLayout, new_layout: vk.ImageLayout) {
 	image_barrier := vk.ImageMemoryBarrier2 {
 		sType         = .IMAGE_MEMORY_BARRIER_2,
 		pNext         = nil,
@@ -166,6 +167,37 @@ transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image, current_layout:
 	}
 
 	vk.CmdPipelineBarrier2(cmd, &dep_info)
+}
+
+transition_image :: proc(cmd: vk.CommandBuffer, image: ^GPUImage, new_layout: vk.ImageLayout) -> bool {
+	image_barrier := vk.ImageMemoryBarrier2 {
+		sType         = .IMAGE_MEMORY_BARRIER_2,
+		pNext         = nil,
+		srcStageMask  = {.ALL_COMMANDS},
+		srcAccessMask = {.MEMORY_WRITE},
+		dstStageMask  = {.ALL_COMMANDS},
+		dstAccessMask = {.MEMORY_WRITE, .MEMORY_READ},
+		oldLayout     = image.current_layout,
+		newLayout     = new_layout,
+	}
+
+	aspect_mask: vk.ImageAspectFlags =
+		(new_layout == .DEPTH_ATTACHMENT_OPTIMAL || new_layout == .DEPTH_READ_ONLY_OPTIMAL) ? {.DEPTH} : {.COLOR}
+
+	image_barrier.subresourceRange = init_image_subresource_range(aspect_mask)
+	image_barrier.image = image.image
+
+	dep_info := vk.DependencyInfo {
+		sType                   = .DEPENDENCY_INFO,
+		pNext                   = nil,
+		imageMemoryBarrierCount = 1,
+		pImageMemoryBarriers    = &image_barrier,
+	}
+
+	vk.CmdPipelineBarrier2(cmd, &dep_info)
+	image.current_layout = new_layout
+
+	return true
 }
 
 copy_image_to_image :: proc(cmd: vk.CommandBuffer, source: vk.Image, destination: vk.Image, src_size: vk.Extent2D, dst_size: vk.Extent2D) {

@@ -1,5 +1,4 @@
 import bindless;
-import consts;
 import types;
 
 // 9 imad (+ 6 iops with final shuffle) -- https://vkguide.dev
@@ -20,23 +19,28 @@ uint3 pcg_3d(uint3 v) {
   return v;
 }
 
-float shadow_calc(float4 shadow_coord, float cascade, float2 offset = 0.0,
+struct Shadow_Params {
+    Image2DArray<f32> depth;
+    SamplerComparison sampler;
+}
+
+float shadow_calc(Shadow_Params params, float4 shadow_coord, float cascade, float2 offset = 0.0,
                   float bias) {
   // perform perspective divide
   float3 proj_coords = shadow_coord.xyz / shadow_coord.w;
 
-  let shadow = SHADOW_ID.sample_cmp_level_zero(
-      SHADOW_SAMPLER_ID, Vec3(proj_coords.xy + offset, cascade),
+  let shadow = params.depth.sample_cmp_level_zero(
+      params.sampler, Vec3(proj_coords.xy + offset, cascade),
       proj_coords.z - bias);
 
   return shadow;
 }
 
-float filter_pcf(float2 screen_pos, float4 shadow_coord, float cascade,
+float filter_pcf(Shadow_Params params, float2 screen_pos, float4 shadow_coord, float cascade,
                  float bias, float slope_bias, float NoL) {
   int2 texDim;
   int elems;
-  SHADOW_ID.get_dimensions(texDim.x, texDim.y, elems);
+  params.depth.get_dimensions(texDim.x, texDim.y, elems);
 
   if (shadow_coord.x < 0 || shadow_coord.x > 1) {
     return 1.f;
@@ -70,7 +74,7 @@ float filter_pcf(float2 screen_pos, float4 shadow_coord, float cascade,
   for (int x = -range; x <= range; x++) {
     for (int y = -range; y <= range; y++) {
       shadow_factor +=
-          shadow_calc(shadow_coord, cascade, dirA * x + dirB * y, totalBias);
+          shadow_calc(params, shadow_coord, cascade, dirA * x + dirB * y, totalBias);
       count++;
     }
   }

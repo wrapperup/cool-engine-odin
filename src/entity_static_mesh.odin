@@ -1,6 +1,5 @@
 package game
 
-import "core:fmt"
 import "core:math/linalg/hlsl"
 
 import px "deps:physx-odin"
@@ -14,8 +13,8 @@ StaticMesh :: struct {
 	body:         ^px.RigidStatic,
 }
 
-init_static_mesh :: proc(static_mesh: ^StaticMesh, mesh_file_name: cstring, material: MaterialId) {
-	mesh, ok := load_mesh_from_file(mesh_file_name)
+init_static_mesh :: proc(static_mesh: ^StaticMesh, asset_name: Asset_Name, material: MaterialId) {
+	mesh, ok := load_mesh_from_file(asset_path(asset_name))
 	assert(ok)
 
 	gpu_mesh := upload_mesh_to_gpu(mesh)
@@ -23,8 +22,6 @@ init_static_mesh :: proc(static_mesh: ^StaticMesh, mesh_file_name: cstring, mate
 
 	tolerances_scale := px.tolerances_scale_new(1, 10)
 	params := px.cooking_params_new(tolerances_scale)
-
-	fmt.println(params)
 
 	points_data := make([]hlsl.float3, len(mesh.vertices))
 	defer delete(points_data)
@@ -44,7 +41,7 @@ init_static_mesh :: proc(static_mesh: ^StaticMesh, mesh_file_name: cstring, mate
 	mesh_desc.triangles.data = raw_data(mesh.indices)
 
 	// valid := px.validate_triangle_mesh(params, mesh_desc)
-	// assert(valid)
+	// assert(valid, "Mesh is not valid.")
 
 	result: px.TriangleMeshCookingResult
 	tri_mesh := px.create_triangle_mesh(params, mesh_desc, px.physics_get_physics_insertion_callback_mut(game.phys.physics), &result)

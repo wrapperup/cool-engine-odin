@@ -3,9 +3,7 @@ package gfx
 import vk "vendor:vulkan"
 
 import im "deps:odin-imgui"
-import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
-import "vendor:glfw"
 
 render_imgui :: proc() {
 	im.Render()

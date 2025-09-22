@@ -10,6 +10,194 @@ DEFAULT_VERTEX_ENTRY: cstring : "vertex_main"
 DEFAULT_FRAGMENT_ENTRY: cstring : "fragment_main"
 DEFAULT_COMPUTE_ENTRY: cstring : "compute_main"
 
+_create_pipeline_layout :: proc(
+	debug_name: cstring,
+	descriptor_set_layout: ^vk.DescriptorSetLayout,
+	$T: typeid,
+	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
+	loc := #caller_location,
+) -> (
+	pipeline_layout: vk.PipelineLayout,
+) {
+	buffer_range := vk.PushConstantRange {
+		offset     = 0,
+		size       = size_of(T),
+		stageFlags = stage_flags,
+	}
+
+	pipeline_layout_info := init_pipeline_layout_create_info()
+	pipeline_layout_info.pPushConstantRanges = &buffer_range
+	pipeline_layout_info.pushConstantRangeCount = 1
+	pipeline_layout_info.pSetLayouts = descriptor_set_layout
+	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
+
+	vk_check(vk.CreatePipelineLayout(r_ctx.device, &pipeline_layout_info, nil, &pipeline_layout))
+
+	when ODIN_DEBUG {
+		if debug_name == nil {
+			debug_set_object_name(pipeline_layout, fmt.ctprint(loc))
+		} else {
+			debug_set_object_name(pipeline_layout, debug_name)
+		}
+	}
+
+	return
+}
+
+Pipeline :: struct {
+	layout:      vk.PipelineLayout,
+	pipeline:    vk.Pipeline,
+	stage_flags: vk.ShaderStageFlags,
+}
+
+GraphicsPipeline :: struct {
+	using common: Pipeline,
+}
+
+PipelineBlendMode :: enum {
+	None,
+	Additive,
+	Alpha,
+}
+
+create_graphics_pipeline :: proc(
+	name: cstring,
+	shader: vk.ShaderModule,
+	input_topology: vk.PrimitiveTopology,
+	polygon_mode: vk.PolygonMode,
+	front_face: vk.FrontFace,
+	cull_mode: vk.CullModeFlags,
+	depth: struct {
+		write_enabled: b32,
+		compare_op:    vk.CompareOp,
+		format:        vk.Format,
+	},
+	$push_constant: typeid,
+	blend_mode: PipelineBlendMode = .None,
+	multisampling_samples: vk.SampleCountFlag = ._1,
+	color_format: vk.Format = .UNDEFINED,
+	vertex_entry: cstring = DEFAULT_VERTEX_ENTRY,
+	fragment_entry: cstring = DEFAULT_FRAGMENT_ENTRY,
+	loc := #caller_location,
+) -> GraphicsPipeline {
+	pipeline_layout: vk.PipelineLayout
+	pipeline: vk.Pipeline
+
+	{
+		pipeline_layout = _create_pipeline_layout(name, &r_ctx.bindless_system.descriptor_layout, push_constant, loc = loc)
+	}
+
+	{
+		pipeline_builder := pb_init()
+		defer pb_delete(pipeline_builder)
+
+		pipeline_builder.pipeline_layout = pipeline_layout
+		pb_set_shaders(&pipeline_builder, shader, vertex_entry, fragment_entry)
+		pb_set_input_topology(&pipeline_builder, input_topology)
+		pb_set_polygon_mode(&pipeline_builder, polygon_mode)
+		pb_set_cull_mode(&pipeline_builder, cull_mode, front_face)
+		pb_set_multisampling(&pipeline_builder, multisampling_samples)
+
+		switch blend_mode {
+		case .None:
+			pb_disable_blending(&pipeline_builder)
+		case .Additive:
+			pb_enable_blending_additive(&pipeline_builder)
+		case .Alpha:
+			pb_enable_blending_alphablend(&pipeline_builder)
+		}
+
+		pb_enable_depthtest(&pipeline_builder, depth.write_enabled, depth.compare_op)
+		pb_set_depth_format(&pipeline_builder, depth.format)
+
+		if color_format == .UNDEFINED {
+			pb_disable_color_attachment(&pipeline_builder)
+		} else {
+			pb_set_color_attachment_format(&pipeline_builder, color_format)
+		}
+
+		pipeline = pb_build_pipeline(&pipeline_builder)
+
+		debug_set_object_name(pipeline, name)
+	}
+
+	return {layout = pipeline_layout, pipeline = pipeline, stage_flags = {.VERTEX, .FRAGMENT}}
+}
+
+ComputePipeline :: struct {
+	using common: Pipeline,
+}
+
+create_compute_pipelines :: proc(
+	name: cstring,
+	shader: vk.ShaderModule,
+	$push_constant: typeid,
+	entry: cstring = DEFAULT_COMPUTE_ENTRY,
+	loc := #caller_location,
+) -> ComputePipeline {
+	pipeline_layout := _create_pipeline_layout(name, &r_ctx.bindless_system.descriptor_layout, push_constant, {.COMPUTE}, loc = loc)
+
+	stage_info := vk.PipelineShaderStageCreateInfo {
+		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage  = {.COMPUTE},
+		module = shader,
+		pName  = entry,
+	}
+
+	compute_pipeline_create_info := vk.ComputePipelineCreateInfo {
+		sType  = .COMPUTE_PIPELINE_CREATE_INFO,
+		layout = pipeline_layout,
+		stage  = stage_info,
+	}
+
+	pipeline: vk.Pipeline
+	vk_check(vk.CreateComputePipelines(r_ctx.device, 0, 1, &compute_pipeline_create_info, nil, &pipeline), loc)
+
+	debug_set_object_name(pipeline, name)
+
+	return {layout = pipeline_layout, pipeline = pipeline, stage_flags = {.COMPUTE}}
+}
+
+// ====================================================================
+
+load_shader_module :: proc(file_name: string) -> (vk.ShaderModule, bool) {
+	buffer, ok := os.read_entire_file(file_name)
+
+	if !ok {
+		return 0, false
+	}
+
+	defer delete(buffer)
+
+	return load_shader_module_from_bytes(buffer)
+}
+
+load_shader_module_from_bytes :: proc(bytes: []u8) -> (vk.ShaderModule, bool) {
+	// Byte length needs to be a multiple of 4
+	if len(bytes) % 4 != 0 {
+		return 0, false
+	}
+
+	info := vk.ShaderModuleCreateInfo {
+		sType    = .SHADER_MODULE_CREATE_INFO,
+		codeSize = len(bytes), // codeSize needs to be in bytes
+		pCode    = raw_data(slice.reinterpret([]u32, bytes)), // code needs to be in 32bit words
+	}
+
+	module: vk.ShaderModule
+	if vk.CreateShaderModule(r_ctx.device, &info, nil, &module) != .SUCCESS {
+		return 0, false
+	}
+
+	return module, true
+}
+
+destroy_shader_module :: proc(module: vk.ShaderModule) {
+	vk.DestroyShaderModule(r_ctx.device, module, nil)
+}
+
+// ====================================================================
+
 PipelineBuilder :: struct {
 	shader_stages:           [dynamic]vk.PipelineShaderStageCreateInfo,
 	input_assembly:          vk.PipelineInputAssemblyStateCreateInfo,
@@ -230,196 +418,4 @@ pb_build_pipeline :: proc(builder: ^PipelineBuilder) -> vk.Pipeline {
 
 pb_delete :: proc(builder: PipelineBuilder) {
 	delete(builder.shader_stages)
-}
-
-// ====================================================================
-
-create_pipeline_layout :: proc(
-	debug_name: cstring,
-	descriptor_set_layout: ^vk.DescriptorSetLayout = nil,
-	loc := #caller_location,
-) -> (
-	pipeline_layout: vk.PipelineLayout,
-) {
-	pipeline_layout_info := init_pipeline_layout_create_info()
-	pipeline_layout_info.pSetLayouts = descriptor_set_layout
-	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
-
-	vk_check(vk.CreatePipelineLayout(r_ctx.device, &pipeline_layout_info, nil, &pipeline_layout))
-
-	when ODIN_DEBUG {
-		if debug_name == nil {
-			debug_set_object_name(pipeline_layout, fmt.ctprint(loc))
-		} else {
-			debug_set_object_name(pipeline_layout, debug_name)
-		}
-	}
-
-	return
-}
-
-create_pipeline_layout_pc :: proc(
-	debug_name: cstring,
-	descriptor_set_layout: ^vk.DescriptorSetLayout,
-	$T: typeid,
-	stage_flags: vk.ShaderStageFlags = {.VERTEX, .FRAGMENT},
-	loc := #caller_location,
-) -> (
-	pipeline_layout: vk.PipelineLayout,
-) {
-	buffer_range := vk.PushConstantRange {
-		offset     = 0,
-		size       = size_of(T),
-		stageFlags = stage_flags,
-	}
-
-	pipeline_layout_info := init_pipeline_layout_create_info()
-	pipeline_layout_info.pPushConstantRanges = &buffer_range
-	pipeline_layout_info.pushConstantRangeCount = 1
-	pipeline_layout_info.pSetLayouts = descriptor_set_layout
-	pipeline_layout_info.setLayoutCount = descriptor_set_layout != nil ? 1 : 0
-
-	vk_check(vk.CreatePipelineLayout(r_ctx.device, &pipeline_layout_info, nil, &pipeline_layout))
-
-	when ODIN_DEBUG {
-		if debug_name == nil {
-			debug_set_object_name(pipeline_layout, fmt.ctprint(loc))
-		} else {
-			debug_set_object_name(pipeline_layout, debug_name)
-		}
-	}
-
-	return
-}
-
-PipelineBlendMode :: enum {
-	None,
-	Additive,
-	Alpha,
-}
-
-create_graphics_pipeline :: proc(
-	name: cstring,
-	pipeline_layout: vk.PipelineLayout,
-	shader: vk.ShaderModule,
-	input_topology: vk.PrimitiveTopology,
-	polygon_mode: vk.PolygonMode,
-	front_face: vk.FrontFace,
-	cull_mode: vk.CullModeFlags,
-	depth: struct {
-		write_enabled: b32,
-		compare_op:    vk.CompareOp,
-		format:        vk.Format,
-	},
-	blend_mode: PipelineBlendMode = .None,
-	multisampling_samples: vk.SampleCountFlag = ._1,
-	color_format: vk.Format = .UNDEFINED,
-	vertex_entry: cstring = DEFAULT_VERTEX_ENTRY,
-	fragment_entry: cstring = DEFAULT_FRAGMENT_ENTRY,
-) -> (
-	vk.Pipeline,
-	bool,
-) {
-	pipeline_builder := pb_init()
-	defer pb_delete(pipeline_builder)
-
-	pipeline_builder.pipeline_layout = pipeline_layout
-	pb_set_shaders(&pipeline_builder, shader, vertex_entry, fragment_entry)
-	pb_set_input_topology(&pipeline_builder, input_topology)
-	pb_set_polygon_mode(&pipeline_builder, polygon_mode)
-	pb_set_cull_mode(&pipeline_builder, cull_mode, front_face)
-	pb_set_multisampling(&pipeline_builder, multisampling_samples)
-
-	switch blend_mode {
-	case .None:
-		pb_disable_blending(&pipeline_builder)
-	case .Additive:
-		pb_enable_blending_additive(&pipeline_builder)
-	case .Alpha:
-		pb_enable_blending_alphablend(&pipeline_builder)
-	}
-
-	pb_enable_depthtest(&pipeline_builder, depth.write_enabled, depth.compare_op)
-	pb_set_depth_format(&pipeline_builder, depth.format)
-
-	if color_format == .UNDEFINED {
-		pb_disable_color_attachment(&pipeline_builder)
-	} else {
-		pb_set_color_attachment_format(&pipeline_builder, color_format)
-	}
-
-	pipeline := pb_build_pipeline(&pipeline_builder)
-
-	debug_set_object_name(pipeline, name)
-
-	return pipeline, true
-}
-
-create_compute_pipelines :: proc(
-	name: cstring,
-	pipeline_layout: vk.PipelineLayout,
-	shader: vk.ShaderModule,
-	entry: cstring = DEFAULT_COMPUTE_ENTRY,
-	loc := #caller_location,
-) -> (
-	vk.Pipeline,
-	bool,
-) {
-	stage_info := vk.PipelineShaderStageCreateInfo {
-		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage  = {.COMPUTE},
-		module = shader,
-		pName  = entry,
-	}
-
-	compute_pipeline_create_info := vk.ComputePipelineCreateInfo {
-		sType  = .COMPUTE_PIPELINE_CREATE_INFO,
-		layout = pipeline_layout,
-		stage  = stage_info,
-	}
-
-	pipeline: vk.Pipeline
-	vk_check(vk.CreateComputePipelines(r_ctx.device, 0, 1, &compute_pipeline_create_info, nil, &pipeline), loc)
-
-	debug_set_object_name(pipeline, name)
-
-	return pipeline, true
-}
-
-// ====================================================================
-
-load_shader_module :: proc(file_name: string) -> (vk.ShaderModule, bool) {
-	buffer, ok := os.read_entire_file(file_name)
-
-	if !ok {
-		return 0, false
-	}
-
-	defer delete(buffer)
-
-	return load_shader_module_from_bytes(buffer)
-}
-
-load_shader_module_from_bytes :: proc(bytes: []u8) -> (vk.ShaderModule, bool) {
-	// Byte length needs to be a multiple of 4
-	if len(bytes) % 4 != 0 {
-		return 0, false
-	}
-
-	info := vk.ShaderModuleCreateInfo {
-		sType    = .SHADER_MODULE_CREATE_INFO,
-		codeSize = len(bytes), // codeSize needs to be in bytes
-		pCode    = raw_data(slice.reinterpret([]u32, bytes)), // code needs to be in 32bit words
-	}
-
-	module: vk.ShaderModule
-	if vk.CreateShaderModule(r_ctx.device, &info, nil, &module) != .SUCCESS {
-		return 0, false
-	}
-
-	return module, true
-}
-
-destroy_shader_module :: proc(module: vk.ShaderModule) {
-	vk.DestroyShaderModule(r_ctx.device, module, nil)
 }

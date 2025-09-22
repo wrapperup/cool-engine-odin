@@ -69,20 +69,3 @@ typedef Mat3x2f32 Mat3x2;
 typedef Mat2x4f32 Mat2x4;
 typedef Mat2x3f32 Mat2x3;
 typedef Mat2x2f32 Mat2x2;
-
-// f64
-typedef Vec2f64 DVec2;
-typedef Vec3f64 DVec3;
-typedef Vec4f64 DVec4;
-
-typedef Mat4x4f64 DMat4x4;
-typedef Mat4x3f64 DMat4x3;
-typedef Mat4x2f64 DMat4x2;
-
-typedef Mat3x4f64 DMat3x4;
-typedef Mat3x3f64 DMat3x3;
-typedef Mat3x2f64 DMat3x2;
-
-typedef Mat2x4f64 DMat2x4;
-typedef Mat2x3f64 DMat2x3;
-typedef Mat2x2f64 DMat2x2;

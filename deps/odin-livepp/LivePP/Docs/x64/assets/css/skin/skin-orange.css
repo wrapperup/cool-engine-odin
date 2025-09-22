@@ -1,0 +1,241 @@
+* {
+  text-shadow: none !important;
+}
+
+body {
+  background-color: #222222;
+  color: #ffffff;
+}
+
+code,
+pre {
+  font-weight: normal !important;
+  border-radius: 0.5em !important;
+  overflow: hidden;
+}
+
+table code,
+table pre {
+  background: transparent !important;
+  color: white !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+main {
+  overflow-x: hidden !important;
+}
+
+.language-css .token.string,
+.style .token.string,
+.token.entity,
+.token.operator,
+.token.url {
+  background: none;
+}
+
+table,
+table td,
+table th {
+  border: 2px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+table th {
+  color: #999 !important;
+  background-color: #373737;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+  background-color: #2d2d2d;
+}
+
+.table-striped > tbody > tr:nth-of-type(even) {
+  background-color: #373737;
+}
+
+img {
+  max-width: 100%;
+}
+
+.site-footer {
+  display: none;
+}
+
+.logo-bar {
+  display: flex;
+  flex-direction: row;
+  justify-items: start;
+  align-items: center;
+  gap: 1em;
+  font-weight: 400;
+  font-size: 2rem;
+}
+
+.logo-bar img {
+  display: block;
+  margin: 0;
+  width: 44px;
+  height: 44px;
+  border: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  border: none;
+  display: block;
+  margin: 0.5em 0;
+  padding: 0;
+  line-height: 1;
+}
+
+h1 a::after,
+h2 a::after,
+h3 a::after,
+h4 a::after,
+h5 a::after,
+h6 a::after {
+  display: none !important;
+}
+
+h1 a,
+h1 a:hover,
+h2 a,
+h2 a:hover,
+h3 a,
+h3 a:hover,
+h4 a,
+h4 a:hover,
+h5 a,
+h5 a:hover,
+h6 a,
+h6 a:hover {
+  border: none !important;
+  text-decoration: none !important;
+  font-weight: bold;
+  color: #ff9e13;
+}
+
+.file-tree {
+  color: white;
+  border-radius: 0.5em !important;
+  background: #333333;
+  border: none;
+  overflow: hidden;
+}
+
+.callout {
+  border-color: #ff9e13;
+  border-radius: 0.5em;
+  overflow: hidden;
+}
+
+img {
+  margin: 1em 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07),
+    0 4px 8px rgba(0, 0, 0, 0.07), 0 8px 16px rgba(0, 0, 0, 0.07),
+    0 16px 32px rgba(0, 0, 0, 0.07), 0 32px 64px rgba(0, 0, 0, 0.07);
+}
+
+::selection {
+  background: #666666;
+}
+
+::-moz-selection {
+  background: #666666;
+}
+
+.navbar-default.navbar-light li > a:focus,
+.navbar-default.navbar-light li > a:hover,
+.navbar-default.navbar-light .active > a,
+.navbar-default.navbar-light .active > a:focus,
+.navbar-default.navbar-light .active > a:hover,
+.navbar-default.navbar-light .open > a:focus,
+.navbar-default.navbar-light .open > a:hover,
+.navbar-default.navbar-light .open > a,
+.sidenav a.active,
+.sidenav a:hover,
+.sidenav > li > a.active,
+.sidenav > li > a:hover,
+.sidenav li.active > a,
+.sidebar-boxed .sidenav > li > a:hover,
+.sidebar-boxed .sidenav > li > a.open,
+a,
+a:focus,
+a:hover,
+h1 a:before,
+h2 a:before,
+h3 a:before,
+.toc a:hover,
+.toc a:active,
+.tabs-text .nav-tabs > li.active a,
+.tabs-btn .nav-tabs li.active a,
+.code-tabs .languages .btn.active,
+.code-tabs .languages .btn:active,
+.promo > .fa,
+.promo > .glyphicon,
+.pagination > li > a:focus,
+.pagination > li > a:hover,
+.pagination > li > span:focus,
+.pagination > li > span:hover,
+.pager li > a:hover {
+  color: #fea621;
+}
+
+.site-header .navbar,
+.sidenav > li > ul li.active a:before,
+.sidenav > li > ul a.active:before,
+.sidebar-line .sidenav li.active > a:before,
+.sidebar-line .sidenav a.active:before,
+.carousel.indicators-out .carousel-indicators .active,
+.pagination > .active > a,
+.pagination > .active > a:focus,
+.pagination > .active > a:hover,
+.pagination > .active > span,
+.pagination > .active > span:focus,
+.pagination > .active > span:hover {
+  background: #fea621;
+  background: -webkit-linear-gradient(to right, #ff9e13 0%, #ff4f01 100%);
+  background: linear-gradient(to right, #ff9e13 0%, #ff4f01 100%);
+  color: black;
+}
+
+.carousel.indicators-out .carousel-indicators li {
+  border-color: #fea621;
+}
+
+.tabs-text .nav-tabs > li.active {
+  border-bottom-color: #fea621;
+}
+
+.grid-view li {
+  border-top-color: #fea621;
+}
+
+@media screen and (max-width: 767px) {
+  .navbar {
+    background-color: #fea621 !important;
+  }
+}
+
+pre {
+  color: white;
+  background-color: #181818;
+}
+
+pre[class*="language-"] {
+  background-color: #181818;
+}
+
+kbd {
+  background-color: #000;
+}
+
+.code-in-text {
+  color: white;
+  background-color: #222 !important;
+  font-weight: bold !important;
+}

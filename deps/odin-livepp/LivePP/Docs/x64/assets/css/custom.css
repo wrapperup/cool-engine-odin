@@ -1,0 +1,39 @@
+.label-custom-MM {
+  font-size: 14px;
+}
+
+.label-default-MM {
+  color: black;
+  background-color: #fea621;
+}
+
+.label-error-MM {
+  color: black;
+  background-color: #ff0000;
+}
+
+.text-error-MM {
+  color: #ff0000;
+}
+
+.callout-info-MM {
+  border-left-color: #fea621;
+}
+
+.callout-info-MM h4,
+.callout-info-MM a {
+  color: #fea621;
+}
+
+::-webkit-input-placeholder { /* Chrome/Opera/Safari */
+  color: #000;
+}
+::-moz-placeholder { /* Firefox 19+ */
+  color: #000;
+}
+:-ms-input-placeholder { /* IE 10+ */
+  color: #000;
+}
+:-moz-placeholder { /* Firefox 18- */
+  color: #000;
+}
