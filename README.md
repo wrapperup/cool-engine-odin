@@ -24,6 +24,7 @@ Toy engine + Vulkan renderer I built for fun to learn Odin language (and some gr
 - Tools for baking IBL (irradiance SH and specular cubemaps)
 
 ### Screenshots
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e65f6132-fe8c-404a-999d-b757c266a109" />
 
 ## Dependencies
 
