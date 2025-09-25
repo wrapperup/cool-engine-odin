@@ -8,8 +8,14 @@ if not exist "build" (
     mkdir "build"
 )
 
-if not exist "build/debug" (
-    mkdir "build/debug"
+if "%~1"=="1" (
+    if not exist "build/release" (
+        mkdir "build/release"
+    )
+) else (
+    if not exist "build/debug" (
+        mkdir "build/debug"
+    )
 )
 
 if not exist "%META_EXE%" (

@@ -23,6 +23,11 @@ Toy engine + Vulkan renderer I built for fun to learn Odin language (and some gr
 - Compute skinning
 - Tools for baking IBL (irradiance SH and specular cubemaps)
 
+## How to build:
+1. Clone repo
+2. Run `setup.bat` once (this will download some large PhysX binaries and ensure submodules are up to date)
+3. Run `build.bat` to generate `build/debug/main.exe`
+
 ### Screenshots
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e65f6132-fe8c-404a-999d-b757c266a109" />
 
