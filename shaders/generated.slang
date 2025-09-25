@@ -3,7 +3,7 @@
 //
 
 //
-// Generated from C:\Repos\odin\vulkan-playground\src\entity_point_light.odin
+// Generated from C:\Repos\odin\cool-engine-odin\src\entity_point_light.odin
 //
 struct PointLight {
   Vec3 color;
@@ -15,7 +15,7 @@ struct PointLight {
 
 
 //
-// Generated from C:\Repos\odin\vulkan-playground\src\gpu_types.odin
+// Generated from C:\Repos\odin\cool-engine-odin\src\gpu_types.odin
 //
 struct Vertex {
   float3 position;
@@ -34,7 +34,7 @@ struct SkeletonVertexAttribute {
 
 
 //
-// Generated from C:\Repos\odin\vulkan-playground\src\renderer.odin
+// Generated from C:\Repos\odin\cool-engine-odin\src\renderer.odin
 //
 struct DrawPushConstants {
   GlobalData* global_data_buffer;
@@ -113,7 +113,7 @@ struct GlobalData {
 
 
 //
-// Generated from C:\Repos\odin\vulkan-playground\src\spherical_harmonics.odin
+// Generated from C:\Repos\odin\cool-engine-odin\src\spherical_harmonics.odin
 //
 struct Sh_Coefficients {
   Vec4 coeffs[9];
