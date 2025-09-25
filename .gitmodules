@@ -1,21 +1,18 @@
 [submodule "deps/odin-libktx"]
 	path = deps/odin-libktx
-	url = https://github.com/DanielGavin/odin-libktx
-[submodule "deps/jolt"]
-	path = deps/jolt
-	url = https://gitlab.com/raygarner13/jolt
+	url = https://github.com/wrapperup/odin-libktx
 [submodule "deps/physx-odin"]
 	path = deps/physx-odin
-	url = https://github.com/tgolsson/physx-odin
+	url = https://github.com/wrapperup/physx-odin
 [submodule "deps/odin-vma"]
 	path = deps/odin-vma
-	url = https://github.com/DanielGavin/odin-vma
+	url = https://github.com/wrapperup/odin-vma
 [submodule "deps/odin-slang"]
 	path = deps/odin-slang
-	url = https://github.com/DragosPopse/odin-slang
+	url = https://github.com/wrapperup/odin-slang
 [submodule "deps/odin-mikktspace"]
 	path = deps/odin-mikktspace
 	url = https://github.com/wrapperup/odin-mikktspace
 [submodule "deps/gltf2"]
 	path = deps/gltf2
-	url = https://github.com/Pawel82S/glTF2
+	url = https://github.com/wrapperup/glTF2
