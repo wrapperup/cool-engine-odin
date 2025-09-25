@@ -4,6 +4,14 @@ setlocal
 set META_EXE=build\meta.exe
 set META_BUILD_SCRIPT=build-meta.bat
 
+if not exist "build" (
+    mkdir "build"
+)
+
+if not exist "build/debug" (
+    mkdir "build/debug"
+)
+
 if not exist "%META_EXE%" (
     echo Metaprogram missing, building...
     call %META_BUILD_SCRIPT%
