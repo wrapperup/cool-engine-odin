@@ -309,7 +309,7 @@ init_mesh_pipelines :: proc() {
 			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
 			color_format = gfx.renderer().draw_image.format,
 			multisampling_samples = gfx.msaa_samples(),
-			push_constant = GPUDrawPushConstants,
+			push_constants = GPUDrawPushConstants,
 		)
 	})
 
@@ -326,7 +326,7 @@ init_mesh_pipelines :: proc() {
 			cull_mode = {},
 			front_face = .COUNTER_CLOCKWISE,
 			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-			push_constant = GPUDrawPushConstants,
+			push_constants = GPUDrawPushConstants,
 		)
 	},
 	)
@@ -353,7 +353,7 @@ init_skybox_pipelines :: proc() {
 			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
 			color_format = gfx.renderer().draw_image.format,
 			multisampling_samples = gfx.msaa_samples(),
-			push_constant = GPUSkyboxPushConstants,
+			push_constants = GPUSkyboxPushConstants,
 		)
 	})
 }
