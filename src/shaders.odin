@@ -260,16 +260,14 @@ diagnostics_check :: #force_inline proc(diagnostics: ^sp.IBlob, loc := #caller_l
 	}
 }
 
-options: []sp.CompilerOptionEntry = {
-	{name = .VulkanUseEntryPointName, value = {kind = .Int, intValue0 = 1}},
-	{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}},
-}
-
-target_desc: sp.TargetDesc
-session_desc: sp.SessionDesc
-
 init_slang_session :: proc() -> ^sp.ISession {
-	target_desc = {
+	options: []sp.CompilerOptionEntry = {
+		{name = .VulkanUseEntryPointName, value = {kind = .Int, intValue0 = 1}},
+		{name = .GLSLForceScalarLayout, value = {kind = .Int, intValue0 = 1}},
+		// {name = .Optimization, value = {kind = .Int, intValue0 = 3}},
+	}
+
+	target_desc := sp.TargetDesc {
 		structureSize               = size_of(sp.TargetDesc),
 		format                      = .SPIRV,
 		flags                       = {.GENERATE_SPIRV_DIRECTLY},
@@ -278,9 +276,8 @@ init_slang_session :: proc() -> ^sp.ISession {
 		compilerOptionEntries       = &options[0],
 		compilerOptionEntryCount    = u32(len(options)),
 	}
-	#assert(size_of(sp.TargetDesc) == 48)
 
-	session_desc = {
+    session_desc := sp.SessionDesc {
 		structureSize            = size_of(sp.SessionDesc),
 		targets                  = &target_desc,
 		targetCount              = 1,
@@ -289,7 +286,6 @@ init_slang_session :: proc() -> ^sp.ISession {
 		compilerOptionEntryCount = u32(len(options)),
 	}
 
-	#assert(size_of(sp.SessionDesc) == 96)
 	session: ^sp.ISession
 	global_session := game.render_state.global_session
 	slang_check(game.render_state.global_session->createSession(session_desc, &session))

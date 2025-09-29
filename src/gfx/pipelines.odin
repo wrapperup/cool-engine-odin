@@ -66,13 +66,13 @@ create_graphics_pipeline :: proc(
 	input_topology: vk.PrimitiveTopology,
 	polygon_mode: vk.PolygonMode,
 	front_face: vk.FrontFace,
-	cull_mode: vk.CullModeFlags,
 	depth: struct {
 		write_enabled: b32,
 		compare_op:    vk.CompareOp,
 		format:        vk.Format,
-	},
-	$push_constant: typeid,
+	} = {},
+	$push_constants: typeid,
+	cull_mode: vk.CullModeFlags = {},
 	blend_mode: PipelineBlendMode = .None,
 	multisampling_samples: vk.SampleCountFlag = ._1,
 	color_format: vk.Format = .UNDEFINED,
@@ -84,7 +84,7 @@ create_graphics_pipeline :: proc(
 	pipeline: vk.Pipeline
 
 	{
-		pipeline_layout = _create_pipeline_layout(name, &r_ctx.bindless_system.descriptor_layout, push_constant, loc = loc)
+		pipeline_layout = _create_pipeline_layout(name, &r_ctx.bindless_system.descriptor_layout, push_constants, loc = loc)
 	}
 
 	{
@@ -131,11 +131,11 @@ ComputePipeline :: struct {
 create_compute_pipelines :: proc(
 	name: cstring,
 	shader: vk.ShaderModule,
-	$push_constant: typeid,
+	$push_constants: typeid,
 	entry: cstring = DEFAULT_COMPUTE_ENTRY,
 	loc := #caller_location,
 ) -> ComputePipeline {
-	pipeline_layout := _create_pipeline_layout(name, &r_ctx.bindless_system.descriptor_layout, push_constant, {.COMPUTE}, loc = loc)
+	pipeline_layout := _create_pipeline_layout(name, &r_ctx.bindless_system.descriptor_layout, push_constants, {.COMPUTE}, loc = loc)
 
 	stage_info := vk.PipelineShaderStageCreateInfo {
 		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
