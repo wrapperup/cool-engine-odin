@@ -64,7 +64,7 @@ Renderer :: struct {
 	// Command Pool/Buffer
 	frames:                      [FRAME_OVERLAP]FrameData,
 	frame_number:                int,
-	global_arena:                VulkanArena,
+	global_arena:                ResourceArena,
 	allocator:                   vma.Allocator,
 
 	// Draw resources
@@ -239,7 +239,7 @@ FrameData :: struct {
 	render_fence:                          vk.Fence,
 	command_pool:                          vk.CommandPool,
 	main_command_buffer:                   vk.CommandBuffer,
-	arena:                                 VulkanArena,
+	arena:                                 ResourceArena,
 }
 
 begin_immediate_submit :: proc() -> vk.CommandBuffer {

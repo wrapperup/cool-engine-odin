@@ -236,7 +236,7 @@ load_gpu_mesh_from_file :: proc(path: string, loc := #caller_location) -> (gpu_m
 	return upload_mesh_to_gpu(mesh, loc = loc), true
 }
 
-defer_destroy_gpu_mesh :: proc(arena: ^gfx.VulkanArena, gpu_mesh: GPUMeshBuffers) {
+defer_destroy_gpu_mesh :: proc(arena: ^gfx.ResourceArena, gpu_mesh: GPUMeshBuffers) {
 	gfx.defer_destroy_buffer(arena, gpu_mesh.vertex_buffer)
 	gfx.defer_destroy_buffer(arena, gpu_mesh.index_buffer)
 }
@@ -396,7 +396,7 @@ load_skel_mesh_from_file :: proc(path: string, loc := #caller_location) -> (skel
 	return
 }
 
-defer_destroy_gpu_skel_mesh :: proc(arena: ^gfx.VulkanArena, gpu_mesh: GPUSkelMeshBuffers) {
+defer_destroy_gpu_skel_mesh :: proc(arena: ^gfx.ResourceArena, gpu_mesh: GPUSkelMeshBuffers) {
 	defer_destroy_gpu_mesh(arena, gpu_mesh)
 	gfx.defer_destroy_buffer(arena, gpu_mesh.skel_vert_attrs_buffer)
 }
