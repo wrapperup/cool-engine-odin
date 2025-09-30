@@ -11,9 +11,11 @@ import "core:sys/windows"
 import "core:time"
 
 import glfw "vendor:glfw"
-import vk "vendor:vulkan"
 
-import px "../deps/physx-odin"
+import im "deps:odin-imgui"
+import im_glfw "deps:odin-imgui/imgui_impl_glfw"
+import im_vk "deps:odin-imgui/imgui_impl_vulkan"
+
 import "../src/gfx"
 
 main :: proc() {
@@ -24,9 +26,7 @@ main :: proc() {
 
 	window := glfw.CreateWindow(1920, 1080, "Triangle", nil, nil)
 
-	if !gfx.init({window = window, enable_validation_layers = ODIN_DEBUG, enable_logs = ODIN_DEBUG}) {
-		fmt.println("Graphics could not be initialized.")
-	}
+	gfx.init({window = window, enable_validation_layers = ODIN_DEBUG, enable_logs = ODIN_DEBUG})
 
 	Vertex :: struct {
 		pos:   [3]f32,
@@ -40,65 +40,87 @@ main :: proc() {
 	}
 	indices: [3]u32 = {0, 1, 2}
 
+    arena := &gfx.r_ctx.global_arena
+
 	vertex_buffer := gfx.create_buffer([3]Vertex, len(vertices), {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
+    gfx.defer_destroy(arena, vertex_buffer)
+
 	index_buffer := gfx.create_buffer([3]u32, len(indices), {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
+    gfx.defer_destroy(arena, index_buffer)
 
 	gfx.staging_write_buffer_slice(&vertex_buffer, vertices[:])
 	gfx.staging_write_buffer_slice(&index_buffer, indices[:])
 
-	shader, ok := gfx.load_shader_module("assets/out/triangle.spv")
+	shader, ok := gfx.load_shader_module("triangle.spv")
 	assert(ok)
 
-	triangle_pipeline_layout := gfx.create_pipeline_layout()
+    TrianglePushConstant :: struct {
+        vertices: gfx.GPUPtr([3]Vertex)
+    }
 
 	triangle_pipeline := gfx.create_graphics_pipeline(
-		{
-			pipeline_layout = triangle_pipeline_layout,
-			shader = shader,
-			input_topology = .TRIANGLE_LIST,
-			polygon_mode = .FILL,
-			front_face = .COUNTER_CLOCKWISE,
-			color_format = gfx.renderer().draw_image.format,
-		},
+        name = "Triangle",
+        shader = shader,
+        input_topology = .TRIANGLE_LIST,
+        polygon_mode = .FILL,
+        front_face = .COUNTER_CLOCKWISE,
+        color_format = gfx.r_ctx.draw_image.format,
+        push_constants = TrianglePushConstant,
 	)
+    gfx.defer_destroy(arena, triangle_pipeline)
+
+    gfx.destroy_shader_module(shader)
+
+    assert(triangle_pipeline.pipeline != 0, "Failed to create pipeline")
 
 	for !glfw.WindowShouldClose(window) {
+        glfw.PollEvents()
+
+        // TODO: gfx shouldn't depend on imgui.
+        im_vk.NewFrame()
+        im_glfw.NewFrame()
+        im.NewFrame()
+
 		cmd := gfx.begin_command_buffer()
 
-		gfx.transition_image(cmd, gfx.renderer().draw_image.image, .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)
+		gfx.transition_image(cmd, &gfx.r_ctx.draw_image, .COLOR_ATTACHMENT_OPTIMAL)
 
-		color_attachment := gfx.init_attachment_info(gfx.renderer().draw_image.image_view, nil, .COLOR_ATTACHMENT_OPTIMAL)
-		depth_attachment := gfx.init_attachment_info(
-			gfx.renderer().depth_image.image_view,
-			&{depthStencil = {depth = 1.0}},
-			.DEPTH_ATTACHMENT_OPTIMAL,
-		)
-		render_info := gfx.init_rendering_info(gfx.renderer().draw_extent, &color_attachment, &depth_attachment)
+        {
+            gfx.cmd_begin_rendering(cmd,
+                area = gfx.r_ctx.draw_extent,
+                color_attachment = &{
+                    view = gfx.r_ctx.draw_image.image_view,
+                    layout = .COLOR_ATTACHMENT_OPTIMAL,
+                },
+            )
 
-		vk.CmdBeginRendering(cmd, &render_info)
+            gfx.set_viewport_and_scissor(cmd, gfx.r_ctx.draw_extent)
 
-		gfx.set_viewport_and_scissor(cmd, gfx.renderer().draw_extent)
+            gfx.cmd_bind_pipeline(cmd, triangle_pipeline)
 
-		vk.CmdBindPipeline(cmd, .GRAPHICS, triangle_pipeline)
+            gfx.cmd_bind_index_buffer(cmd, index_buffer.buffer)
+            gfx.cmd_push_constants(cmd, TrianglePushConstant {
+                vertices = vertex_buffer.address,
+            })
 
-		offset := vk.DeviceSize(0)
-		vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer.buffer, &offset)
-		vk.CmdBindIndexBuffer(cmd, index_buffer.buffer, 0, .UINT32)
+            gfx.cmd_draw_indexed(cmd, len(indices))
 
-		vk.CmdDrawIndexed(cmd, len(indices), 1, 0, 0, 0)
+            gfx.cmd_end_rendering(cmd)
+        }
 
-		vk.CmdEndRendering(cmd)
+		gfx.transition_image(cmd, &gfx.r_ctx.draw_image, .TRANSFER_SRC_OPTIMAL)
 
-		gfx.transition_image(cmd, gfx.renderer().draw_image.image, .UNDEFINED, .GENERAL)
-
-		gfx.transition_image(cmd, gfx.renderer().draw_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL)
-		gfx.copy_image_to_swapchain(cmd, gfx.renderer().draw_image.image, gfx.renderer().draw_extent)
+		gfx.copy_image_to_swapchain(cmd, gfx.r_ctx.draw_image.image, gfx.r_ctx.draw_extent)
 
 		gfx.submit(cmd)
 
 		// Free temp allocations
 		free_all(context.temp_allocator)
 	}
+
+    free_all(context.temp_allocator)
+
+    gfx.shutdown()
 }
 
 @(export)
