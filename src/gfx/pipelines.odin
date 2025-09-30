@@ -66,12 +66,12 @@ create_graphics_pipeline :: proc(
 	input_topology: vk.PrimitiveTopology,
 	polygon_mode: vk.PolygonMode,
 	front_face: vk.FrontFace,
+	$push_constants: typeid,
 	depth: struct {
 		write_enabled: b32,
 		compare_op:    vk.CompareOp,
 		format:        vk.Format,
 	} = {},
-	$push_constants: typeid,
 	cull_mode: vk.CullModeFlags = {},
 	blend_mode: PipelineBlendMode = .None,
 	multisampling_samples: vk.SampleCountFlag = ._1,
