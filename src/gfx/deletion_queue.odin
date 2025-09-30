@@ -15,7 +15,7 @@ import vk "vendor:vulkan"
 //
 // The deletion arena is now basically a (crappy) state machine.
 
-VulkanArena :: struct {
+ResourceArena :: struct {
 	resource_arena: [dynamic]ResourceHandle,
 }
 
@@ -146,7 +146,7 @@ resource_requires_allocation :: proc(type: ResourceType) -> bool {
 }
 
 defer_destroy_resource :: proc(
-	arena: ^VulkanArena,
+	arena: ^ResourceArena,
 	handle: u64,
     resource_type: ResourceType,
 	allocation: vma.Allocation = nil,
@@ -169,7 +169,7 @@ defer_destroy_resource :: proc(
 }
 
 defer_destroy_buffer :: proc(
-	arena: ^VulkanArena,
+	arena: ^ResourceArena,
 	buffer: GPUBuffer($T),
 	debug: string = "UNKNOWN",
 	loc := #caller_location,
@@ -178,7 +178,7 @@ defer_destroy_buffer :: proc(
 }
 
 defer_destroy_gpu_image :: proc(
-	arena: ^VulkanArena,
+	arena: ^ResourceArena,
 	image: GPUImage,
 	debug: string = "UNKNOWN",
 	loc := #caller_location,
@@ -190,7 +190,7 @@ defer_destroy_gpu_image :: proc(
 }
 
 defer_destroy_graphics_pipeline :: proc(
-	arena: ^VulkanArena,
+	arena: ^ResourceArena,
 	pipeline: GraphicsPipeline,
 	debug: string = "UNKNOWN",
 	loc := #caller_location,
@@ -200,7 +200,7 @@ defer_destroy_graphics_pipeline :: proc(
 }
 
 defer_destroy_compute_pipeline :: proc(
-	arena: ^VulkanArena,
+	arena: ^ResourceArena,
 	pipeline: ComputePipeline,
 	debug: string = "UNKNOWN",
 	loc := #caller_location,
@@ -210,7 +210,7 @@ defer_destroy_compute_pipeline :: proc(
 }
 
 defer_destroy_vk_buffer :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.Buffer,
     allocation: vma.Allocation = nil,
     debug: string = "UNKNOWN",
@@ -220,7 +220,7 @@ defer_destroy_vk_buffer :: proc(
 }
 
 defer_destroy_vk_image :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.Image,
     allocation: vma.Allocation = nil,
     debug: string = "UNKNOWN",
@@ -230,7 +230,7 @@ defer_destroy_vk_image :: proc(
 }
 
 defer_destroy_vk_image_view :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.ImageView,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -239,7 +239,7 @@ defer_destroy_vk_image_view :: proc(
 }
 
 defer_destroy_vk_command_pool :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.CommandPool,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -248,7 +248,7 @@ defer_destroy_vk_command_pool :: proc(
 }
 
 defer_destroy_vk_descriptor_pool :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.DescriptorPool,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -257,7 +257,7 @@ defer_destroy_vk_descriptor_pool :: proc(
 }
 
 defer_destroy_vk_descriptor_set_layout :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.DescriptorSetLayout,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -266,7 +266,7 @@ defer_destroy_vk_descriptor_set_layout :: proc(
 }
 
 defer_destroy_vk_fence :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.Fence,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -275,7 +275,7 @@ defer_destroy_vk_fence :: proc(
 }
 
 defer_destroy_vk_pipeline :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.Pipeline,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -284,7 +284,7 @@ defer_destroy_vk_pipeline :: proc(
 }
 
 defer_destroy_vk_pipeline_layout :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.PipelineLayout,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -293,7 +293,7 @@ defer_destroy_vk_pipeline_layout :: proc(
 }
 
 defer_destroy_vk_sampler :: proc(
-    arena: ^VulkanArena,
+    arena: ^ResourceArena,
     handle: vk.Sampler,
     debug: string = "UNKNOWN",
     loc := #caller_location,
@@ -306,9 +306,8 @@ defer_destroy :: proc {
     defer_destroy_gpu_image,
     defer_destroy_graphics_pipeline,
     defer_destroy_compute_pipeline,
-    defer_destroy_resource,
 
-    // Vulkan handle overloads
+    // Vulkan-specific handle overloads
     defer_destroy_vk_buffer,
     defer_destroy_vk_image,
     defer_destroy_vk_image_view,
@@ -321,7 +320,7 @@ defer_destroy :: proc {
     defer_destroy_vk_sampler,
 }
 
-flush_vk_arena :: proc(arena: ^VulkanArena) {
+flush_vk_arena :: proc(arena: ^ResourceArena) {
 	#reverse for &resource in arena.resource_arena {
 		vk_destroy_resource_by_handle(resource)
 	}
@@ -329,6 +328,6 @@ flush_vk_arena :: proc(arena: ^VulkanArena) {
 	clear(&arena.resource_arena)
 }
 
-delete_vk_arena :: proc(arena: VulkanArena) {
+delete_vk_arena :: proc(arena: ResourceArena) {
 	delete(arena.resource_arena)
 }
