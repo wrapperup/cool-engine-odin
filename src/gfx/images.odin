@@ -1,5 +1,6 @@
 package gfx
 
+import "core:fmt"
 import "core:mem"
 
 import vk "vendor:vulkan"
@@ -20,7 +21,7 @@ GPUImage :: struct {
 }
 
 // This allocates on the GPU, make sure to call `destroy_image` or add to the deletion queue when you are finished with the image.
-create_gpu_image :: proc(
+create_image :: proc(
 	format: vk.Format,
 	extent: vk.Extent3D,
 	image_usage_flags: vk.ImageUsageFlags,
@@ -32,6 +33,8 @@ create_gpu_image :: proc(
 	flags: vk.ImageCreateFlags = {},
 	alloc_flags: vma.AllocationCreateFlags = {},
 	usage: vma.MemoryUsage = .GPU_ONLY,
+	debug_name: cstring = nil,
+	loc := #caller_location,
 ) -> GPUImage {
 	img_alloc_info := vma.AllocationCreateInfo {
 		usage         = usage,
@@ -51,7 +54,7 @@ create_gpu_image :: proc(
 		tiling,
 	)
 
-	new_image := GPUImage {
+	image := GPUImage {
 		extent       = extent,
 		format       = format,
 		mip_levels   = mip_levels,
@@ -59,34 +62,46 @@ create_gpu_image :: proc(
 		usage        = image_usage_flags,
 	}
 
-	vk_check(vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &new_image.image, &new_image.allocation, nil))
+	vk_check(vma.CreateImage(r_ctx.allocator, &img_info, &img_alloc_info, &image.image, &image.allocation, nil))
 
-	return new_image
-}
+	// We also create a default image view for convenience:
+	view_type: vk.ImageViewType = .D1
+	if .CUBE_COMPATIBLE in flags {
+        view_type = .CUBE
+	} else {
+		view_type += cast(vk.ImageViewType)image_type // Adding dimension
 
-create_gpu_image_view :: proc(
-	image: ^GPUImage,
-	aspect_flags: vk.ImageAspectFlags,
-	view_type: vk.ImageViewType = .D2,
-	base_mip_level: u32 = 0,
-	base_array_layer: u32 = 0,
-) {
+		if array_layers > 1 {
+			view_type += cast(vk.ImageViewType)4
+		}
+	}
+
 	image.image_view = create_image_view(
 		image.image,
 		image.format,
-		aspect_flags,
 		view_type,
-		base_mip_level,
-		image.mip_levels,
-		base_array_layer,
-		image.array_layers,
+		base_mip_level = 0,
+		mip_levels = image.mip_levels,
+		base_array_layer = 0,
+		array_layers = image.array_layers,
 	)
+
+	when ODIN_DEBUG {
+		if debug_name == nil {
+			debug_set_object_name(image.image, fmt.ctprint(loc))
+			debug_set_object_name(image.image_view, fmt.ctprint(loc))
+		} else {
+			debug_set_object_name(image.image, debug_name)
+			debug_set_object_name(image.image_view, debug_name)
+		}
+	}
+
+	return image
 }
 
 create_image_view :: proc(
 	image: vk.Image,
 	format: vk.Format,
-	aspect_flags: vk.ImageAspectFlags,
 	view_type: vk.ImageViewType = .D2,
 	#any_int base_mip_level: u32 = 0,
 	#any_int mip_levels: u32 = 1,
@@ -103,7 +118,7 @@ create_image_view :: proc(
 			levelCount = mip_levels,
 			baseArrayLayer = base_array_layer,
 			layerCount = array_layers,
-			aspectMask = aspect_flags,
+			aspectMask = vk_aspect_of_format(format),
 		},
 	}
 
@@ -111,6 +126,55 @@ create_image_view :: proc(
 	vk_check(vk.CreateImageView(r_ctx.device, &info, nil, &image_view))
 
 	return image_view
+}
+
+is_depth_format :: proc(format: vk.Format) -> bool {
+	#partial switch format {
+	case .D16_UNORM:
+		return true
+	case .D32_SFLOAT:
+		return true
+	case .D16_UNORM_S8_UINT:
+		return true
+	case .D32_SFLOAT_S8_UINT:
+		return true
+	case .X8_D24_UNORM_PACK32:
+		return true
+	}
+
+	return false
+}
+
+is_stencil_format :: proc(format: vk.Format) -> bool {
+	#partial switch format {
+	case .S8_UINT:
+		return true
+	case .D16_UNORM_S8_UINT:
+		return true
+	case .D24_UNORM_S8_UINT:
+		return true
+	case .D32_SFLOAT_S8_UINT:
+		return true
+	}
+
+	return false
+}
+
+vk_aspect_of_format :: proc(format: vk.Format) -> vk.ImageAspectFlags {
+	if is_depth_format(format) || is_stencil_format(format) {
+		flags := vk.ImageAspectFlags{}
+
+		if is_depth_format(format) {
+			flags |= {.DEPTH}
+		}
+		if is_stencil_format(format) {
+			flags |= {.STENCIL}
+		}
+
+		return flags
+	}
+
+	return {.COLOR}
 }
 
 create_sampler :: proc(
@@ -259,9 +323,9 @@ load_image_from_file :: proc(
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromNamedFile(filename, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 
-    assert(ktx_result == .SUCCESS, "Failed to load image.")
+	assert(ktx_result == .SUCCESS, "Failed to load image.")
 
-    return load_image_from_ktx_texture(ktx_texture, image_type, image_view_type, out_width, out_height, out_depth)
+	return load_image_from_ktx_texture(ktx_texture, image_type, image_view_type, out_width, out_height, out_depth)
 }
 
 load_image_from_memory :: proc(
@@ -271,13 +335,14 @@ load_image_from_memory :: proc(
 	out_width: ^u32 = nil,
 	out_height: ^u32 = nil,
 	out_depth: ^u32 = nil,
+	loc := #caller_location,
 ) -> GPUImage {
 	ktx_texture: ^ktx.Texture2
 	ktx_result := ktx.Texture2_CreateFromMemory(raw_data(mem), len(mem), {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 
-    assert(ktx_result == .SUCCESS, "Failed to load image.")
+	assert(ktx_result == .SUCCESS, "Failed to load image.")
 
-    return load_image_from_ktx_texture(ktx_texture, image_type, image_view_type, out_width, out_height, out_depth)
+	return load_image_from_ktx_texture(ktx_texture, image_type, image_view_type, out_width, out_height, out_depth, loc = loc)
 }
 
 load_image_from_ktx_texture :: proc(
@@ -287,6 +352,7 @@ load_image_from_ktx_texture :: proc(
 	out_width: ^u32 = nil,
 	out_height: ^u32 = nil,
 	out_depth: ^u32 = nil,
+    loc := #caller_location,
 ) -> GPUImage {
 	num_faces := ktx_texture.numFaces // Faces (cubemap)
 	num_levels := ktx_texture.numLevels // Mip levels
@@ -307,7 +373,7 @@ load_image_from_ktx_texture :: proc(
 
 	extent := vk.Extent3D{ktx_texture.baseWidth, ktx_texture.baseHeight, ktx_texture.baseDepth}
 
-	image := create_gpu_image(
+	image := create_image(
 		format,
 		extent,
 		{.SAMPLED, .TRANSFER_DST},
@@ -315,8 +381,8 @@ load_image_from_ktx_texture :: proc(
 		mip_levels = num_levels,
 		array_layers = num_layers,
 		flags = is_cubemap ? {.CUBE_COMPATIBLE} : {},
+        loc = loc
 	)
-	create_gpu_image_view(&image, {.COLOR}, image_view_type, 0, 0)
 
 	// Next, upload image data to vk Image
 	staging := create_buffer(u8, vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)

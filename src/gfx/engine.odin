@@ -195,21 +195,15 @@ create_swapchain :: proc() {
 	draw_image_extent := vk.Extent3D{u32(x), u32(y), 1}
 	draw_image_usages := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST, .STORAGE, .COLOR_ATTACHMENT}
 
-	r_ctx.draw_image = create_gpu_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = r_ctx.msaa_samples)
-	create_gpu_image_view(&r_ctx.draw_image, {.COLOR})
-	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image, r_ctx.draw_image.allocation)
-	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image.image_view)
+	r_ctx.draw_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = r_ctx.msaa_samples)
+	defer_destroy(&r_ctx.global_arena, r_ctx.draw_image)
 
 	// Used for MSAA resolution
-	r_ctx.resolve_image = create_gpu_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
-	create_gpu_image_view(&r_ctx.resolve_image, {.COLOR})
-	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image, r_ctx.resolve_image.allocation)
-	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image.image_view)
+	r_ctx.resolve_image = create_image(draw_image_format, draw_image_extent, draw_image_usages, msaa_samples = ._1)
+	defer_destroy(&r_ctx.global_arena, r_ctx.resolve_image)
 
-	r_ctx.depth_image = create_gpu_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = r_ctx.msaa_samples)
-	create_gpu_image_view(&r_ctx.depth_image, {.DEPTH})
-	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image, r_ctx.depth_image.allocation)
-	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image.image_view)
+	r_ctx.depth_image = create_image(.D32_SFLOAT, draw_image_extent, {.DEPTH_STENCIL_ATTACHMENT}, msaa_samples = r_ctx.msaa_samples)
+	defer_destroy(&r_ctx.global_arena, r_ctx.depth_image)
 
 	r_ctx.draw_extent.width = r_ctx.draw_image.extent.width
 	r_ctx.draw_extent.height = r_ctx.draw_image.extent.height

@@ -203,13 +203,12 @@ init_game_renderer :: proc() {
 init_shadow_maps :: proc() {
 	extent := vk.Extent3D{game.config.shadow_map_size, game.config.shadow_map_size, 1}
 
-	game.render_state.shadow_depth_image = gfx.create_gpu_image(
+	game.render_state.shadow_depth_image = gfx.create_image(
 		.D32_SFLOAT,
 		extent,
 		{.DEPTH_STENCIL_ATTACHMENT, .SAMPLED},
 		array_layers = NUM_CASCADES,
 	)
-	gfx.create_gpu_image_view(&game.render_state.shadow_depth_image, {.DEPTH}, .D2_ARRAY)
 
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.shadow_depth_image.image_view)
 	gfx.defer_destroy(
@@ -221,7 +220,7 @@ init_shadow_maps :: proc() {
 	depth_image := &game.render_state.shadow_depth_image
 
 	for &view, i in game.render_state.shadow_depth_attach_image_views {
-		view = gfx.create_image_view(depth_image.image, depth_image.format, {.DEPTH}, .D2, 0, 1, i, 1)
+		view = gfx.create_image_view(depth_image.image, depth_image.format, .D2, 0, 1, i, 1)
 		gfx.defer_destroy(&gfx.renderer().global_arena, view)
 	}
 }
@@ -230,7 +229,6 @@ init_test_resources :: proc() {
 	tony_mc_mapface := gfx.load_image_from_memory(asset_content(.t_tony_mc_mapface), .D3, .D3)
 
 	dfg := gfx.load_image_from_memory(asset_content(.t_dfg))
-
 	env := gfx.load_image_from_memory(asset_content(.t_test_cubemap_ld), .D2, .CUBE)
 
 	// Default Imageture Sampler
@@ -336,7 +334,7 @@ init_skinning_pipelines :: proc() {
 	game.render_state.skinning_pipeline = add_compute_shader(
 		"shaders/skinning.slang",
 		proc(module: vk.ShaderModule) -> gfx.ComputePipeline {
-			return gfx.create_compute_pipelines("Skinning", module, GPUSkinningPushConstants)
+			return gfx.create_compute_pipeline("Skinning", module, GPUSkinningPushConstants)
 		},
 	)
 }
@@ -362,7 +360,7 @@ init_tonemapper_pipelines :: proc() {
 	game.render_state.tonemapper_pipeline = add_compute_shader(
 		"shaders/tonemapping.slang",
 		proc(module: vk.ShaderModule) -> gfx.ComputePipeline {
-			return gfx.create_compute_pipelines("Tonemapper_Pipeline", module, GPUPostProcessingPushConstants)
+			return gfx.create_compute_pipeline("Tonemapper_Pipeline", module, GPUPostProcessingPushConstants)
 		},
 	)
 }
@@ -527,12 +525,11 @@ draw :: proc() {
 	// 			gfx.defer_destroy_gpu_image(&gfx.current_frame().arena, font_state.font_img)
 	// 		}
 	//
-	// 		font_state.font_img = gfx.create_gpu_image(
+	// 		font_state.font_img = gfx.create_image(
 	// 			.R8_UINT,
 	// 			{atlas_size.x, atlas_size.y, 1},
 	// 			{.TRANSFER_DST, .SAMPLED},
 	// 		)
-	// 		gfx.create_gpu_image_view(&font_state.font_img, {.COLOR})
 	//
 	// 		set_texture(font_state.font_img, FONT_ATLAS_ID)
 	// 	}

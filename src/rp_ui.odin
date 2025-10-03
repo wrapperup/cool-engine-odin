@@ -24,7 +24,7 @@ create_ui_pass :: proc() -> UIPass {
 ui_pass_init :: proc(this: rawptr) {
 	ui_pass := cast(^UIPass)this
 	ui_pass.ui_pipeline = add_compute_shader("shaders/ui.slang", proc(module: vk.ShaderModule) -> gfx.ComputePipeline {
-		return gfx.create_compute_pipelines("UI_Pipeline", module, GPUPostProcessingPushConstants)
+		return gfx.create_compute_pipeline("UI_Pipeline", module, GPUPostProcessingPushConstants)
 	})
 }
 
