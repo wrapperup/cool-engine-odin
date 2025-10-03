@@ -234,17 +234,3 @@ init_pipeline_layout_create_info :: proc() -> vk.PipelineLayoutCreateInfo {
 
 	return info
 }
-
-init_pipeline_shader_stage_create_info :: proc(
-	stage: vk.ShaderStageFlags,
-	shader_module: vk.ShaderModule,
-	entry: cstring = "main",
-) -> vk.PipelineShaderStageCreateInfo {
-	info := vk.PipelineShaderStageCreateInfo {
-		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage  = stage,
-		module = shader_module,
-		pName  = entry,
-	}
-	return info
-}

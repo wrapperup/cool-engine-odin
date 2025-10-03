@@ -128,7 +128,7 @@ ComputePipeline :: struct {
 	using common: Pipeline,
 }
 
-create_compute_pipelines :: proc(
+create_compute_pipeline :: proc(
 	name: cstring,
 	shader: vk.ShaderModule,
 	$push_constants: typeid,
@@ -248,11 +248,23 @@ pb_set_shaders :: proc(
 ) {
 	clear(&builder.shader_stages)
 	if vertex_entry != nil {
-		append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.VERTEX}, shader, vertex_entry))
+        info := vk.PipelineShaderStageCreateInfo {
+            sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage = {.VERTEX},
+            module = shader,
+            pName = vertex_entry,
+        }
+		append(&builder.shader_stages, info)
 	}
 
 	if fragment_entry != nil {
-		append(&builder.shader_stages, init_pipeline_shader_stage_create_info({.FRAGMENT}, shader, fragment_entry))
+        info := vk.PipelineShaderStageCreateInfo {
+            sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage = {.FRAGMENT},
+            module = shader,
+            pName = fragment_entry,
+        }
+		append(&builder.shader_stages, info)
 	}
 }
 

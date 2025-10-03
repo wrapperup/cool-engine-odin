@@ -43,7 +43,7 @@ init_bindless_descriptors :: proc() {
 	)
 }
 
-add_image :: proc(image: GPUImage) -> ImageId {
+add_gpu_image :: proc(image: GPUImage) -> ImageId {
 	bindless_system := &r_ctx.bindless_system
 
 	image_id := ImageId(u32(len(bindless_system.images)))
@@ -82,6 +82,17 @@ add_image :: proc(image: GPUImage) -> ImageId {
     }
 
 	return image_id
+}
+
+add_gpu_image_with_view :: proc(image: GPUImage, view: vk.ImageView) -> ImageId {
+    image := image
+    image.image_view = view
+    return add_gpu_image(image)
+}
+
+add_image :: proc {
+    add_gpu_image,
+    add_gpu_image_with_view
 }
 
 add_sampler :: proc(sampler: vk.Sampler) -> SamplerId {
