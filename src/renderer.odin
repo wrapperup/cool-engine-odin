@@ -269,7 +269,7 @@ init_test_materials :: proc() {
 		{.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 	)
-	gfx.defer_destroy_buffer(&gfx.renderer().global_arena, game.render_state.scene_resources.materials_buffer)
+	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.scene_resources.materials_buffer)
 
 	base_color_id := gfx.add_image(gfx.load_image_from_memory(asset_content(.t_test_basecolor2)))
 	normal_map_id := gfx.add_image(gfx.load_image_from_memory(asset_content(.t_test_normalmap)))
@@ -428,14 +428,14 @@ init_buffers :: proc() {
 	for &frame in game.render_state.frame_data {
 		// Global uniform buffer
 		frame.global_uniform_buffer = gfx.create_buffer(GPUGlobalData, 1, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.global_uniform_buffer)
+		gfx.defer_destroy(&gfx.renderer().global_arena, frame.global_uniform_buffer)
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(Mat4x4, 16_384, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.model_matrices_buffer)
+		gfx.defer_destroy(&gfx.renderer().global_arena, frame.model_matrices_buffer)
 
 		frame.cascade_matrices_buffer = gfx.create_buffer(Mat4x4, NUM_CASCADES, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.cascade_matrices_buffer)
+		gfx.defer_destroy(&gfx.renderer().global_arena, frame.cascade_matrices_buffer)
 
 		frame.cascade_configs_buffer = gfx.create_buffer(
 			GPUCascadeConfig,
@@ -443,7 +443,7 @@ init_buffers :: proc() {
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, frame.cascade_configs_buffer)
+		gfx.defer_destroy(&gfx.renderer().global_arena, frame.cascade_configs_buffer)
 	}
 
 	// comp_coeffs := process_sh_coefficients_from_cubemap_file(asset_path(.t_test_cubemap_ld))
@@ -461,7 +461,7 @@ init_buffers :: proc() {
 		{.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER},
 		.GPU_ONLY,
 	)
-	gfx.defer_destroy_buffer(&gfx.renderer().global_arena, game.render_state.scene_resources.point_light_buffer)
+	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.scene_resources.point_light_buffer)
 
 	environment^ = {
 		world_to_volume  = linalg.matrix4_from_trs_f32(ir_volume.translation, ir_volume.rotation, ir_volume.sh_volume_scale),
@@ -522,7 +522,7 @@ draw :: proc() {
 	// 		vk.DeviceWaitIdle(gfx.renderer().device)
 	//
 	// 		if font_state.font_img.image != 0 {
-	// 			gfx.defer_destroy_gpu_image(&gfx.current_frame().arena, font_state.font_img)
+	// 			gfx.defer_destroy(&gfx.current_frame().arena, font_state.font_img)
 	// 		}
 	//
 	// 		font_state.font_img = gfx.create_image(
