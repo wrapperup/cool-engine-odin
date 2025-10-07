@@ -49,7 +49,7 @@ Vec3 sample_dfg(PBR_Params params, f32 NoV, f32 p_roughness) {
     return params.dfg.sample(params.default_sampler, Vec2(NoV, linear_roughness)).rgb;
 }
 
-Vec3 evaluate_ibl(PBR_Params params, Vec3 n, Vec3 v, Vec3 diffuse_color, Vec3 f0, f32 p_roughness, Sh_Coefficients *volume, Vec3 coord, Mat4x4 world_to_volume) {
+Vec3 evaluate_ibl(PBR_Params params, Vec3 n, Vec3 v, Vec3 diffuse_color, Vec3 f0, f32 p_roughness, Sh_Coefficients* coeffs) {
     let f90 = saturate(dot(f0, Vec3(50.0 * 0.33)));
 
     let NoV = max(dot(n, v), 0.0);
@@ -65,7 +65,7 @@ Vec3 evaluate_ibl(PBR_Params params, Vec3 n, Vec3 v, Vec3 diffuse_color, Vec3 f0
     let Lr = (f0 * Ldfg.r + f90 * Ldfg.g) * Lld;
 #endif
 
-    let diffuse_irradiance = irradiance_sh_volume(coord, n, volume, world_to_volume);
+    let diffuse_irradiance = irradiance_sh(n, coeffs[0]);
     let Ld = diffuse_color * diffuse_irradiance;
 
     return Lr + Ld;

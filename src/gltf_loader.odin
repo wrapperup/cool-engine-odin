@@ -23,11 +23,9 @@ create_mesh_buffers :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffe
 	new_surface.vertex_buffer = gfx.create_buffer(
         Vertex,
 		vertex_count,
-		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
-		.GPU_ONLY,
 		loc = loc,
 	)
-	new_surface.index_buffer = gfx.create_buffer(u32, index_count, {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY, loc = loc)
+	new_surface.index_buffer = gfx.create_buffer(u32, index_count, .Index, loc = loc)
 
 	return new_surface
 }
@@ -39,7 +37,7 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 	assert(buffers.index_count == u32(len(mesh.indices)))
 	assert(buffers.vertex_count == u32(len(mesh.vertices)))
 
-	staging := gfx.create_buffer(u8, vertex_buffer_size + index_buffer_size, {.TRANSFER_SRC}, .CPU_ONLY, loc = loc)
+	staging := gfx.create_buffer(u8, vertex_buffer_size + index_buffer_size, .Staging, loc = loc)
 
 	gfx.write_buffer_slice(&staging, mesh.vertices)
 	gfx.write_buffer_slice(&staging, mesh.indices, vertex_buffer_size)
@@ -413,8 +411,6 @@ create_skel_mesh_buffers :: proc(skel_mesh: SkeletalMesh, loc := #caller_locatio
 	new_surface.skel_vert_attrs_buffer = gfx.create_buffer(
 		SkeletonVertexAttribute,
         len(skel_mesh.attrs),
-		{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
-		.GPU_ONLY,
 		loc = loc,
 	)
 

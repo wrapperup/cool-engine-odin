@@ -5,54 +5,79 @@ import "core:mem"
 import vma "deps:odin-vma"
 import vk "vendor:vulkan"
 
-GPUBuffer :: struct ($T: typeid) {
+GPUBuffer :: struct($T: typeid) {
 	buffer:     vk.Buffer,
 	allocation: vma.Allocation,
 	info:       vma.AllocationInfo,
-	address:    GPUPtr(T),
+	ptr:    GPUPtr(T),
 }
 
+// This is hopefully very common kinds of buffers
+// you may typically want to create. Uniform and Storage
+// buffers will always create a valid GPUPtr(T).
+BufferKind :: enum {
+	Storage, // Includes ptr
+	Uniform, // Includes ptr. However, prefer uniform access for speed.
+	DynUniform, // Mapped uniform buffer // TODO: HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
+	Index,
+	Staging, // For CPU -> GPU writes onto device-local buffers.
+	Readback, // For GPU -> CPU reads from device-local buffers.
+}
+
+vk_buffer_flags :: proc(kind: BufferKind) -> (vk.BufferUsageFlags, vma.AllocationCreateFlags) {
+	switch kind {
+	case .Storage:
+		return {.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS}, {}
+	case .Uniform:
+		return {.TRANSFER_DST, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, {}
+	case .DynUniform:
+		return {.TRANSFER_DST, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, {.MAPPED, .HOST_ACCESS_RANDOM}
+	case .Index:
+		return {.TRANSFER_DST, .INDEX_BUFFER}, {}
+	case .Staging:
+		return {.TRANSFER_SRC}, {.MAPPED, .HOST_ACCESS_SEQUENTIAL_WRITE}
+	case .Readback:
+		return {.TRANSFER_DST}, {.MAPPED, .HOST_ACCESS_RANDOM}
+	}
+
+	unreachable()
+}
 
 // This allocates on the GPU, make sure to call `destroy_buffer` or add to deletion queue when you are finished with the buffer.
 create_buffer :: proc(
-    $T: typeid,
-	#any_int size: vk.DeviceSize, // TODO: Possible footgun? Idk, every other time it's annoying.
-	usage: vk.BufferUsageFlags,
-	memory_usage: vma.MemoryUsage,
-	alloc_flags: vma.AllocationCreateFlags = {.MAPPED},
+	$T: typeid,
+	#any_int size: vk.DeviceSize = 1,
+	kind: BufferKind = .Storage,
+	name: cstring = nil,
 	loc := #caller_location,
-	debug_name: cstring = nil,
 ) -> GPUBuffer(T) {
+	alloc_size := cast(vk.DeviceSize)(size_of(T) * size)
+
+	vk_usage_flags, vma_create_flags := vk_buffer_flags(kind)
+
 	buffer_info := vk.BufferCreateInfo {
 		sType = .BUFFER_CREATE_INFO,
+		size  = alloc_size,
+		usage = vk_usage_flags,
 	}
 
-    alloc_size := cast(vk.DeviceSize)(size_of(T) * size)
-
-	buffer_info.size = alloc_size
-	buffer_info.usage = usage
-
 	vma_alloc_info := vma.AllocationCreateInfo {
-		usage = memory_usage,
-		flags = alloc_flags,
+		usage = .AUTO,
+		flags = vma_create_flags,
 	}
 
 	new_buffer: GPUBuffer(T)
+	vk_check(vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info), loc)
 
-	vk_check(
-		vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info),
-		loc,
-	)
-
-	if .SHADER_DEVICE_ADDRESS in usage {
-		new_buffer.address.address = get_buffer_device_address(new_buffer)
+	if .SHADER_DEVICE_ADDRESS in vk_usage_flags {
+		new_buffer.ptr.address = get_buffer_device_address(new_buffer)
 	}
 
 	when ODIN_DEBUG {
-		if debug_name == nil {
+		if name == nil {
 			debug_set_object_name(new_buffer.buffer, fmt.ctprint(loc))
 		} else {
-			debug_set_object_name(new_buffer.buffer, debug_name)
+			debug_set_object_name(new_buffer.buffer, name)
 		}
 	}
 
@@ -64,11 +89,10 @@ destroy_buffer :: proc(allocated_buffer: ^GPUBuffer($T)) {
 }
 
 
-
 // Only purpose of this is to be captured during bindgen.
- GPUPtr :: struct($T: typeid) {
- 	address: vk.DeviceAddress,
- }
+GPUPtr :: struct($T: typeid) {
+	address: vk.DeviceAddress,
+}
 
 get_buffer_device_address :: proc(buffer: GPUBuffer($T)) -> vk.DeviceAddress {
 	device_address_info := vk.BufferDeviceAddressInfo {
@@ -85,6 +109,9 @@ write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.DeviceSize
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
 	data := cast([^]u8)buffer.info.pMappedData
+
+    assert(data != nil, "Buffer is not mapped.")
+
 	mem.copy(data[offset:], in_data, size)
 }
 
@@ -95,8 +122,8 @@ write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset: vk.Dev
 
 	data := cast([^]u8)buffer.info.pMappedData
 
-    assert(buffer.info.pMappedData != nil)
-    assert(raw_data(in_data) != nil)
+	assert(data != nil, "Buffer is not mapped.")
+	assert(raw_data(in_data) != nil)
 
 	mem.copy(data[offset:], raw_data(in_data), size)
 }
@@ -106,7 +133,7 @@ staging_write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.De
 	size := size_of(T)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
-	staging := create_buffer(u8, vk.DeviceSize(size_of(T)), {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(u8, vk.DeviceSize(size_of(T)), .Staging)
 	write_buffer(&staging, in_data)
 
 	if cmd, ok := immediate_submit(); ok {
@@ -127,7 +154,7 @@ staging_write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset
 	size := size_of(T) * len(in_data)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer", loc)
 
-	staging := create_buffer(u8, size, {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(u8, size, .Staging)
 	write_buffer_slice(&staging, in_data)
 
 	if cmd, ok := immediate_submit(); ok {

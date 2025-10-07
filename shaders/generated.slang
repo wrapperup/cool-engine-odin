@@ -82,8 +82,7 @@ struct Material {
 };
 
 struct Environment {
-  Mat4x4 world_to_volume;
-  Sh_Coefficients* sh_volume;
+  Sh_Coefficients* sh_coeffs;
   PointLight* point_lights;
   u32 num_point_lights;
   ImageCube env_map;

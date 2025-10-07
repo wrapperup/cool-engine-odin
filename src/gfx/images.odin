@@ -385,7 +385,7 @@ load_image_from_ktx_texture :: proc(
 	)
 
 	// Next, upload image data to vk Image
-	staging := create_buffer(u8, vk.DeviceSize(size), {.TRANSFER_SRC}, .CPU_ONLY)
+	staging := create_buffer(u8, vk.DeviceSize(size), .Staging)
 	mapped_data := staging.info.pMappedData
 
 	mem.copy(mapped_data, data, int(size))
