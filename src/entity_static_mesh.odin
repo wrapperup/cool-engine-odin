@@ -18,7 +18,7 @@ init_static_mesh :: proc(static_mesh: ^StaticMesh, asset_name: Asset_Name, mater
 	assert(ok)
 
 	gpu_mesh := upload_mesh_to_gpu(mesh)
-	defer_destroy_gpu_mesh(&gfx.renderer().global_arena, gpu_mesh)
+	defer_destroy_gpu_mesh(&gfx.r_ctx.global_arena, gpu_mesh)
 
 	tolerances_scale := px.tolerances_scale_new(1, 10)
 	params := px.cooking_params_new(tolerances_scale)

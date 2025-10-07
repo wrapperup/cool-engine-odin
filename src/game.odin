@@ -167,7 +167,7 @@ main_game :: proc() {
 
 		skeleton, anim, ok := load_skel_mesh_from_file(asset_path(.sk_skeltest2))
 		assert(ok)
-		defer_destroy_gpu_skel_mesh(&gfx.renderer().global_arena, skeleton.buffers)
+		defer_destroy_gpu_skel_mesh(&gfx.r_ctx.global_arena, skeleton.buffers)
 
 		// LEAK: Needs asset system.
 		skel_ptr := new(Skeleton)

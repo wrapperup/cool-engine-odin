@@ -51,8 +51,8 @@ init_skeletal_mesh_instance :: proc(skel: ^Skeleton, anim: ^SkeletalAnimation) -
 			.GPU_ONLY,
 		)
 
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, instance.joint_matrices_buffers[i])
-		gfx.defer_destroy_buffer(&gfx.renderer().global_arena, instance.preskinned_vertex_buffers[i])
+		gfx.defer_destroy_buffer(&gfx.r_ctx.global_arena, instance.joint_matrices_buffers[i])
+		gfx.defer_destroy_buffer(&gfx.r_ctx.global_arena, instance.preskinned_vertex_buffers[i])
 	}
 
 	return instance
