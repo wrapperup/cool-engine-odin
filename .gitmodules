@@ -16,3 +16,6 @@
 [submodule "deps/gltf2"]
 	path = deps/gltf2
 	url = https://github.com/wrapperup/glTF2
+[submodule "deps/knit"]
+	path = deps/knit
+	url = https://github.com/wrapperup/knit

@@ -19,6 +19,7 @@ ShaderManager :: struct {
 	compute_shaders:  [dynamic]Shader(gfx.ComputePipeline),
 }
 
+// TODO: I want to use proper assets for this, so we can target spv in the release.
 add_graphics_shader :: proc(
 	path: cstring,
 	pipeline_create_callback: proc(_: vk.ShaderModule) -> gfx.GraphicsPipeline,
