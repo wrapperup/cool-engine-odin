@@ -115,7 +115,7 @@ create_prefiltered_cubemap_pipeline :: proc(filename: cstring, out_width, out_he
 		size += w * h * size_of(f32) * 4 * 6 // R32G32B32A32_SFLOAT
 	}
 
-	pass.prefilter_image_mapped_buffer = gfx.create_buffer(u8, vk.DeviceSize(size), {.TRANSFER_DST}, .GPU_TO_CPU)
+	pass.prefilter_image_mapped_buffer = gfx.create_buffer(u8, vk.DeviceSize(size), .Readback)
 
 	return pass
 }

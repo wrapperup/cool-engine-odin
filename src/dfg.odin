@@ -38,7 +38,7 @@ create_dfg_generate_pipeline :: proc(width, height: u32) -> DfgGeneratePass {
 	pass.dfg_image = gfx.add_image(dfg_image)
 
 	// R16G16_SFLOAT = size_of(f32) * 1 (2 components mapped to bytes of float)
-	pass.dfg_image_mapped_buffer = gfx.create_buffer(f32, width * height, {.TRANSFER_DST}, .GPU_TO_CPU)
+	pass.dfg_image_mapped_buffer = gfx.create_buffer(f32, width * height, .Readback)
 
 	return pass
 }

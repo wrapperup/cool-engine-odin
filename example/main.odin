@@ -100,7 +100,7 @@ main :: proc() {
 
             gfx.cmd_bind_index_buffer(cmd, index_buffer.buffer)
             gfx.cmd_push_constants(cmd, TrianglePushConstant {
-                vertices = vertex_buffer.address,
+                vertices = vertex_buffer.ptr,
             })
 
             gfx.cmd_draw_indexed(cmd, len(indices))

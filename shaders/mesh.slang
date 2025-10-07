@@ -189,7 +189,7 @@ FragmentOutput fragment_main(FragmentInput in) {
 
   frag_color += pc.global_data_buffer.sky_color * ao *
                 evaluate_ibl(params, n, v, diffuse, f0, proughness,
-                             pc.global_data_buffer.environment.sh_volume, pos_ws, pc.global_data_buffer.environment.world_to_volume);
+                             pc.global_data_buffer.environment.sh_coeffs);
 
   // DEBUG
   // frag_color = base_color;

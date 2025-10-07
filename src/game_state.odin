@@ -41,14 +41,12 @@ init_skeletal_mesh_instance :: proc(skel: ^Skeleton, anim: ^SkeletalAnimation) -
 		instance.joint_matrices_buffers[i] = gfx.create_buffer(
 			Mat4x4,
 			instance.skel.joint_count,
-			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
-			.CPU_TO_GPU,
+            .DynUniform, // TODO: This doesn't make any sense. We use this buffer through BDA...
 		)
 		instance.preskinned_vertex_buffers[i] = gfx.create_buffer(
 			Vertex,
 			instance.skel.buffers.vertex_count,
-			{.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS},
-			.GPU_ONLY,
+            .DynUniform,
 		)
 
 		gfx.defer_destroy_buffer(&gfx.r_ctx.global_arena, instance.joint_matrices_buffers[i])
