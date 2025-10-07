@@ -143,7 +143,8 @@ collect_files :: proc(path: string) -> (ast_files: [dynamic]^ast.File, success: 
 	}
 
 	filepath.walk(pkg_path, proc(info: os.File_Info, in_err: os.Error, user_data: rawptr) -> (err: os.Error, skip_dir: bool) {
-			if (info.is_dir) do return
+			if info.is_dir do return
+            if filepath.ext(info.fullpath) != ".odin" do return
 
 			assert(user_data != nil)
 

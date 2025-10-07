@@ -8,6 +8,7 @@ import "core:time"
 import glfw "vendor:glfw"
 import ma "vendor:miniaudio"
 
+import "deps:knit"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
@@ -23,6 +24,9 @@ start_live_time := time.tick_now()
 game: ^Game
 
 main_game :: proc() {
+    knit.init(12)
+    defer knit.destroy()
+
     if !load_generated_assets() {
         fmt.eprintln("Failed to load assets!")
     }
