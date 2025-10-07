@@ -37,11 +37,11 @@ create_prefiltered_cubemap_pipeline :: proc(filename: cstring, out_width, out_he
 		height = out_height,
 	}
 
-	gfx.defer_destroy(&gfx.renderer().global_arena, pass.descriptor_set_layout)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, pass.descriptor_set_layout)
 
 	pass.descriptor_set = gfx.allocate_descriptor_set(
-		&gfx.renderer().global_descriptor_allocator,
-		gfx.renderer().device,
+		&gfx.r_ctx.global_descriptor_allocator,
+		gfx.r_ctx.device,
 		pass.descriptor_set_layout,
 	)
 

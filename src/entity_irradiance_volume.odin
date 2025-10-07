@@ -3189,7 +3189,7 @@ init_irradiance_volume :: proc(volume: ^Irradiance_Volume) {
 		{.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER},
 		.GPU_ONLY,
 	)
-	gfx.defer_destroy_buffer(&gfx.renderer().global_arena, volume.gpu_buffer)
+	gfx.defer_destroy_buffer(&gfx.r_ctx.global_arena, volume.gpu_buffer)
 
 	gfx.staging_write_buffer_slice(&volume.gpu_buffer, volume.sh_volume)
 }

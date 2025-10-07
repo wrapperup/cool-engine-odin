@@ -40,8 +40,8 @@ ui_pass_run :: proc(this: rawptr, cmd: vk.CommandBuffer) {
 
 	vk.CmdDispatch(
 		cmd,
-		u32(math.ceil(f32(gfx.renderer().draw_extent.width) / 16.0)),
-		u32(math.ceil(f32(gfx.renderer().draw_extent.height) / 16.0)),
+		u32(math.ceil(f32(gfx.r_ctx.draw_extent.width) / 16.0)),
+		u32(math.ceil(f32(gfx.r_ctx.draw_extent.height) / 16.0)),
 		1,
 	)
 }

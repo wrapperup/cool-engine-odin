@@ -78,8 +78,7 @@ GPUMaterial :: struct {
 
 @(shader_shared)
 GPUEnvironment :: struct {
-	world_to_volume:  Mat4x4,
-	sh_volume:        GPUPtr(Sh_Coefficients),
+	sh_coeffs:        GPUPtr(Sh_Coefficients),
 	point_lights:     GPUPtr(GPUPointLight),
 	num_point_lights: u32,
 	env_map:          ImageId `ImageCube`,
@@ -210,9 +209,9 @@ init_shadow_maps :: proc() {
 		array_layers = NUM_CASCADES,
 	)
 
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.shadow_depth_image.image_view)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, game.render_state.shadow_depth_image.image_view)
 	gfx.defer_destroy(
-		&gfx.renderer().global_arena,
+		&gfx.r_ctx.global_arena,
 		game.render_state.shadow_depth_image.image,
 		game.render_state.shadow_depth_image.allocation,
 	)
@@ -221,7 +220,7 @@ init_shadow_maps :: proc() {
 
 	for &view, i in game.render_state.shadow_depth_attach_image_views {
 		view = gfx.create_image_view(depth_image.image, depth_image.format, .D2, 0, 1, i, 1)
-		gfx.defer_destroy(&gfx.renderer().global_arena, view)
+		gfx.defer_destroy(&gfx.r_ctx.global_arena, view)
 	}
 }
 
@@ -232,18 +231,18 @@ init_test_resources :: proc() {
 	env := gfx.load_image_from_memory(asset_content(.t_test_cubemap_ld), .D2, .CUBE)
 
 	// Default Imageture Sampler
-	default_sampler := gfx.create_sampler(.LINEAR, .REPEAT, max_lod = 10.0, max_anisotropy = gfx.renderer().limits.maxSamplerAnisotropy)
-	gfx.defer_destroy(&gfx.renderer().global_arena, default_sampler)
+	default_sampler := gfx.create_sampler(.LINEAR, .REPEAT, max_lod = 10.0, max_anisotropy = gfx.r_ctx.limits.maxSamplerAnisotropy)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, default_sampler)
 
 	font_image_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE)
-	gfx.defer_destroy(&gfx.renderer().global_arena, font_image_sampler)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, font_image_sampler)
 
 	// Shadow Depth Imageture Sampler
 	shadow_depth_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE, .LESS_OR_EQUAL)
-	gfx.defer_destroy(&gfx.renderer().global_arena, shadow_depth_sampler)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, shadow_depth_sampler)
 
 	env_sampler := gfx.create_sampler(.LINEAR, .CLAMP_TO_EDGE, max_lod = 8.0)
-	gfx.defer_destroy(&gfx.renderer().global_arena, env_sampler)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, env_sampler)
 
 	{
 		rs := &game.render_state
@@ -258,7 +257,7 @@ init_test_resources :: proc() {
 		tr.shadow_depth_sampler_id = gfx.add_sampler(shadow_depth_sampler)
 		tr.env_sampler_id = gfx.add_sampler(env_sampler)
 
-		tr.resolved_image_id = gfx.add_image(gfx.renderer().resolve_image)
+		tr.resolved_image_id = gfx.add_image(gfx.r_ctx.resolve_image)
 	}
 }
 
@@ -269,7 +268,7 @@ init_test_materials :: proc() {
 		{.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS},
 		.GPU_ONLY,
 	)
-	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.scene_resources.materials_buffer)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, game.render_state.scene_resources.materials_buffer)
 
 	base_color_id := gfx.add_image(gfx.load_image_from_memory(asset_content(.t_test_basecolor2)))
 	normal_map_id := gfx.add_image(gfx.load_image_from_memory(asset_content(.t_test_normalmap)))
@@ -304,8 +303,8 @@ init_mesh_pipelines :: proc() {
 			polygon_mode = .FILL,
 			cull_mode = {.BACK},
 			front_face = .COUNTER_CLOCKWISE,
-			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-			color_format = gfx.renderer().draw_image.format,
+			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+			color_format = gfx.r_ctx.draw_image.format,
 			multisampling_samples = gfx.msaa_samples(),
 			push_constants = GPUDrawPushConstants,
 		)
@@ -323,7 +322,7 @@ init_mesh_pipelines :: proc() {
 			polygon_mode = .FILL,
 			cull_mode = {},
 			front_face = .COUNTER_CLOCKWISE,
-			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
 			push_constants = GPUDrawPushConstants,
 		)
 	},
@@ -348,8 +347,8 @@ init_skybox_pipelines :: proc() {
 			polygon_mode = .FILL,
 			cull_mode = {.BACK},
 			front_face = .COUNTER_CLOCKWISE,
-			depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-			color_format = gfx.renderer().draw_image.format,
+			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+			color_format = gfx.r_ctx.draw_image.format,
 			multisampling_samples = gfx.msaa_samples(),
 			push_constants = GPUSkyboxPushConstants,
 		)
@@ -387,7 +386,7 @@ init_font_renderer :: proc() {
 	// 	&game.render_state.bindless_system.descriptor_layout,
 	// 	GPUFontRendererPushConstants,
 	// )
-	// gfx.defer_destroy(&gfx.renderer().global_arena, font_state.font_pip_layout)
+	// gfx.defer_destroy(&gfx.r_ctx.global_arena, font_state.font_pip_layout)
 	//
 	// game.render_state.font_state.font_shader = add_shader("shaders/text.slang", proc(module: vk.ShaderModule, _: rawptr) -> (vk.Pipeline, bool) {
 	// 	return gfx.create_graphics_pipeline(
@@ -399,8 +398,8 @@ init_font_renderer :: proc() {
 	// 		cull_mode = {},
 	// 		front_face = .COUNTER_CLOCKWISE,
 	// 		blend_mode = .Alpha,
-	// 		depth = {format = gfx.renderer().depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
-	// 		color_format = gfx.renderer().draw_image.format,
+	// 		depth = {format = gfx.r_ctx.depth_image.format, compare_op = .LESS_OR_EQUAL, write_enabled = true},
+	// 		color_format = gfx.r_ctx.draw_image.format,
 	// 		multisampling_samples = gfx.msaa_samples(),
 	// 	)
 	// })
@@ -421,21 +420,21 @@ init_buffers :: proc() {
 	{
 		mesh, ok := load_gpu_mesh_from_file(asset_path(.sm_skybox))
 		assert(ok)
-		defer_destroy_gpu_mesh(&gfx.renderer().global_arena, mesh)
+		defer_destroy_gpu_mesh(&gfx.r_ctx.global_arena, mesh)
 		game.render_state.skybox_mesh = mesh
 	}
 
 	for &frame in game.render_state.frame_data {
 		// Global uniform buffer
 		frame.global_uniform_buffer = gfx.create_buffer(GPUGlobalData, 1, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
-		gfx.defer_destroy(&gfx.renderer().global_arena, frame.global_uniform_buffer)
+		gfx.defer_destroy(&gfx.r_ctx.global_arena, frame.global_uniform_buffer)
 
 		// Model matrices
 		frame.model_matrices_buffer = gfx.create_buffer(Mat4x4, 16_384, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
-		gfx.defer_destroy(&gfx.renderer().global_arena, frame.model_matrices_buffer)
+		gfx.defer_destroy(&gfx.r_ctx.global_arena, frame.model_matrices_buffer)
 
 		frame.cascade_matrices_buffer = gfx.create_buffer(Mat4x4, NUM_CASCADES, {.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, .CPU_TO_GPU)
-		gfx.defer_destroy(&gfx.renderer().global_arena, frame.cascade_matrices_buffer)
+		gfx.defer_destroy(&gfx.r_ctx.global_arena, frame.cascade_matrices_buffer)
 
 		frame.cascade_configs_buffer = gfx.create_buffer(
 			GPUCascadeConfig,
@@ -443,11 +442,14 @@ init_buffers :: proc() {
 			{.UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS},
 			.CPU_TO_GPU,
 		)
-		gfx.defer_destroy(&gfx.renderer().global_arena, frame.cascade_configs_buffer)
+		gfx.defer_destroy(&gfx.r_ctx.global_arena, frame.cascade_configs_buffer)
 	}
 
-	// comp_coeffs := process_sh_coefficients_from_cubemap_file(asset_path(.t_test_cubemap_ld))
+	comp_coeffs := process_sh_coefficients_from_cubemap_file(asset_path(.t_test_cubemap_ld))
 	// comp_coeffs := process_sh_coefficients_from_equirectangular_file("assets/gen/test_equirectangular.ktx2")
+
+    gfx.create_buffer()
+    gfx.defer_destroy(gfx.
 
 	environment := &game.render_state.global_uniform_data.environment
 
@@ -464,8 +466,7 @@ init_buffers :: proc() {
 	gfx.defer_destroy(&gfx.renderer().global_arena, game.render_state.scene_resources.point_light_buffer)
 
 	environment^ = {
-		world_to_volume  = linalg.matrix4_from_trs_f32(ir_volume.translation, ir_volume.rotation, ir_volume.sh_volume_scale),
-		sh_volume        = ir_volume.gpu_buffer.address,
+        sh_coeffs        = comp_coeffs.address,
 		// sh_coeffs       = comp_coeffs,
 		// sh_volume_size  = ir_volume.sh_volume_size,
 		// sh_volume_scale = ir_volume.sh_volume_scale,
