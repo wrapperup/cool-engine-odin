@@ -1,5 +1,8 @@
 package game
 
+import "core:sys/info"
+import "core:math"
+import "core:os"
 import "core:log"
 import "core:fmt"
 import "core:math/linalg"
@@ -24,8 +27,11 @@ start_live_time := time.tick_now()
 game: ^Game
 
 main_game :: proc() {
-    knit.init(12)
-    defer knit.destroy()
+    reserved_threads := 4
+    worker_threads := math.max(info.cpu.physical_cores - reserved_threads, 1)
+
+    knit.init(worker_threads)
+    log.info("Tasks initialized with", worker_threads, "threads")
 
     if !load_generated_assets() {
         fmt.eprintln("Failed to load assets!")
@@ -323,4 +329,6 @@ main_game :: proc() {
     when ENABLE_LIVEPP {
         lpp.DestroySynchronizedAgent(&lpp_agent)
     }
+
+    knit.destroy()
 }
