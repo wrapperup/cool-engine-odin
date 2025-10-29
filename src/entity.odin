@@ -4,14 +4,14 @@ import "base:intrinsics"
 import "base:runtime"
 
 RawSparseSet :: struct {
-	sparse: runtime.Raw_Map,
-	dense:  runtime.Raw_Dynamic_Array,
+	sparse:          runtime.Raw_Map,
+	dense:           runtime.Raw_Dynamic_Array,
 	sparse_map_info: runtime.Map_Info,
 }
 
 SparseSet :: struct($T: typeid) {
-	sparse: map[EntityId]int, // id -> index in dense
-	dense:  [dynamic]T,
+	sparse:          map[EntityId]int, // id -> index in dense
+	dense:           [dynamic]T,
 	sparse_map_info: runtime.Map_Info,
 }
 
@@ -58,32 +58,17 @@ remove_elem_sparse_set :: proc(set: ^SparseSet($T), id: EntityId) -> (ok: bool) 
 
 // Entity Id is a packed u32 number that contains
 // the liveness, generation and index in entity array.
-EntityId :: distinct bit_field u32 {
-	generation: u8   | 8,
-	index:      u32  | 24,
-}
-
-// For rawptr conversion only.
-_EntityId64 :: distinct bit_field u64 {
-	generation: u8   | 8,
-	index:      u32  | 24,
-	pad:        u32  | 32,
+EntityId :: struct {
+	generation: u32,
+	index:      u32,
 }
 
 entity_id_to_rawptr :: proc(id: EntityId) -> rawptr {
-	raw_id := _EntityId64 {
-		generation = id.generation,
-		index      = id.index,
-	}
-	return transmute(rawptr)raw_id
+	return transmute(rawptr)id
 }
 
 entity_id_from_rawptr :: proc(ptr: rawptr) -> EntityId {
-	raw_id := transmute(_EntityId64)ptr
-	id := EntityId {
-		generation = raw_id.generation,
-		index      = raw_id.index,
-	}
+	id := transmute(EntityId)ptr
 	return id
 }
 
@@ -113,7 +98,7 @@ EntitySystem :: struct {
 	// Holds cache-friendly, common data across entities
 	entities:        [MAX_ENTITY_STORAGE]Entity,
 
-	// Maps typeid of T to SparseSet(T). 
+	// Maps typeid of T to SparseSet(T).
 	//
 	// Safety: NEVER use this raw, use `new_or_get_entity_subtype_system`
 	// or `get_entity_subtype_system to get the correct typing.
@@ -132,7 +117,7 @@ new_or_get_entity_subtype_system :: proc($T: typeid) -> ^SparseSet(T) {
 	if _, ok := game.entity_system.subtype_storage[name]; !ok {
 		sparse_set := new(SparseSet(T))
 
-		subtype_storage := SubtypeStorage{
+		subtype_storage := SubtypeStorage {
 			ptr       = cast(^RawSparseSet)sparse_set,
 			type_info = type_info_of(T)^,
 		}
@@ -140,7 +125,7 @@ new_or_get_entity_subtype_system :: proc($T: typeid) -> ^SparseSet(T) {
 		subtype_storage.ptr.sparse_map_info = runtime.map_info(type_of(sparse_set.sparse))^
 
 		game.entity_system.subtype_storage[name] = subtype_storage
-		
+
 	}
 
 	return get_entity_subtype_system(T)
@@ -171,7 +156,7 @@ new_entity_subtype_id :: proc($T: typeid) -> (^T, TypedEntityId(T)) where intrin
 	return subtype, TypedEntityId(T){id = subtype.entity.id}
 }
 
-// Returns a pointer to a new entity. If the entity array was 
+// Returns a pointer to a new entity. If the entity array was
 // extended, returns true, else if an entity was revived, false.
 new_entity_raw :: proc() -> ^Entity {
 	created_entity := Entity {
@@ -233,7 +218,7 @@ get_entity :: proc {
 remove_entity_raw :: proc(id: EntityId) -> bool {
 	entity := &game.entity_system.entities[id.index]
 
-	// Compare generation 
+	// Compare generation
 	if entity.id.generation != id.generation {
 		return false
 	}
