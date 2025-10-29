@@ -1,7 +1,7 @@
 package game
 
 @shader_shared
-GPUPointLight :: struct {
+GPUPointLight :: struct #max_field_align(16) {
 	color:     Vec3,
 	radius:    f32,
 	world_pos: Vec3,
