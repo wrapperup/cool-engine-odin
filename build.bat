@@ -26,6 +26,11 @@ if not exist "%META_EXE%" (
 :: Run metaprogram
 %META_EXE%
 
+if %ERRORLEVEL% neq 0 (
+    echo Meta program failed with exit code %ERRORLEVEL%.
+    exit /b %ERRORLEVEL%
+)
+
 set BASE_FLAGS=src ^
     -collection:deps=deps ^
     -custom-attribute:shader_shared ^

@@ -1,5 +1,6 @@
 package game
 
+import "core:strconv"
 import "base:intrinsics"
 
 import "core:fmt"
@@ -319,6 +320,26 @@ generate_bind_lit :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Ba
 generate_bind_struct :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Struct_Type, src_file: ^ast.File) {
     strings.write_string(builder, "struct ")
     strings.write_string(builder, strip_gpu_name(name))
+
+    if expr.max_field_align != nil {
+        text := ""
+
+        #partial switch e in expr.max_field_align.derived {
+        case ^ast.Basic_Lit: 
+            text = e.tok.text
+        case ^ast.Paren_Expr:
+            text = e.expr.derived.(^ast.Basic_Lit).tok.text
+        case: unreachable()
+        }
+
+        max_field_align, ok := strconv.parse_int(text)
+        if max_field_align > 16 || !ok {
+            report_error("Struct must have a max field align of 16.", expr, src_file)
+        }
+    } else {
+            report_error("Struct must have a max field align of 16.", expr, src_file, "Add #max_field_align(16)")
+    }
+
     if len(expr.fields.list) > 0 {
         strings.write_string(builder, " {\n")
 
@@ -368,7 +389,11 @@ main_meta :: proc() {
 	generate_shader_bindings(files[:])
     generate_assets()
 
-	fmt.println("Parsed and generated code in", time.since(start_time))
+    if !error_reported {
+        fmt.println("Parsed and generated code in", time.since(start_time))
+    } else {
+        os.exit(1)
+    }
 }
 
 generate_assets :: proc() {

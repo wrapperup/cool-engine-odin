@@ -5,7 +5,7 @@ import "core:math/linalg/hlsl"
 import "gfx"
 
 @shader_shared
-Vertex :: struct {
+Vertex :: struct #max_field_align(16) {
 	position: hlsl.float3,
 	uv_x:     f32,
 	normal:   hlsl.float3,
@@ -15,7 +15,7 @@ Vertex :: struct {
 }
 
 @shader_shared
-SkeletonVertexAttribute :: struct {
+SkeletonVertexAttribute :: struct #max_field_align(16) {
 	joints:  [4]u8,
 	weights: [4]f32,
 }
