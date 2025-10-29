@@ -26,7 +26,7 @@ ImageId :: gfx.ImageId
 SamplerId :: gfx.SamplerId
 
 @(shader_shared)
-GPUDrawPushConstants :: struct {
+GPUDrawPushConstants :: struct #max_field_align(16) {
 	global_data_buffer: GPUPtr(GPUGlobalData),
 	vertex_buffer:      GPUPtr(Vertex),
 	model_matrices:     GPUPtr(Mat4x4),
@@ -39,7 +39,7 @@ GPUDrawPushConstants :: struct {
 }
 
 @(shader_shared)
-GPUDrawShadowDepthPushConstants :: struct {
+GPUDrawShadowDepthPushConstants :: struct #max_field_align(16) {
 	vertex_buffer:  GPUPtr(Vertex),
 	model_matrices: GPUPtr(Mat4x4),
 	global_data:    GPUPtr(GPUGlobalData),
@@ -48,7 +48,7 @@ GPUDrawShadowDepthPushConstants :: struct {
 }
 
 @(shader_shared)
-GPUSkinningPushConstants :: struct {
+GPUSkinningPushConstants :: struct #max_field_align(16) {
 	input_vertex_buffer:  GPUPtr(Vertex),
 	output_vertex_buffer: GPUPtr(Vertex),
 	joint_matrices:       GPUPtr(Mat4x4),
@@ -57,20 +57,20 @@ GPUSkinningPushConstants :: struct {
 }
 
 @(shader_shared)
-GPUSkyboxPushConstants :: struct {
+GPUSkyboxPushConstants :: struct #max_field_align(16) {
 	vertex_buffer:      GPUPtr(Vertex),
 	global_data_buffer: GPUPtr(GPUGlobalData),
 }
 
 @(shader_shared)
-GPUPostProcessingPushConstants :: struct {
+GPUPostProcessingPushConstants :: struct #max_field_align(16) {
 	resolved_image:  ImageId `RWImage2D`,
 	tony_mc_mapface: ImageId `Image3D<Vec3>`,
 	sampler:         SamplerId `Sampler`,
 }
 
 @(shader_shared)
-GPUMaterial :: struct {
+GPUMaterial :: struct #max_field_align(16) {
 	base_color_id:            ImageId `Image2D`,
 	normal_map_id:            ImageId `Image2D`,
 	ao_roughness_metallic_id: ImageId `Image2D`,
@@ -87,7 +87,7 @@ GPUEnvironment :: struct #max_field_align(16) {
 }
 
 @(shader_shared)
-GPUCascadeConfig :: struct {
+GPUCascadeConfig :: struct #max_field_align(16) {
 	split_dist: f32,
 	bias:       f32,
 	slope_bias: f32,
@@ -190,7 +190,6 @@ add_material :: proc(material: GPUMaterial) -> MaterialId {
 	return material_id
 }
 
-//// INITIALIZATION
 init_game_renderer :: proc() {
 	init_shadow_maps()
 	init_test_resources()

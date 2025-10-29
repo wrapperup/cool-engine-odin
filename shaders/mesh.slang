@@ -20,15 +20,6 @@ static const Mat4x4 BIAS_MAT = {
   0.0, 0.0, 0.0, 1.0, //
 };
 
-struct PbrMaterialParams {
-  Vec4 base_color;
-  Vec4 emissive;
-  f32 metallic;
-  f32 roughness;
-  f32 reflectance;
-  f32 ambient_occlussion;
-}
-
 [vk_push_constant]
 DrawPushConstants pc;
 
