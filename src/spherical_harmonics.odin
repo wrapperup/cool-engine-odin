@@ -1,16 +1,16 @@
 package game
 
-import "core:strings"
 import "core:math"
 import "core:math/linalg"
 import "core:mem"
 import "core:slice"
+import "core:strings"
 
 import ktx "deps:odin-libktx"
 
-@shader_shared
-Sh_Coefficients :: struct {
-    coeffs: [9]Vec4
+@(shader_shared)
+Sh_Coefficients :: struct #max_field_align(16) {
+	coeffs: [9]Vec4,
 }
 
 process_sh_coefficients_from_cubemap_file :: proc(in_filename: string) -> Sh_Coefficients {
@@ -226,8 +226,8 @@ area_element :: proc(x, y: f32) -> f32 {
 
 load_image_into_bytes :: proc(filename: string, loc := #caller_location) -> ([]Vec4, [2]int) {
 	ktx_texture: ^ktx.Texture2
-    filename_c := strings.clone_to_cstring(filename)
-    defer delete(filename_c)
+	filename_c := strings.clone_to_cstring(filename)
+	defer delete(filename_c)
 	ktx_result := ktx.Texture2_CreateFromNamedFile(filename_c, {.TEXTURE_CREATE_LOAD_IMAGE_DATA}, &ktx_texture)
 	assert(ktx_result == .SUCCESS, "Failed to load image.", loc)
 
