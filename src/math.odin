@@ -30,19 +30,3 @@ aabb_center :: proc(box: Aabb) -> Vec3 {
 	offset := (box.max - box.min) / 2.0
 	return box.min + offset
 }
-
-debug_draw_aabb :: proc(box: Aabb) {
-	offset := box.max - box.min
-
-	debug_draw_dot(box.min)
-
-	debug_draw_dot(box.min + {offset.x, 0, 0})
-	debug_draw_dot(box.min + {0, offset.y, 0})
-	debug_draw_dot(box.min + {0, 0, offset.z})
-
-	debug_draw_dot(box.min + {offset.x, offset.y, 0})
-	debug_draw_dot(box.min + {0, offset.y, offset.z})
-	debug_draw_dot(box.min + {offset.x, 0, offset.z})
-
-	debug_draw_dot(box.max)
-}
