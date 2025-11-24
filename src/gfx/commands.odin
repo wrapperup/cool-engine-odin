@@ -91,3 +91,22 @@ cmd_end_rendering :: #force_inline proc(cmd: vk.CommandBuffer) {
 cmd_dispatch :: #force_inline proc(cmd: vk.CommandBuffer, group_count_x: u32 = 1, group_count_y: u32 = 1, group_count_z: u32 = 1) {
 	vk.CmdDispatch(cmd, group_count_x, group_count_y, group_count_z)
 }
+
+cmd_copy_buffer :: #force_inline proc(
+    cmd: vk.CommandBuffer,
+    source_buffer: ^GPUBuffer($T),
+    dst_buffer: ^GPUBuffer($U),
+    len := 0,
+    dst_offset := 0,
+    src_offset := 0
+) {
+	size := size_of(T) * len
+
+    region := vk.BufferCopy {
+        dstOffset = cast(vk.DeviceSize)dst_offset,
+        srcOffset = cast(vk.DeviceSize)src_offset,
+        size      = vk.DeviceSize(size),
+    }
+
+    vk.CmdCopyBuffer(cmd, source_buffer.buffer, dst_buffer.buffer, 1, &region)
+}

@@ -12,10 +12,6 @@ import vma "deps:odin-vma"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
-import im "deps:odin-imgui"
-import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
-
 log_normal :: proc(args: ..any) {
 	if r_ctx.enable_logs {
 		fmt.println(..args)
@@ -81,11 +77,6 @@ Renderer :: struct {
 	imm_fence:                   vk.Fence,
 	imm_command_buffer:          vk.CommandBuffer,
 	imm_command_pool:            vk.CommandPool,
-
-	// Dear Imgui
-	imgui_ctx:                   ^im.Context,
-	imgui_init:                  bool,
-	imgui_pool:                  vk.DescriptorPool,
 
 	// Bindless
 	bindless_system:             BindlessSystem,
@@ -236,7 +227,11 @@ FrameData :: struct {
 	arena:                                 ResourceArena,
 }
 
-begin_immediate_submit :: proc() -> vk.CommandBuffer {
+frame_arena :: proc() -> ^ResourceArena {
+    return &current_frame().arena
+}
+
+_begin_immediate_submit :: proc() -> vk.CommandBuffer {
 	vk_check(vk.ResetFences(r_ctx.device, 1, &r_ctx.imm_fence))
 	vk_check(vk.ResetCommandBuffer(r_ctx.imm_command_buffer, {}))
 
@@ -249,7 +244,7 @@ begin_immediate_submit :: proc() -> vk.CommandBuffer {
 	return cmd
 }
 
-end_immediate_submit :: proc() {
+_end_immediate_submit :: proc() {
 	cmd := r_ctx.imm_command_buffer
 
 	vk_check(vk.EndCommandBuffer(cmd))
@@ -264,9 +259,9 @@ end_immediate_submit :: proc() {
 	vk_check(vk.WaitForFences(r_ctx.device, 1, &r_ctx.imm_fence, true, 9_999_999_999))
 }
 
-@(deferred_in = end_immediate_submit)
-immediate_submit :: proc() -> (cmd: vk.CommandBuffer, ready: bool) {
-	return begin_immediate_submit(), true
+@(deferred_in = _end_immediate_submit)
+immediate_submit :: proc() -> vk.CommandBuffer {
+	return _begin_immediate_submit()
 }
 
 current_frame_index :: proc() -> int {
@@ -561,37 +556,6 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 			poolSizeCount = u32(len(pool_sizes)),
 			pPoolSizes    = raw_data(pool_sizes),
 		}
-
-		vk_check(vk.CreateDescriptorPool(r_ctx.device, &pool_info, nil, &r_ctx.imgui_pool))
-
-		r_ctx.imgui_ctx = im.CreateContext()
-		im.SetCurrentContext(r_ctx.imgui_ctx)
-
-		im_glfw.InitForVulkan(r_ctx.window, true)
-
-		// this initializes imgui for Vulkan
-		init_info := im_vk.InitInfo {
-			Instance              = r_ctx.instance,
-			PhysicalDevice        = r_ctx.physical_device,
-			Device                = r_ctx.device,
-			Queue                 = r_ctx.graphics_queue,
-			DescriptorPool        = r_ctx.imgui_pool,
-			MinImageCount         = 3,
-			ImageCount            = 3,
-			UseDynamicRendering   = true,
-			ColorAttachmentFormat = r_ctx.swapchain.swapchain_image_format,
-			MSAASamples           = {._1},
-		}
-
-		// We've already loaded the funcs with Odin's built-in loader,
-		// imgui needs the addresses of those functions now.
-		im_vk.LoadFunctions(proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-				return vk.GetInstanceProcAddr((cast(^vk.Instance)user_data)^, function_name)
-			}, &r_ctx.instance)
-
-		assert(im_vk.Init(&init_info, 0))
-
-		r_ctx.imgui_init = true
 	}
 
 	{
@@ -622,11 +586,6 @@ cleanup_vulkan :: proc() {
 
 		flush_vk_arena(&frame.arena)
 		delete_vk_arena(frame.arena)
-	}
-
-	if r_ctx.imgui_init {
-		im_vk.Shutdown()
-		vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
 	}
 
 	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
@@ -750,8 +709,6 @@ copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_siz
 
 // Called by the user when they end drawing to the screen.
 submit :: proc(cmd: vk.CommandBuffer) -> (swapchain_resized: bool) {
-	render_imgui()
-
 	// set swapchain image layout to Attachment Optimal so we can draw it
 	transition_vk_image(
 		cmd,
@@ -759,9 +716,6 @@ submit :: proc(cmd: vk.CommandBuffer) -> (swapchain_resized: bool) {
 		.TRANSFER_DST_OPTIMAL,
 		.COLOR_ATTACHMENT_OPTIMAL,
 	)
-
-	//draw imgui into the swapchain image
-	draw_imgui(cmd, r_ctx.swapchain.swapchain_image_views[r_ctx.swapchain.swapchain_image_index])
 
 	// set swapchain image layout to Present so we can show it on the screen
 	transition_vk_image(
@@ -1049,10 +1003,6 @@ load_vulkan_addresses :: proc() {
 	}
 
 	vk.load_proc_addresses_instance(r_ctx.instance)
-
-	im_vk.LoadFunctions(proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-			return vk.GetInstanceProcAddr((cast(^vk.Instance)user_data)^, function_name)
-		}, &r_ctx.instance)
 }
 
 

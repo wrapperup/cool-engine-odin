@@ -9,7 +9,7 @@ GPUBuffer :: struct($T: typeid) {
 	buffer:     vk.Buffer,
 	allocation: vma.Allocation,
 	info:       vma.AllocationInfo,
-	ptr:    GPUPtr(T),
+	ptr:        GPUPtr(T),
 }
 
 // This is hopefully very common kinds of buffers
@@ -67,7 +67,10 @@ create_buffer :: proc(
 	}
 
 	new_buffer: GPUBuffer(T)
-	vk_check(vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info), loc)
+	vk_check(
+		vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info),
+		loc,
+	)
 
 	if .SHADER_DEVICE_ADDRESS in vk_usage_flags {
 		new_buffer.ptr.address = get_buffer_device_address(new_buffer)
@@ -84,7 +87,7 @@ create_buffer :: proc(
 	return new_buffer
 }
 
-destroy_buffer :: proc(allocated_buffer: ^GPUBuffer($T)) {
+destroy_buffer :: proc(allocated_buffer: GPUBuffer($T)) {
 	vma.DestroyBuffer(r_ctx.allocator, allocated_buffer.buffer, allocated_buffer.allocation)
 }
 
@@ -110,7 +113,7 @@ write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.DeviceSize
 
 	data := cast([^]u8)buffer.info.pMappedData
 
-    assert(data != nil, "Buffer is not mapped.")
+	assert(data != nil, "Buffer is not mapped.")
 
 	mem.copy(data[offset:], in_data, size)
 }
@@ -134,9 +137,12 @@ staging_write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.De
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
 	staging := create_buffer(u8, vk.DeviceSize(size_of(T)), .Staging)
+	defer destroy_buffer(staging)
+
 	write_buffer(&staging, in_data)
 
-	if cmd, ok := immediate_submit(); ok {
+    {
+        cmd := immediate_submit()
 		region := vk.BufferCopy {
 			dstOffset = offset,
 			srcOffset = 0,
@@ -145,29 +151,22 @@ staging_write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.De
 
 		vk.CmdCopyBuffer(cmd, staging.buffer, buffer.buffer, 1, &region)
 	}
-
-	destroy_buffer(&staging)
 }
 
 // Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
-staging_write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
+staging_write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset := 0, loc := #caller_location) {
 	size := size_of(T) * len(in_data)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer", loc)
 
 	staging := create_buffer(u8, size, .Staging)
+	defer destroy_buffer(staging)
+
 	write_buffer_slice(&staging, in_data)
 
-	if cmd, ok := immediate_submit(); ok {
-		region := vk.BufferCopy {
-			dstOffset = offset,
-			srcOffset = 0,
-			size      = vk.DeviceSize(size),
-		}
-
-		vk.CmdCopyBuffer(cmd, staging.buffer, buffer.buffer, 1, &region)
+	{
+        cmd := immediate_submit()
+        cmd_copy_buffer(cmd, &staging, buffer, len(in_data), offset)
 	}
-
-	destroy_buffer(&staging)
 }
 
 transition_buffer :: proc(

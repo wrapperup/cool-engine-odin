@@ -1,11 +1,11 @@
 package game
 
-import "core:sys/info"
-import "core:math"
-import "core:os"
-import "core:log"
 import "core:fmt"
+import "core:log"
+import "core:math"
 import "core:math/linalg"
+import "core:os"
+import "core:sys/info"
 import "core:time"
 
 import glfw "vendor:glfw"
@@ -14,33 +14,34 @@ import ma "vendor:miniaudio"
 import "deps:knit"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 import px "deps:physx-odin"
 
 import "gfx"
+import im_gfx "gfx/imgui_backend"
 
 //import lpp "deps:odin-livepp"
 ENABLE_LIVEPP :: false
+WITH_IMGUI :: false
 
 start_live_time := time.tick_now()
 
 game: ^Game
 
 main_game :: proc() {
-    reserved_threads := 4
-    worker_threads := math.max(info.cpu.physical_cores - reserved_threads, 1)
+	reserved_threads := 4
+	worker_threads := math.max(info.cpu.physical_cores - reserved_threads, 1)
 
-    knit.init(worker_threads)
-    log.info("Tasks initialized with", worker_threads, "threads")
+	knit.init(worker_threads)
+	log.info("Tasks initialized with", worker_threads, "threads")
 
-    if !load_generated_assets() {
-        fmt.eprintln("Failed to load assets!")
-    }
+	if !load_generated_assets() {
+		fmt.eprintln("Failed to load assets!")
+	}
 
 	when ENABLE_LIVEPP {
-        local_preferences := lpp.CreateDefaultLocalPreferences()
-        project_preferences := lpp.CreateDefaultProjectPreferences()
-        project_preferences.exceptionHandler.isEnabled = false
+		local_preferences := lpp.CreateDefaultLocalPreferences()
+		project_preferences := lpp.CreateDefaultProjectPreferences()
+		project_preferences.exceptionHandler.isEnabled = false
 
 		lpp_agent := lpp.CreateSynchronizedAgentWithPreferencesANSI(&local_preferences, "./deps/odin-livepp/LivePP", &project_preferences)
 
@@ -72,7 +73,7 @@ main_game :: proc() {
 	game.renderer = gfx.init({window = game.window, msaa_samples = ._4, enable_validation_layers = true, enable_logs = true})
 	if game.renderer == nil {
 		log.error("Graphics could not be initialized.")
-        return
+		return
 	}
 
 	// init_entity_system()
@@ -80,7 +81,9 @@ main_game :: proc() {
 	init_sound_system()
 	// init_asset_system()
 
-	configure_im()
+	when WITH_IMGUI {
+		configure_im()
+	}
 
 	g_physx_error_callback := px.create_error_callback(user_error_callback, nil)
 
@@ -212,7 +215,7 @@ main_game :: proc() {
 
 	game.frame_time_start = time.tick_now()
 
-    glfw.ShowWindow(window)
+	glfw.ShowWindow(window)
 
 	window_open := true
 	for window_open {
@@ -238,10 +241,11 @@ main_game :: proc() {
 
 		glfw.PollEvents()
 
-		if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
-			im_vk.NewFrame()
-			im_glfw.NewFrame()
-			im.NewFrame()
+		when WITH_IMGUI {
+			if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
+				im_glfw.NewFrame()
+				im.NewFrame()
+			}
 		}
 
 		simulate_input()
@@ -269,12 +273,14 @@ main_game :: proc() {
 		}
 
 		if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
-			update_imgui()
+			when WITH_IMGUI {
+				update_imgui()
+			}
 			draw()
 		}
 
 		if action_just_pressed(.Fullscreen) {
-			// 
+			//
 			game.window_state.is_fullscreen = !game.window_state.is_fullscreen
 
 			monitor := glfw.GetPrimaryMonitor()
@@ -303,17 +309,17 @@ main_game :: proc() {
 
 		free_all(context.temp_allocator)
 
-        when ENABLE_LIVEPP {
-            if lpp_agent.WantsReload(.SYNCHRONIZE_WITH_RELOAD) {
-                lpp_agent.Reload(.WAIT_UNTIL_CHANGES_ARE_APPLIED)
-            }
+		when ENABLE_LIVEPP {
+			if lpp_agent.WantsReload(.SYNCHRONIZE_WITH_RELOAD) {
+				lpp_agent.Reload(.WAIT_UNTIL_CHANGES_ARE_APPLIED)
+			}
 
-            if lpp_agent.WantsRestart() {
-                // The others don't seem to work. We would need to advance a frame to handle graceful termination,
-                // but this function doesn't return until the process is terminated.
-                lpp_agent.Restart(.INSTANT_TERMINATION, 0, nil)
-            }
-        }
+			if lpp_agent.WantsRestart() {
+				// The others don't seem to work. We would need to advance a frame to handle graceful termination,
+				// but this function doesn't return until the process is terminated.
+				lpp_agent.Restart(.INSTANT_TERMINATION, 0, nil)
+			}
+		}
 	}
 
 	free_all(context.temp_allocator)
@@ -326,9 +332,9 @@ main_game :: proc() {
 
 	renderer_shutdown()
 
-    when ENABLE_LIVEPP {
-        lpp.DestroySynchronizedAgent(&lpp_agent)
-    }
+	when ENABLE_LIVEPP {
+		lpp.DestroySynchronizedAgent(&lpp_agent)
+	}
 
-    knit.destroy()
+	knit.destroy()
 }

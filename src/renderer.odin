@@ -11,7 +11,10 @@ import "core:time"
 import sp "deps:odin-slang/slang"
 import vk "vendor:vulkan"
 
+import im "deps:odin-imgui"
+
 import "gfx"
+import im_gfx "gfx/imgui_backend"
 
 // TODO: Make this into proper assets?
 MaterialId :: u32
@@ -191,6 +194,10 @@ add_material :: proc(material: GPUMaterial) -> MaterialId {
 }
 
 init_game_renderer :: proc() {
+	when WITH_IMGUI {
+		im_gfx.init()
+	}
+
 	init_shadow_maps()
 	init_test_resources()
 	init_test_materials()
@@ -437,6 +444,8 @@ init_buffers :: proc() {
 	// comp_coeffs := process_sh_coefficients_from_equirectangular_file("assets/gen/test_equirectangular.ktx2")
 
 	sh_coeffs_buffer := gfx.create_buffer(Sh_Coefficients)
+	gfx.defer_destroy(&gfx.r_ctx.global_arena, sh_coeffs_buffer)
+
 	gfx.staging_write_buffer(&sh_coeffs_buffer, &sh_coeffs)
 
 	environment := &game.render_state.global_data.environment
@@ -607,14 +616,15 @@ draw :: proc() {
 	// 	}
 	// }
 
-	final_image: vk.Image
+	final_image: gfx.GPUImage
+
 	switch game.view_state {
 	case .SceneDepth:
 		gfx.transition_image(cmd, &gfx.r_ctx.depth_image, .TRANSFER_SRC_OPTIMAL)
-		final_image = gfx.r_ctx.depth_image.image
+		final_image = gfx.r_ctx.depth_image
 	case .ShadowDepth:
 		gfx.transition_image(cmd, &game.render_state.shadow_depth_image, .TRANSFER_SRC_OPTIMAL)
-		final_image = game.render_state.shadow_depth_image.image
+		final_image = game.render_state.shadow_depth_image
 	case .SceneColor:
 		if gfx.msaa_enabled() {
 			// Resolve MSAA
@@ -648,16 +658,23 @@ draw :: proc() {
 
 			// Prepare swapchain image
 			gfx.transition_image(cmd, &gfx.r_ctx.resolve_image, .TRANSFER_SRC_OPTIMAL)
-			final_image = gfx.r_ctx.resolve_image.image
+			final_image = gfx.r_ctx.resolve_image
 		} else {
 			post_processing_pass(cmd)
 			// Prepare swapchain image
 			gfx.transition_image(cmd, &gfx.r_ctx.draw_image, .TRANSFER_SRC_OPTIMAL)
-			final_image = gfx.r_ctx.draw_image.image
+			final_image = gfx.r_ctx.draw_image
 		}
 	}
 
-	gfx.copy_image_to_swapchain(cmd, final_image, gfx.r_ctx.draw_extent)
+	gfx.copy_image_to_swapchain(cmd, final_image.image, gfx.r_ctx.draw_extent)
+
+	when WITH_IMGUI {
+		im.Render()
+		im_gfx.render_draw_data(im.GetDrawData(), cmd, &final_image)
+
+        assert(final_image.image_view != 0)
+	}
 
 	swapchain_resized := gfx.submit(cmd)
 
@@ -1030,5 +1047,7 @@ update_buffers :: proc() {
 }
 
 renderer_shutdown :: proc() {
+	// im_gfx.shutdown()
+	// gfx.shutdown()
 	// destroy_shaders()
 }

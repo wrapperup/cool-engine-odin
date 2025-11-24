@@ -94,7 +94,8 @@ process_env_to_file :: proc(in_filename: cstring, out_filename: cstring, out_wid
 	pass := impl.create_prefiltered_cubemap_pipeline(in_filename, out_width, out_height)
 	assert(pass.width > 0)
 	assert(pass.height > 0)
-	if cmd, ok := gfx.immediate_submit(); ok {
+	{
+        cmd := gfx.immediate_submit()
 		gfx.transition_image(cmd, pass.prefilter_image.image, .UNDEFINED, .GENERAL)
 		impl.run_prefilter_cubemap_pass(&pass, cmd, samples)
 

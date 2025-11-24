@@ -14,7 +14,6 @@ import glfw "vendor:glfw"
 
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 
 import "../src/gfx"
 
@@ -42,10 +41,10 @@ main :: proc() {
 
     arena := &gfx.r_ctx.global_arena
 
-	vertex_buffer := gfx.create_buffer([3]Vertex, len(vertices), {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
+	vertex_buffer := gfx.create_buffer([3]Vertex, len(vertices), .Storage)
     gfx.defer_destroy(arena, vertex_buffer)
 
-	index_buffer := gfx.create_buffer([3]u32, len(indices), {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
+	index_buffer := gfx.create_buffer([3]u32, len(indices), .Index)
     gfx.defer_destroy(arena, index_buffer)
 
 	gfx.staging_write_buffer_slice(&vertex_buffer, vertices[:])
@@ -75,11 +74,6 @@ main :: proc() {
 
 	for !glfw.WindowShouldClose(window) {
         glfw.PollEvents()
-
-        // TODO: gfx shouldn't depend on imgui.
-        im_vk.NewFrame()
-        im_glfw.NewFrame()
-        im.NewFrame()
 
 		cmd := gfx.begin_command_buffer()
 

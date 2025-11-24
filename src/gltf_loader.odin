@@ -42,7 +42,8 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 	gfx.write_buffer_slice(&staging, mesh.vertices)
 	gfx.write_buffer_slice(&staging, mesh.indices, vertex_buffer_size)
 
-	if cmd, ok := gfx.immediate_submit(); ok {
+    {
+        cmd := gfx.immediate_submit()
 		vertex_copy := vk.BufferCopy {
 			dstOffset = 0,
 			srcOffset = 0,
@@ -59,7 +60,7 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 		vk.CmdCopyBuffer(cmd, staging.buffer, buffers.index_buffer.buffer, 1, &index_copy)
 	}
 
-	gfx.destroy_buffer(&staging)
+	gfx.destroy_buffer(staging)
 }
 
 // Allocates two slices if successful. Make sure to free them when you're done.

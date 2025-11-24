@@ -417,13 +417,14 @@ load_image_from_ktx_texture :: proc(
 		}
 	}
 
-	if cmd, ok := immediate_submit(); ok {
+	{
+        cmd := immediate_submit()
 		transition_image(cmd, &image, .TRANSFER_DST_OPTIMAL)
 		vk.CmdCopyBufferToImage(cmd, staging.buffer, image.image, .TRANSFER_DST_OPTIMAL, u32(len(copy_regions)), raw_data(copy_regions))
 		transition_image(cmd, &image, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
-	destroy_buffer(&staging)
+	destroy_buffer(staging)
 
 	defer_destroy(&r_ctx.global_arena, image.image_view)
 	defer_destroy(&r_ctx.global_arena, image.image, image.allocation)
@@ -452,7 +453,8 @@ staging_write_image :: proc(gpu_image: ^GPUImage, in_data: ^$T, offset: vk.Devic
 	staging := create_buffer(u8, vk.DeviceSize(size_of(T)), {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer(&staging, in_data)
 
-	if cmd, ok := immediate_submit(); ok {
+    {
+        cmd := immediate_submit()
 		transition_image(cmd, gpu_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 		copy_region := vk.BufferImageCopy {
@@ -468,7 +470,7 @@ staging_write_image :: proc(gpu_image: ^GPUImage, in_data: ^$T, offset: vk.Devic
 		transition_image(cmd, gpu_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
-	destroy_buffer(&staging)
+	destroy_buffer(staging)
 }
 
 // Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
@@ -482,7 +484,8 @@ staging_write_image_slice :: proc(gpu_image: ^GPUImage, in_data: []$T, offset: v
 	staging := create_buffer(u8, size, {.TRANSFER_SRC}, .CPU_ONLY)
 	write_buffer_slice(&staging, in_data)
 
-	if cmd, ok := immediate_submit(); ok {
+    {
+        cmd := immediate_submit()
 		transition_image(cmd, gpu_image.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
 
 		copy_region := vk.BufferImageCopy {
@@ -498,7 +501,7 @@ staging_write_image_slice :: proc(gpu_image: ^GPUImage, in_data: []$T, offset: v
 		transition_image(cmd, gpu_image.image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
 	}
 
-	destroy_buffer(&staging)
+	destroy_buffer(staging)
 }
 
 write_buffer_to_ktx_file :: proc(

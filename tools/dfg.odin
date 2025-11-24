@@ -86,8 +86,9 @@ calculate_dfg_to_file :: proc(filename: cstring, width, height: u32) {
 
 	fmt.println("Generating DFG image...")
 	pass := impl.create_dfg_generate_pipeline(width, height)
-	if cmd, ok := gfx.immediate_submit(); ok {
-		gfx.transition_image(cmd, pass.dfg_image.image, .UNDEFINED, .GENERAL)
+    {
+        cmd := gfx.immediate_submit()
+		gfx.transition_image(cmd, pass.dfg_image, .GENERAL)
 		impl.run_dfg_generate_pass(&pass, cmd)
 
 		region := vk.BufferImageCopy {
