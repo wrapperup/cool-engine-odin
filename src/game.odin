@@ -21,7 +21,7 @@ import im_gfx "gfx/imgui_backend"
 
 //import lpp "deps:odin-livepp"
 ENABLE_LIVEPP :: false
-WITH_IMGUI :: false
+WITH_IMGUI :: true
 
 start_live_time := time.tick_now()
 
@@ -66,6 +66,7 @@ main_game :: proc() {
 
 	game = new(Game)
 	game.config = default_game_config()
+    game.show_imgui = WITH_IMGUI
 	glfw.Init()
 
 	game.window = window
@@ -82,6 +83,8 @@ main_game :: proc() {
 	// init_asset_system()
 
 	when WITH_IMGUI {
+        im.CreateContext()
+        im_glfw.InitForVulkan(window, true)
 		configure_im()
 	}
 

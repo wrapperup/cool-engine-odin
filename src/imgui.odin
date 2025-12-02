@@ -154,6 +154,12 @@ configure_im :: proc() {
 update_imgui :: proc() {
 	scope_stat_time(.Imgui)
 
+	if action_just_pressed(.ShowDebug) {
+		game.show_imgui = !game.show_imgui
+	}
+
+	if !game.show_imgui do return
+
 	view_projection := get_current_projection_view_matrix()
 
 	bl := im.GetBackgroundDrawList()
@@ -169,12 +175,6 @@ update_imgui :: proc() {
 
 		im.DrawList_AddLine(bl, line0, line1, line.color0, 1.0)
 	}
-
-	if action_just_pressed(.ShowDebug) {
-		game.show_imgui = !game.show_imgui
-	}
-
-	if !game.show_imgui do return
 
 	editor_draw_imgui()
 

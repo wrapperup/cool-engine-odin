@@ -178,8 +178,8 @@ vk_aspect_of_format :: proc(format: vk.Format) -> vk.ImageAspectFlags {
 }
 
 create_sampler :: proc(
-	filter: vk.Filter,
-	address_mode: vk.SamplerAddressMode,
+	filter: vk.Filter = .LINEAR,
+	address_mode: vk.SamplerAddressMode = .CLAMP_TO_EDGE,
 	compare_op: vk.CompareOp = .NEVER,
 	border_color: vk.BorderColor = .FLOAT_TRANSPARENT_BLACK,
 	max_lod: f32 = 1.0,

@@ -80,16 +80,10 @@ FragmentOutput fragment_main(FragmentInput in) {
 
     CombinedImageId image = decode_combined_image_id(pc.image_id);
 
-    if (image.rw_image) {
-        RWTexture2D tex = RWImages[image.image_index];
+    Texture2D tex = Images[image.image_index];
+    SamplerState sampler = Samplers[image.sampler_index].as<SamplerState>();
 
-        texture_col = tex.Load(int2(int(in.uv.x), int(in.uv.y)));
-    } else {
-        Texture2D tex = Images[image.image_index];
-        SamplerState sampler = Samplers[image.sampler_index].as<SamplerState>();
-
-        texture_col = tex.Sample(sampler, in.uv);
-    }
+    texture_col = tex.Sample(sampler, in.uv);
 
     float4 col = in.col * texture_col;
 

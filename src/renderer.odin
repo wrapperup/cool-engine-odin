@@ -667,14 +667,14 @@ draw :: proc() {
 		}
 	}
 
-	gfx.copy_image_to_swapchain(cmd, final_image.image, gfx.r_ctx.draw_extent)
-
 	when WITH_IMGUI {
 		im.Render()
 		im_gfx.render_draw_data(im.GetDrawData(), cmd, &final_image)
 
         assert(final_image.image_view != 0)
 	}
+
+	gfx.copy_image_to_swapchain(cmd, final_image.image, gfx.r_ctx.draw_extent)
 
 	swapchain_resized := gfx.submit(cmd)
 

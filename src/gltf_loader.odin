@@ -31,8 +31,8 @@ create_mesh_buffers :: proc(mesh: Mesh, loc := #caller_location) -> GPUMeshBuffe
 }
 
 staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := #caller_location) {
-	vertex_buffer_size := vk.DeviceSize(size_of(Vertex) * len(mesh.vertices))
-	index_buffer_size := vk.DeviceSize(size_of(u32) * len(mesh.indices))
+	vertex_buffer_size := size_of(Vertex) * len(mesh.vertices)
+	index_buffer_size := size_of(u32) * len(mesh.indices)
 
 	assert(buffers.index_count == u32(len(mesh.indices)))
 	assert(buffers.vertex_count == u32(len(mesh.vertices)))
@@ -44,20 +44,8 @@ staging_write_mesh_buffers :: proc(buffers: ^GPUMeshBuffers, mesh: Mesh, loc := 
 
     {
         cmd := gfx.immediate_submit()
-		vertex_copy := vk.BufferCopy {
-			dstOffset = 0,
-			srcOffset = 0,
-			size      = vertex_buffer_size,
-		}
-
-		index_copy := vk.BufferCopy {
-			dstOffset = 0,
-			srcOffset = vertex_buffer_size,
-			size      = index_buffer_size,
-		}
-
-		vk.CmdCopyBuffer(cmd, staging.buffer, buffers.vertex_buffer.buffer, 1, &vertex_copy)
-		vk.CmdCopyBuffer(cmd, staging.buffer, buffers.index_buffer.buffer, 1, &index_copy)
+        gfx.cmd_copy_buffer(cmd, src_buffer = &staging, dst_buffer = &buffers.vertex_buffer, size = vertex_buffer_size)
+        gfx.cmd_copy_buffer(cmd, src_buffer = &staging, dst_buffer = &buffers.index_buffer, size = index_buffer_size, src_offset = vertex_buffer_size)
 	}
 
 	gfx.destroy_buffer(staging)

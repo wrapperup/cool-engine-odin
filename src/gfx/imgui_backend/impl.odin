@@ -20,7 +20,7 @@ PushConstants :: struct {
 	vbuffer:     gfx.GPUPtr(im.DrawVert),
 	scale:       [2]f32,
 	translation: [2]f32,
-	image_id:    u32,
+	image_id:    gfx.CombinedImageId,
 }
 
 init :: proc() -> bool {
@@ -41,8 +41,8 @@ init :: proc() -> bool {
 		input_topology = .TRIANGLE_LIST,
 		polygon_mode = .FILL,
 		front_face = .COUNTER_CLOCKWISE,
-		push_constants = PushConstants,
 		blend_mode = .Alpha,
+        push_constants = PushConstants,
 	)
 
 	pixels: ^u8
@@ -55,6 +55,30 @@ init :: proc() -> bool {
 	// bindless first API?
 	font_sheet_image := gfx.create_image(.R8G8B8A8_UNORM, {u32(width), u32(height), 1}, {.SAMPLED, .TRANSFER_DST})
 	backend_data.font_sheet = gfx.add_image(font_sheet_image)
+
+    font_sheet_size := width * height * 4 * size_of(u8)
+    pixels_slice := (cast([^]u8)pixels)[:font_sheet_size]
+
+    font_staging_buffer := gfx.create_buffer(u8, font_sheet_size, .Staging, name = "imgui_impl_font_sheet_staging_buffer")
+    gfx.write_buffer_slice(&font_staging_buffer, pixels_slice)
+
+    {
+        cmd := gfx.immediate_submit()
+        gfx.transition_image(cmd, &font_sheet_image, .TRANSFER_DST_OPTIMAL)
+        gfx.cmd_copy_buffer_to_image(cmd, &font_staging_buffer, &font_sheet_image, {int(width), int(height), 1})
+        gfx.transition_image(cmd, &font_sheet_image, .GENERAL)
+    }
+
+    font_sampler := gfx.create_sampler()
+    backend_data.font_sampler = gfx.add_sampler(font_sampler)
+
+    font_combined_id := gfx.CombinedImageId {
+        rw_image = false,
+        image_id = backend_data.font_sheet,
+        sampler_id = backend_data.font_sampler,
+    }
+
+    im.FontAtlas_SetTexID(io.Fonts, transmute(rawptr)font_combined_id)
 
 	return true
 }
@@ -80,26 +104,26 @@ render_draw_data :: proc(draw_data: ^im.DrawData, cmd: vk.CommandBuffer, image: 
 			if bd.vbuffer.buffer != 0 {
 				gfx.destroy_buffer(bd.vbuffer)
 			}
-			bd.vbuffer = gfx.create_buffer(im.DrawVert, draw_data.TotalVtxCount, name = "imgui_impl_gfx_vertex_buffer")
+			bd.vbuffer = gfx.create_buffer(im.DrawVert, new_index_len, name = "imgui_impl_gfx_vertex_buffer")
 
             assert(bd.vbuffer.info.size != 0)
 		}
 
-		if bd.ibuffer.info.size < new_vertex_size {
+		if bd.ibuffer.info.size < new_index_size {
 			if bd.ibuffer.buffer != 0 {
 				gfx.destroy_buffer(bd.ibuffer)
 			}
-			bd.ibuffer = gfx.create_buffer(im.DrawIdx, draw_data.TotalIdxCount, .Index, name = "imgui_impl_gfx_index_buffer")
+			bd.ibuffer = gfx.create_buffer(im.DrawIdx, new_index_len, .Index, name = "imgui_impl_gfx_index_buffer")
 
             assert(bd.ibuffer.info.size != 0)
 		}
 
         arena := gfx.frame_arena()
 
-		vstaging := gfx.create_buffer(im.DrawVert, new_vertex_size, .Staging, name = "imgui_impl_gfx_vertex_staging_buffer")
+		vstaging := gfx.create_buffer(im.DrawVert, new_vertex_len, .Staging, name = "imgui_impl_gfx_vertex_staging_buffer")
 		gfx.defer_destroy(arena, vstaging)
 
-		istaging := gfx.create_buffer(im.DrawIdx, new_index_size, .Staging, name = "imgui_impl_gfx_index_staging_buffer")
+		istaging := gfx.create_buffer(im.DrawIdx, new_index_len, .Staging, name = "imgui_impl_gfx_index_staging_buffer")
 		gfx.defer_destroy(arena, istaging)
 
 		vtx_dst := cast(^im.DrawVert)vstaging.info.pMappedData
@@ -182,7 +206,7 @@ render_draw_data :: proc(draw_data: ^im.DrawData, cmd: vk.CommandBuffer, image: 
 					vbuffer = bd.vbuffer.ptr,
 					translation = translation,
 					scale = scale,
-					image_id = cast(u32)(transmute(u64)pcmd.TextureId),
+					image_id = transmute(gfx.CombinedImageId)pcmd.TextureId,
 				},
 			)
 

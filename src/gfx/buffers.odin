@@ -107,7 +107,7 @@ get_buffer_device_address :: proc(buffer: GPUBuffer($T)) -> vk.DeviceAddress {
 }
 
 // Writes to the buffer with the input data at offset.
-write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
+write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset := 0, loc := #caller_location) {
 	size := size_of(T)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
@@ -119,7 +119,7 @@ write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.DeviceSize
 }
 
 // Writes to the buffer with the input slice at offset.
-write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
+write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset := 0, loc := #caller_location) {
 	size := size_of(T) * len(in_data)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the slice and offset is larger than the buffer", loc)
 
@@ -132,7 +132,7 @@ write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset: vk.Dev
 }
 
 // Uploads the data via a staging buffer. This is useful if your buffer is GPU only.
-staging_write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.DeviceSize = 0, loc := #caller_location) {
+staging_write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset := 0, loc := #caller_location) {
 	size := size_of(T)
 	assert(buffer.info.size >= vk.DeviceSize(u64(size) + u64(offset)), "The size of the data and offset is larger than the buffer", loc)
 
@@ -141,15 +141,9 @@ staging_write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.De
 
 	write_buffer(&staging, in_data)
 
-    {
+	{
         cmd := immediate_submit()
-		region := vk.BufferCopy {
-			dstOffset = offset,
-			srcOffset = 0,
-			size      = vk.DeviceSize(size),
-		}
-
-		vk.CmdCopyBuffer(cmd, staging.buffer, buffer.buffer, 1, &region)
+        cmd_copy_buffer(cmd, &staging, buffer, size, offset)
 	}
 }
 
@@ -165,7 +159,7 @@ staging_write_buffer_slice :: proc(buffer: ^GPUBuffer($Z), in_data: []$T, offset
 
 	{
         cmd := immediate_submit()
-        cmd_copy_buffer(cmd, &staging, buffer, len(in_data), offset)
+        cmd_copy_buffer(cmd, &staging, buffer, size, offset)
 	}
 }
 
