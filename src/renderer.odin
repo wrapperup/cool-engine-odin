@@ -5,7 +5,7 @@ import "core:image"
 import "core:log"
 import "core:math"
 import "core:math/linalg"
-import "core:os/os2"
+import "core:os"
 import "core:time"
 
 import sp "deps:odin-slang/slang"

@@ -1,236 +1,222 @@
 package game
 
-import "core:strconv"
 import "base:intrinsics"
+import "base:runtime"
+import "core:strconv"
 
 import "core:fmt"
 import "core:odin/ast"
 import "core:odin/parser"
 import "core:odin/tokenizer"
 import "core:os"
-import "core:os/os2"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
 
 Type_Mapping :: struct {
-    from: string,
-    to: string,
+	from: string,
+	to:   string,
 }
 
 type_map := []Type_Mapping {
-    // { "f32", "float" },
-    // { "f64", "double" },
-    // { "i32", "int" },
-    // { "u32", "uint" },
-    // { "u8" , "uint8_t" },
+	// { "f32", "float" },
+	// { "f64", "double" },
+	// { "i32", "int" },
+	// { "u32", "uint" },
+	// { "u8" , "uint8_t" },
 }
 
 templated_type_map := []string {
-    "Image1D_",
-    "Image2D_",
-    "Image3D_",
-    "ImageCube_",
-
-    "Image1DArray_",
-    "Image2DArray_",
-    "Image3DArray_",
-    "ImageCubeArray_",
-
-    "RWImage1D_",
-    "RWImage2D_",
-    "RWImage3D_",
+	"Image1D_",
+	"Image2D_",
+	"Image3D_",
+	"ImageCube_",
+	"Image1DArray_",
+	"Image2DArray_",
+	"Image3DArray_",
+	"ImageCubeArray_",
+	"RWImage1D_",
+	"RWImage2D_",
+	"RWImage3D_",
 }
 
 banned_types := []Type_Mapping {
-    { "ImageId", "Tag the struct with an `Image*` type." },
-    { "SamplerId", "Tag the struct with `Sampler` or `SamplerComparison`." },
+	{"ImageId", "Tag the struct with an `Image*` type."},
+	{"SamplerId", "Tag the struct with `Sampler` or `SamplerComparison`."},
 }
 
 error_reported := false
 
 report_warning :: proc(message: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
-    report(message, "\x1b[31mWarning:\x1b[0m", node, file, suggestion)
+	report(message, "\x1b[31mWarning:\x1b[0m", node, file, suggestion)
 }
 
 report_error :: proc(message: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
-    report(message, "\x1b[31mError:\x1b[0m", node, file, suggestion)
-    error_reported = true
+	report(message, "\x1b[31mError:\x1b[0m", node, file, suggestion)
+	error_reported = true
 }
 
 report :: proc(message: string, level: string, node: ^ast.Node, file: ^ast.File, suggestion := "") {
-    fmt.eprintln("\x1b[1m", node.pos.file, "(", node.pos.line, ":", node.pos.column, ")\x1b[22m ", level, " ", message, sep = "")
+	fmt.eprintln("\x1b[1m", node.pos.file, "(", node.pos.line, ":", node.pos.column, ")\x1b[22m ", level, " ", message, sep = "")
 
-    fmt.eprint("        ")
-    file_src := file.src
-    i := 0
-    for line in strings.split_lines_iterator(&file_src) {
-        if i == node.pos.line-1 {
-            fmt.eprintln(strings.trim_space(line))
-            break
-        }
-        i += 1
-    }
+	fmt.eprint("        ")
+	file_src := file.src
+	i := 0
+	for line in strings.split_lines_iterator(&file_src) {
+		if i == node.pos.line - 1 {
+			fmt.eprintln(strings.trim_space(line))
+			break
+		}
+		i += 1
+	}
 
-    fmt.eprint("        ")
-    for i in 2..<node.pos.column {
-        fmt.eprint(" ")
-    }
-    fmt.eprint("^")
-    if node.end.column != node.pos.column {
-        for i in 2..<(node.end.column - node.pos.column) {
-            fmt.eprint("~")
-        }
-        fmt.eprint("^")
-    }
-    fmt.eprintln("")
-    if suggestion != "" {
-        fmt.eprint("        ")
-        fmt.eprintln("Suggestion:", suggestion)
-    }
+	fmt.eprint("        ")
+	for i in 2 ..< node.pos.column {
+		fmt.eprint(" ")
+	}
+	fmt.eprint("^")
+	if node.end.column != node.pos.column {
+		for i in 2 ..< (node.end.column - node.pos.column) {
+			fmt.eprint("~")
+		}
+		fmt.eprint("^")
+	}
+	fmt.eprintln("")
+	if suggestion != "" {
+		fmt.eprint("        ")
+		fmt.eprintln("Suggestion:", suggestion)
+	}
 }
 
 map_type_to_slang :: proc(ty: string, node: ^ast.Node, file: ^ast.File) -> string {
-    for mapping in type_map {
-        if mapping.from == ty {
-            return mapping.to
-        }
-    }
+	for mapping in type_map {
+		if mapping.from == ty {
+			return mapping.to
+		}
+	}
 
-    for name in templated_type_map {
-        if strings.starts_with(ty, name) {
-            start := name[:len(name)-1]
-            rest := ty[len(name):]
-            return fmt.tprint(start, "<", rest, ">", sep = "");
-        }
-    }
+	for name in templated_type_map {
+		if strings.starts_with(ty, name) {
+			start := name[:len(name) - 1]
+			rest := ty[len(name):]
+			return fmt.tprint(start, "<", rest, ">", sep = "")
+		}
+	}
 
-    return strip_gpu_name(ty);
+	return strip_gpu_name(ty)
 }
 
 strip_gpu_name :: proc(s: string) -> string {
-    if s == "GPUPtr" {
-        return s;
-    }
+	if s == "GPUPtr" {
+		return s
+	}
 
-    if strings.has_prefix(s, "GPU_") {
-        return s[4:]
-    } else if strings.has_prefix(s, "GPU") {
-        return s[3:]
-    }
+	if strings.has_prefix(s, "GPU_") {
+		return s[4:]
+	} else if strings.has_prefix(s, "GPU") {
+		return s[3:]
+	}
 
-    return s;
+	return s
 }
 
-collect_files :: proc(path: string) -> (ast_files: [dynamic]^ast.File, success: bool) {
+collect_files :: proc(path: string, allocator: runtime.Allocator) -> (ast_files: [dynamic]^ast.File, success: bool) {
 	NO_POS :: tokenizer.Pos{}
 
-	pkg_path, pkg_path_ok := filepath.abs(path)
-	assert(pkg_path_ok)
+	pkg_path, pkg_path_ok := filepath.abs(path, allocator)
+	assert(pkg_path_ok != nil)
 
 	files: [dynamic]string
 	fullpaths: [dynamic]string
 
-	FileParseContext :: struct {
-		files:     ^[dynamic]string,
-		ast_files: ^[dynamic]^ast.File,
-		fullpaths: ^[dynamic]string,
-	}
+	walker := filepath.walker_create(pkg_path)
+	defer os.walker_destroy(&walker)
 
-	parse_ctx := FileParseContext {
-		files     = &files,
-		fullpaths = &fullpaths,
-		ast_files = &ast_files,
-	}
+	// TODO: This probably needs cleanup, I just made it work with os2->os breaking changes.
 
-	filepath.walk(pkg_path, proc(info: os.File_Info, in_err: os.Error, user_data: rawptr) -> (err: os.Error, skip_dir: bool) {
-			if info.is_dir do return
-            if filepath.ext(info.fullpath) != ".odin" do return
+	for info in os.walker_walk(&walker) {
+		if filepath.ext(info.fullpath) != ".odin" do return
 
-			assert(user_data != nil)
+		fullpath := strings.clone(info.fullpath)
 
-			ctx := cast(^FileParseContext)user_data
-
-			fullpath := strings.clone(info.fullpath)
-
-            base := filepath.base(fullpath)
-            if base == "generated.odin" {
-                return
-            }
-
-			src, ok := os.read_entire_file(fullpath)
-			if !ok {
-				delete(fullpath)
-				fmt.eprintln("Couldn't read file:", fullpath)
-				assert(false, "YAY")
-			}
-
-			if strings.trim_space(string(src)) == "" {
-				delete(fullpath)
-				delete(src)
-				return
-			}
-
-			append(ctx.fullpaths, string(fullpath))
-			append(ctx.files, string(src))
+		base := filepath.base(fullpath)
+		if base == "generated.odin" {
 			return
-		}, &parse_ctx)
+		}
+
+		src, err := os.read_entire_file(fullpath, allocator)
+		if err != nil {
+			delete(fullpath)
+			fmt.eprintln("Couldn't read file:", fullpath)
+			assert(false, "YAY")
+		}
+
+		if strings.trim_space(string(src)) == "" {
+			delete(fullpath)
+			delete(src)
+			return
+		}
+
+		append(&fullpaths, string(fullpath))
+		append(&files, string(src))
+		return
+	}
 
 	resize(&ast_files, len(files))
 
-    p := parser.default_parser()
+	p := parser.default_parser()
 
-    for i in 0..<len(files) {
-        src_file := files[i]
-        fullpath := fullpaths[i]
+	for i in 0 ..< len(files) {
+		src_file := files[i]
+		fullpath := fullpaths[i]
 
-        file := ast.new(ast.File, NO_POS, NO_POS)
-        file.src = string(src_file)
-        file.fullpath = fullpath
+		file := ast.new(ast.File, NO_POS, NO_POS)
+		file.src = string(src_file)
+		file.fullpath = fullpath
 
-        assert(parser.parse_file(&p, file))
+		assert(parser.parse_file(&p, file))
 
-        ast_files[i] = file
-    }
+		ast_files[i] = file
+	}
 
 	success = true
 	return
 }
 
 get_type_string :: proc(expr: ^ast.Expr, file: ^ast.File) -> (type_name: string, array_name: string) {
-    builder: strings.Builder
-    arr_builder: strings.Builder
+	builder: strings.Builder
+	arr_builder: strings.Builder
 
-    node := expr.derived
+	node := expr.derived
 
 	#partial switch ty in node {
 	case ^ast.Selector_Expr:
-        return get_type_string(ty.field, file)
+		return get_type_string(ty.field, file)
 	case ^ast.Ident:
-        return map_type_to_slang(ty.name, &ty.node, file), ""
+		return map_type_to_slang(ty.name, &ty.node, file), ""
 	case ^ast.Call_Expr:
-        if len(ty.args) == 1 {
-            ptr_name: string
-            ptr_name, _ = get_type_string(ty.expr, file)
+		if len(ty.args) == 1 {
+			ptr_name: string
+			ptr_name, _ = get_type_string(ty.expr, file)
 
-            if ptr_name == "GPUPtr" {
-                inner_name: string
-                inner_name, array_name = get_type_string(ty.args[0], file)
-                fmt.sbprint(&builder, inner_name, "*", sep="")
-                break;
-            }
-        }
-    case ^ast.Array_Type:
-        assert(ty.len != nil, "Arrays must be fixed length.")
+			if ptr_name == "GPUPtr" {
+				inner_name: string
+				inner_name, array_name = get_type_string(ty.args[0], file)
+				fmt.sbprint(&builder, inner_name, "*", sep = "")
+				break
+			}
+		}
+	case ^ast.Array_Type:
+		assert(ty.len != nil, "Arrays must be fixed length.")
 
-        lit, ok := ty.len.derived_expr.(^ast.Basic_Lit)
-        assert(ok, "Array length must be positive.")
-        
-        len_string := lit.tok.text
+		lit, ok := ty.len.derived_expr.(^ast.Basic_Lit)
+		assert(ok, "Array length must be positive.")
 
-        inner_type_name, inner_array_name := get_type_string(ty.elem, file)
-        fmt.sbprint(&builder, inner_type_name)
-        fmt.sbprint(&arr_builder, inner_array_name, "[", len_string, "]", sep="")
+		len_string := lit.tok.text
+
+		inner_type_name, inner_array_name := get_type_string(ty.elem, file)
+		fmt.sbprint(&builder, inner_type_name)
+		fmt.sbprint(&arr_builder, inner_array_name, "[", len_string, "]", sep = "")
 	case:
 		assert(false, "Type is not supported.")
 	}
@@ -242,12 +228,12 @@ generate_shader_bindings :: proc(files: []^ast.File) {
 	builder: strings.Builder
 	strings.builder_init(&builder)
 
-    strings.write_string(&builder, "//\n")
-    strings.write_string(&builder, "// This is a generated file, do not modify. See src/meta.odin\n")
-    strings.write_string(&builder, "//")
+	strings.write_string(&builder, "//\n")
+	strings.write_string(&builder, "// This is a generated file, do not modify. See src/meta.odin\n")
+	strings.write_string(&builder, "//")
 
 	for file in files {
-        printed_header_once := false
+		printed_header_once := false
 		for decl in file.decls {
 			value, ok := decl.derived_stmt.(^ast.Value_Decl)
 			if !ok do continue
@@ -267,185 +253,185 @@ generate_shader_bindings :: proc(files: []^ast.File) {
 			if !found do continue
 
 			if len(value.values) != 1 {
-                report_error("Declaration has multiple values. This is not supported with @shader_shared.", value, file)
-                continue
-            }
+				report_error("Declaration has multiple values. This is not supported with @shader_shared.", value, file)
+				continue
+			}
 			if len(value.names) != 1 {
-                report_error("Declaration has names. This is not supported with @shader_shared.", value, file)
-                continue
-            }
+				report_error("Declaration has names. This is not supported with @shader_shared.", value, file)
+				continue
+			}
 
 			ident, nok := value.names[0].derived.(^ast.Ident)
 			if !nok {
-                report_error("Declaration name must be an identifier.", value.names[0], file)
-                continue
-            }
+				report_error("Declaration name must be an identifier.", value.names[0], file)
+				continue
+			}
 
-            name := ident.name
+			name := ident.name
 
-            if !printed_header_once {
-                strings.write_string(&builder, "\n\n")
-                strings.write_string(&builder, "//\n")
-                strings.write_string(&builder, "// Generated from ")
-                strings.write_string(&builder, file.fullpath)
-                strings.write_string(&builder, "\n")
-                strings.write_string(&builder, "//\n")
-                printed_header_once = true
-            }
+			if !printed_header_once {
+				strings.write_string(&builder, "\n\n")
+				strings.write_string(&builder, "//\n")
+				strings.write_string(&builder, "// Generated from ")
+				strings.write_string(&builder, file.fullpath)
+				strings.write_string(&builder, "\n")
+				strings.write_string(&builder, "//\n")
+				printed_header_once = true
+			}
 
-            #partial switch expr in value.values[0].derived_expr {
-            case ^ast.Struct_Type:
-                generate_bind_struct(&builder, name, expr, file)
-            case ^ast.Basic_Lit:
-                if value.type != nil {
-                    report_warning("Shader shared define will ignore the type.", value, file)
-                }
-                generate_bind_lit(&builder, name, expr, file)
-            }
+			#partial switch expr in value.values[0].derived_expr {
+			case ^ast.Struct_Type:
+				generate_bind_struct(&builder, name, expr, file)
+			case ^ast.Basic_Lit:
+				if value.type != nil {
+					report_warning("Shader shared define will ignore the type.", value, file)
+				}
+				generate_bind_lit(&builder, name, expr, file)
+			}
 		}
 	}
 
-    str := strings.to_string(builder)
-    str = strings.trim(str, "\n")
+	str := strings.to_string(builder)
+	str = strings.trim(str, "\n")
 
-    if !error_reported {
-        err_wef := os2.write_entire_file("shaders/generated.slang", transmute([]u8)str)
-        assert(err_wef == nil)
-    }
+	if !error_reported {
+		err_wef := os.write_entire_file("shaders/generated.slang", transmute([]u8)str)
+		assert(err_wef == nil)
+	}
 }
 generate_bind_lit :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Basic_Lit, src_file: ^ast.File) {
-    fmt.sbprintln(builder, "#define", name, expr.tok.text)
+	fmt.sbprintln(builder, "#define", name, expr.tok.text)
 }
 
 generate_bind_struct :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Struct_Type, src_file: ^ast.File) {
-    strings.write_string(builder, "struct ")
-    strings.write_string(builder, strip_gpu_name(name))
+	strings.write_string(builder, "struct ")
+	strings.write_string(builder, strip_gpu_name(name))
 
-    if expr.max_field_align != nil {
-        text := ""
+	if expr.max_field_align != nil {
+		text := ""
 
-        #partial switch e in expr.max_field_align.derived {
-        case ^ast.Basic_Lit: 
-            text = e.tok.text
-        case ^ast.Paren_Expr:
-            text = e.expr.derived.(^ast.Basic_Lit).tok.text
-        case: unreachable()
-        }
+		#partial switch e in expr.max_field_align.derived {
+		case ^ast.Basic_Lit:
+			text = e.tok.text
+		case ^ast.Paren_Expr:
+			text = e.expr.derived.(^ast.Basic_Lit).tok.text
+		case:
+			unreachable()
+		}
 
-        max_field_align, ok := strconv.parse_int(text)
-        if max_field_align > 16 || !ok {
-            report_error("Struct must have a max field align of 16.", expr, src_file)
-        }
-    } else {
-            report_error("Struct must have a max field align of 16.", expr, src_file, "Add #max_field_align(16)")
-    }
+		max_field_align, ok := strconv.parse_int(text)
+		if max_field_align > 16 || !ok {
+			report_error("Struct must have a max field align of 16.", expr, src_file)
+		}
+	} else {
+		report_error("Struct must have a max field align of 16.", expr, src_file, "Add #max_field_align(16)")
+	}
 
-    if len(expr.fields.list) > 0 {
-        strings.write_string(builder, " {\n")
+	if len(expr.fields.list) > 0 {
+		strings.write_string(builder, " {\n")
 
-        for field in expr.fields.list {
-            field_type, array_decl: string
-            if field.tag.text != "" {
-                field_type = field.tag.text[1:len(field.tag.text)-1]
-            } else {
-                field_type, array_decl = get_type_string(field.type, src_file)
-            }
+		for field in expr.fields.list {
+			field_type, array_decl: string
+			if field.tag.text != "" {
+				field_type = field.tag.text[1:len(field.tag.text) - 1]
+			} else {
+				field_type, array_decl = get_type_string(field.type, src_file)
+			}
 
-            for banned_name in banned_types {
-                if banned_name.from == field_type {
-                    report_error("Type is not allowed in a shader struct.", &field.type.expr_base, src_file, banned_name.to)
-                }
-            }
+			for banned_name in banned_types {
+				if banned_name.from == field_type {
+					report_error("Type is not allowed in a shader struct.", &field.type.expr_base, src_file, banned_name.to)
+				}
+			}
 
-            field_name := field.names[0].derived_expr.(^ast.Ident).name
+			field_name := field.names[0].derived_expr.(^ast.Ident).name
 
-            strings.write_string(builder, "  ")
-            strings.write_string(builder, field_type)
-            strings.write_string(builder, " ")
-            strings.write_string(builder, field_name)
-            if len(array_decl) > 0 {
-                strings.write_string(builder, array_decl)
-            }
-            strings.write_string(builder, ";\n")
-        }
+			strings.write_string(builder, "  ")
+			strings.write_string(builder, field_type)
+			strings.write_string(builder, " ")
+			strings.write_string(builder, field_name)
+			if len(array_decl) > 0 {
+				strings.write_string(builder, array_decl)
+			}
+			strings.write_string(builder, ";\n")
+		}
 
-        strings.write_string(builder, "}")
-    }
-    strings.write_string(builder, ";\n\n")
+		strings.write_string(builder, "}")
+	}
+	strings.write_string(builder, ";\n\n")
 }
 
 ShaderDecl :: struct {
-	expr: ^ast.Struct_Type,
-	name: string,
-    src_file: ^ast.File,
+	expr:     ^ast.Struct_Type,
+	name:     string,
+	src_file: ^ast.File,
 }
 
 main_meta :: proc() {
 	start_time := time.now()
 
-	files, ok := collect_files("./src")
+	files, ok := collect_files("./src", context.allocator)
 	assert(ok)
 
 	generate_shader_bindings(files[:])
-    generate_assets()
+	generate_assets()
 
-    if !error_reported {
-        fmt.println("Parsed and generated code in", time.since(start_time))
-    } else {
-        os.exit(1)
-    }
+	if !error_reported {
+		fmt.println("Parsed and generated code in", time.since(start_time))
+	} else {
+		os.exit(1)
+	}
 }
 
 generate_assets :: proc() {
-    b: strings.Builder
+	b: strings.Builder
 
-    bpln :: fmt.sbprintln
+	bpln :: fmt.sbprintln
 
-    bpln(&b, "//")
-    bpln(&b, "// This is a generated file, do not modify. See src/meta.odin")
-    bpln(&b, "//\n")
+	bpln(&b, "//")
+	bpln(&b, "// This is a generated file, do not modify. See src/meta.odin")
+	bpln(&b, "//\n")
 
-    asset_files: [dynamic]os.File_Info
+	asset_files: [dynamic]os.File_Info
 
-	filepath.walk("assets", proc(info: os.File_Info, in_err: os.Error, user_data: rawptr) -> (err: os.Error, skip_dir: bool) { 
-        if !info.is_dir {
-            asset_files := cast(^[dynamic]os.File_Info)user_data
-            append(asset_files, info);
-        }
+	// TODO: This probably needs cleanup, I just made it work with os2->os breaking changes.
+	walker := filepath.walker_create("assets")
+	defer os.walker_destroy(&walker)
 
-        return
-    }, &asset_files)
+	for info in os.walker_walk(&walker) {
+		append(&asset_files, info)
+	}
 
-    working_directory, err_wd := os2.get_working_directory(context.temp_allocator)
-    assert(err_wd == nil, "Can't get working directory")
+	working_directory, err_wd := os.get_working_directory(context.temp_allocator)
+	assert(err_wd == nil, "Can't get working directory")
 
-    bpln(&b, "package game")
-    bpln(&b, "")
-    bpln(&b, "// Assets")
-    bpln(&b, "Asset_Name :: enum {")
-    for file in asset_files {
-        stem := filepath.stem(file.name)
-        bpln(&b, "    ", stem, ",", sep = "")
-    }
-    bpln(&b, "}")
-    bpln(&b, "")
-    bpln(&b, "asset_map: [Asset_Name]Asset")
-    bpln(&b, "")
-    bpln(&b, "load_generated_assets :: proc() -> bool {")
-    for file in asset_files {
-        base := filepath.stem(file.name)
-        rel_path, k := filepath.rel(working_directory, file.fullpath)
-        fixed_path, ok := strings.replace_all(rel_path, "\\", "/")
-        assert(ok)
+	bpln(&b, "package game")
+	bpln(&b, "")
+	bpln(&b, "// Assets")
+	bpln(&b, "Asset_Name :: enum {")
+	for file in asset_files {
+		stem := filepath.stem(file.name)
+		bpln(&b, "    ", stem, ",", sep = "")
+	}
+	bpln(&b, "}")
+	bpln(&b, "")
+	bpln(&b, "asset_map: [Asset_Name]Asset")
+	bpln(&b, "")
+	bpln(&b, "load_generated_assets :: proc() -> bool {")
+	for file in asset_files {
+		base := filepath.stem(file.name)
+		rel_path, k := filepath.rel(working_directory, file.fullpath)
+		fixed_path, ok := strings.replace_all(rel_path, "\\", "/")
+		assert(ok)
 
-        assert(k == nil, "Couldn't get relative path")
-        bpln(&b, "    asset_map[.", base, "] = load_asset(\"", fixed_path, "\") or_return", sep = "")
-    }
-    bpln(&b, "    return true")
-    bpln(&b, "}")
+		assert(k == nil, "Couldn't get relative path")
+		bpln(&b, "    asset_map[.", base, "] = load_asset(\"", fixed_path, "\") or_return", sep = "")
+	}
+	bpln(&b, "    return true")
+	bpln(&b, "}")
 
-    if !error_reported {
-        err_wef := os2.write_entire_file("src/generated.odin", transmute([]u8)strings.to_string(b))
-        assert(err_wef == nil, "Couldn't write generated.odin")
-    }
+	if !error_reported {
+		err_wef := os.write_entire_file("src/generated.odin", transmute([]u8)strings.to_string(b))
+		assert(err_wef == nil, "Couldn't write generated.odin")
+	}
 }

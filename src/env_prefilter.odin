@@ -101,7 +101,7 @@ create_prefiltered_cubemap_pipeline :: proc(filename: cstring, out_width, out_he
 		)
 	}
 
-	prefilter_shader, f_ok := gfx.load_shader_module("shaders/out/prefilter_env.spv")
+	prefilter_shader, f_ok := gfx.load_shader_module("shaders/out/prefilter_env.spv", context.temp_allocator)
 	assert(f_ok, "Failed to load shaders.")
 
 	pass.pipeline = gfx.create_compute_pipeline("Environment Prefiler", prefilter_shader, PrefilteredCubeMapPushConstants)

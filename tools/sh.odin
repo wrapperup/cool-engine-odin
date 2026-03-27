@@ -60,7 +60,7 @@ main :: proc() {
 
 	start_time := time.now()
 
-	buf, ok := os.read_entire_file(string(command.input))
+	buf, ok := os.read_entire_file(string(command.input), context.allocator)
 
 	w, h, channels: i32
 	img_ptr := stbi.loadf_from_memory(raw_data(buf), i32(len(buf)), &w, &h, &channels, 4)

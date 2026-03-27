@@ -11,7 +11,6 @@ import "core:time"
 import glfw "vendor:glfw"
 import ma "vendor:miniaudio"
 
-import "deps:knit"
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 import im_vk "deps:odin-imgui/imgui_impl_vulkan"
@@ -21,6 +20,7 @@ import "gfx"
 
 //import lpp "deps:odin-livepp"
 ENABLE_LIVEPP :: false
+DEBUG :: ODIN_DEBUG
 
 start_live_time := time.tick_now()
 
@@ -28,10 +28,8 @@ game: ^Game
 
 main_game :: proc() {
     reserved_threads := 4
-    worker_threads := math.max(info.cpu.physical_cores - reserved_threads, 1)
-
-    knit.init(worker_threads)
-    log.info("Tasks initialized with", worker_threads, "threads")
+    physical, logical, ok := info.cpu_core_count()
+    worker_threads := math.max(physical - reserved_threads, 1)
 
     if !load_generated_assets() {
         fmt.eprintln("Failed to load assets!")
@@ -329,6 +327,4 @@ main_game :: proc() {
     when ENABLE_LIVEPP {
         lpp.DestroySynchronizedAgent(&lpp_agent)
     }
-
-    knit.destroy()
 }
