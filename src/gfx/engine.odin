@@ -7,6 +7,7 @@ import "core:log"
 import "core:os"
 import "core:reflect"
 import "core:strings"
+import "core:time"
 
 import vma "deps:odin-vma"
 import "vendor:glfw"
@@ -371,7 +372,7 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		log_normal("Available Extensions:")
 
 		for &ext in &extension_props {
-			log_normal(" - %s", cstring(&ext.extensionName[0]))
+			log_normal(" -", cstring(&ext.extensionName[0]))
 		}
 
 		if config.enable_validation_layers && !check_validation_layers() {
@@ -406,13 +407,24 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		devices := make([]vk.PhysicalDevice, device_count)
 		defer delete(devices)
 		vk.EnumeratePhysicalDevices(r_ctx.instance, &device_count, raw_data(devices))
-
 		for device in devices {
-			if is_device_suitable(device) {
+			is_suitable, is_discrete := is_device_suitable(device)
+			if is_suitable && is_discrete {
 				r_ctx.physical_device = device
 				break
 			}
 		}
+
+        // Do a second pass but don't require a discrete GPU.
+		if r_ctx.physical_device == nil {
+            for device in devices {
+                is_suitable, _is_discrete := is_device_suitable(device)
+                if is_suitable {
+                    r_ctx.physical_device = device
+                    break
+                }
+            }
+        }
 
 		if r_ctx.physical_device == nil {
 			panic("No GPU found that supports all required features.")
@@ -541,23 +553,15 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 
 	if r_ctx.window != nil {
 		pool_sizes := []vk.DescriptorPoolSize {
-			{.SAMPLER, 1000},
-			{.COMBINED_IMAGE_SAMPLER, 1000},
-			{.SAMPLED_IMAGE, 1000},
-			{.STORAGE_IMAGE, 1000},
-			{.UNIFORM_TEXEL_BUFFER, 1000},
-			{.STORAGE_TEXEL_BUFFER, 1000},
-			{.UNIFORM_BUFFER, 1000},
-			{.STORAGE_BUFFER, 1000},
-			{.UNIFORM_BUFFER_DYNAMIC, 1000},
-			{.STORAGE_BUFFER_DYNAMIC, 1000},
-			{.INPUT_ATTACHMENT, 1000},
+			{.SAMPLER, 200},
+			{.SAMPLED_IMAGE, 200},
+			{.STORAGE_IMAGE, 200},
 		}
 
 		pool_info := vk.DescriptorPoolCreateInfo {
 			sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-			flags         = {.FREE_DESCRIPTOR_SET},
-			maxSets       = 1_000,
+			flags         = {.UPDATE_AFTER_BIND},
+			maxSets       = 10,
 			poolSizeCount = u32(len(pool_sizes)),
 			pPoolSizes    = raw_data(pool_sizes),
 		}
@@ -682,7 +686,7 @@ set_viewport_and_scissor :: proc {
 	set_viewport_and_scissor_2d,
 }
 
-LAST_WRITE: os.File_Time
+LAST_WRITE: time.Time
 
 is_shaders_updated :: proc() -> bool {
 	lib_last_write, _ := os.last_write_time_by_name("./shaders/out/gradient.comp.spv")
@@ -896,9 +900,11 @@ supports_required_features :: proc(required: $T, test: T) -> bool {
 	return supports_all_flags
 }
 
-is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
+is_device_suitable :: proc(device: vk.PhysicalDevice) -> (is_suitable: bool, is_discrete: bool) {
 	properties: vk.PhysicalDeviceProperties
 	vk.GetPhysicalDeviceProperties(device, &properties)
+
+    log_normal("GPU:", string(properties.deviceName[:]))
 
 	vk_13_features := vk.PhysicalDeviceVulkan13Features {
 		sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -932,7 +938,7 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 
 	// Headless mode
 	if r_ctx.swapchain.swapchain == 0 {
-		return extensions_supported && properties.deviceType == .DISCRETE_GPU && supports_features
+		return extensions_supported && supports_features, properties.deviceType == .DISCRETE_GPU
 	}
 
 	swapchain_adequate := false
@@ -945,7 +951,7 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> bool {
 		swapchain_adequate = format_count > 0 && present_mode_count > 0
 	}
 
-	return swapchain_adequate && extensions_supported && properties.deviceType == .DISCRETE_GPU && supports_features
+	return swapchain_adequate && extensions_supported && supports_features, properties.deviceType == .DISCRETE_GPU
 }
 
 check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
@@ -964,6 +970,10 @@ check_device_extension_support :: proc(device: vk.PhysicalDevice) -> bool {
 				break
 			}
 		}
+
+        if !found {
+            log_normal("Extension not available:", expected_extension)
+        }
 
 		found or_return
 	}

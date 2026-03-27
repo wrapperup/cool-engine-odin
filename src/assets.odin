@@ -2,7 +2,7 @@ package game
 
 import "core:path/filepath"
 import "core:strings"
-import os "core:os/os2"
+import "core:os"
 
 Asset_Type :: enum {
     Unknown,

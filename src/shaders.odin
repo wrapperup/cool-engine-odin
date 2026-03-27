@@ -1,8 +1,9 @@
 package game
 
+import "base:runtime"
 import "core:fmt"
 import "core:log"
-import "core:os/os2"
+import "core:os"
 import "core:path/filepath"
 import "core:slice"
 import "core:strings"
@@ -44,11 +45,11 @@ check_shader_hotreload :: proc() -> (needs_reload: bool) {
 	// TODO: SPEED: Maybe iter this across frames?
 	for &shader in game.render_state.shader_manager.graphics_shaders {
 		max_last_write_time: i64
-		last_write_time, _ := os2.last_write_time_by_name(string(shader.path))
+		last_write_time, _ := os.last_write_time_by_name(string(shader.path))
 		max_last_write_time = last_write_time._nsec
 
 		for path in shader.extra_files {
-			last, _ := os2.last_write_time_by_name(string(path))
+			last, _ := os.last_write_time_by_name(string(path))
 			if last._nsec > max_last_write_time {
 				max_last_write_time = last._nsec
 			}
@@ -62,11 +63,11 @@ check_shader_hotreload :: proc() -> (needs_reload: bool) {
 
 	for &shader in game.render_state.shader_manager.compute_shaders {
 		max_last_write_time: i64
-		last_write_time, _ := os2.last_write_time_by_name(string(shader.path))
+		last_write_time, _ := os.last_write_time_by_name(string(shader.path))
 		max_last_write_time = last_write_time._nsec
 
 		for path in shader.extra_files {
-			last, _ := os2.last_write_time_by_name(string(path))
+			last, _ := os.last_write_time_by_name(string(path))
 			if last._nsec > max_last_write_time {
 				max_last_write_time = last._nsec
 			}
@@ -118,7 +119,7 @@ Shader :: struct($T: typeid) {
 }
 
 init_shader :: proc($T: typeid, path: cstring, pipeline_create_callback: proc(_: vk.ShaderModule) -> T) -> Shader(T) {
-	assert(os2.exists(string(path)))
+	assert(os.exists(string(path)))
 
 	extra_files := get_dependency_file_paths(path)
 
@@ -136,17 +137,17 @@ init_shader :: proc($T: typeid, path: cstring, pipeline_create_callback: proc(_:
 	return shader
 }
 
-get_cached_shader_path :: proc(path: string) -> string {
-	return filepath.join({"shaders", ".cache", filepath.base(path)})
+get_cached_shader_path :: proc(path: string, allocator: runtime.Allocator) -> string {
+	return filepath.join({"shaders", ".cache", filepath.base(path)}, allocator) or_else ""
 }
 
 get_last_write_time :: proc(shader: ^Shader($T)) -> time.Time {
 	max_last_write_time: i64
-	last_write_time, _ := os2.last_write_time_by_name(string(shader.path))
+	last_write_time, _ := os.last_write_time_by_name(string(shader.path))
 	max_last_write_time = last_write_time._nsec
 
 	for path in shader.extra_files {
-		last, _ := os2.last_write_time_by_name(string(path))
+		last, _ := os.last_write_time_by_name(string(path))
 		if last._nsec > max_last_write_time {
 			max_last_write_time = last._nsec
 		}
@@ -156,13 +157,13 @@ get_last_write_time :: proc(shader: ^Shader($T)) -> time.Time {
 }
 
 reload_shader_pipeline :: proc(shader: ^Shader($T)) -> bool {
-	cached_path := get_cached_shader_path(string(shader.path))
+	cached_path := get_cached_shader_path(string(shader.path), context.temp_allocator)
 
 	use_cached_spirv := false
 
-	if os2.exists(cached_path) {
+	if os.exists(cached_path) {
 		shader_last_time := get_last_write_time(shader)
-		cache_time, time_ok := os2.last_write_time_by_name(cached_path)
+		cache_time, time_ok := os.last_write_time_by_name(cached_path)
 		assert(time_ok == nil, "This shouldn't be hit...?")
 
 		if shader_last_time._nsec < cache_time._nsec {
@@ -175,7 +176,7 @@ reload_shader_pipeline :: proc(shader: ^Shader($T)) -> bool {
 	code: []u8
 
 	if use_cached_spirv {
-		spirv_code, err := os2.read_entire_file_from_path(string(cached_path), context.allocator)
+		spirv_code, err := os.read_entire_file_from_path(string(cached_path), context.allocator)
 		if err != nil {
 			return false
 		}
@@ -183,7 +184,7 @@ reload_shader_pipeline :: proc(shader: ^Shader($T)) -> bool {
 		code = spirv_code
 	} else {
 		code = compile_slang_to_spirv(shader) or_return
-		err := os2.write_entire_file(string(cached_path), code)
+		err := os.write_entire_file(string(cached_path), code)
 		if err != nil {
 			log.warn("Warning: Shader couldn't be cached.", err, cached_path)
 		}

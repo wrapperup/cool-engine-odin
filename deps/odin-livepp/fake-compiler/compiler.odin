@@ -2,7 +2,7 @@ package compiler
 
 import "core:os"
 import "core:fmt"
-import "core:os/os2"
+import "core:os"
 import "core:strings"
 
 

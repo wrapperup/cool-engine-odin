@@ -51,7 +51,7 @@ main :: proc() {
 	gfx.staging_write_buffer_slice(&vertex_buffer, vertices[:])
 	gfx.staging_write_buffer_slice(&index_buffer, indices[:])
 
-	shader, ok := gfx.load_shader_module("triangle.spv")
+	shader, ok := gfx.load_shader_module("triangle.spv", context.temp_allocator)
 	assert(ok)
 
     TrianglePushConstant :: struct {

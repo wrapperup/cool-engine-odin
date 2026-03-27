@@ -1,5 +1,6 @@
 package gfx
 
+import "base:runtime"
 import "core:fmt"
 import "core:os"
 import "core:slice"
@@ -160,10 +161,10 @@ create_compute_pipeline :: proc(
 
 // ====================================================================
 
-load_shader_module :: proc(file_name: string) -> (vk.ShaderModule, bool) {
-	buffer, ok := os.read_entire_file(file_name)
+load_shader_module :: proc(file_name: string, allocator: runtime.Allocator) -> (vk.ShaderModule, bool) {
+	buffer, err := os.read_entire_file(file_name, allocator)
 
-	if !ok {
+	if err != nil {
 		return 0, false
 	}
 
