@@ -36,7 +36,7 @@ set BASE_FLAGS=src ^
     -custom-attribute:shader_shared ^
     -show-timings ^
     -extra-linker-flags:/NODEFAULTLIB:libcmt ^
-    -linker:radlink
+    -linker=radlink
 
 :: If first arg is "1", do release; otherwise debug
 if "%~1"=="1" (

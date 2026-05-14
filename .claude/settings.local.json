@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -d /c/Repos/odin/Odin/core/*/)",
+      "Bash(ls -d /c/Repos/odin/Odin/vendor/*/)",
+      "Bash(ls -d /c/Repos/odin/Odin/base/*/)",
+      "Bash(wc:*)",
+      "Bash(grep -n \"parallel_for\" /c/Repos/odin/vulkan-playground/src/*.odin)",
+      "Bash(grep -E \"\\\\.\\(slang|h\\)$\")",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|BUG\\\\|XXX\\\\|HACK\" src/*.odin)",
+      "Bash(grep -r \"assert.*nil\\\\|panic\\\\|unreachable\" src/*.odin)",
+      "Bash(grep -v \"//\")",
+      "Bash(grep:*)"
+    ]
+  }
+}

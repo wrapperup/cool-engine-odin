@@ -4,6 +4,7 @@
 Toy engine + Vulkan renderer I built for fun to learn Odin language (and some graphics techniques).
 
 ### Features
+- Fully written by hand (Fuck off Claude). Wow so special.
 - Sparse entity system (ECS-like)
 - First person player controller based on Unreal character movement
 - Skeletal meshes and animation
