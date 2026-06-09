@@ -302,7 +302,7 @@ pb_set_multisampling :: proc(builder: ^PipelineBuilder, samples: vk.SampleCountF
 	builder.multisampling.minSampleShading = 1.0
 	builder.multisampling.pSampleMask = nil
 
-	builder.multisampling.alphaToCoverageEnable = true
+	builder.multisampling.alphaToCoverageEnable = samples != ._1
 	builder.multisampling.alphaToOneEnable = false
 }
 

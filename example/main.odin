@@ -12,10 +12,6 @@ import "core:time"
 
 import glfw "vendor:glfw"
 
-import im "deps:odin-imgui"
-import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
-
 import "../src/gfx"
 
 main :: proc() {
@@ -75,11 +71,6 @@ main :: proc() {
 
 	for !glfw.WindowShouldClose(window) {
         glfw.PollEvents()
-
-        // TODO: gfx shouldn't depend on imgui.
-        im_vk.NewFrame()
-        im_glfw.NewFrame()
-        im.NewFrame()
 
 		cmd := gfx.begin_command_buffer()
 

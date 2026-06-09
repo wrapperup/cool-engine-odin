@@ -10,8 +10,11 @@ import "core:time"
 
 import sp "deps:odin-slang/slang"
 import vk "vendor:vulkan"
+import im "deps:odin-imgui"
+import im_glfw "deps:odin-imgui/imgui_impl_glfw"
 
 import "gfx"
+import im_gfx "gfx/imgui_backend"
 
 // TODO: Make this into proper assets?
 MaterialId :: u32
@@ -156,6 +159,9 @@ RenderState :: struct {
 	// UI
 	ui_pass:                         UIPass,
 	ui_state:                        UIState,
+
+	// Imgui
+	imgui_ctx:                       ^im.Context,
 }
 
 GameFrameData :: struct {
@@ -191,11 +197,21 @@ add_material :: proc(material: GPUMaterial) -> MaterialId {
 }
 
 init_game_renderer :: proc() {
+	init_imgui()
 	init_shadow_maps()
 	init_test_resources()
 	init_test_materials()
 	init_pipelines()
 	init_buffers()
+}
+
+init_imgui :: proc() {
+    game.render_state.imgui_ctx = im.CreateContext()
+    im.SetCurrentContext(game.render_state.imgui_ctx)
+
+    im_glfw.InitForVulkan(game.window, true)
+
+	im_gfx.gfx_imgui_init()
 }
 
 init_shadow_maps :: proc() {
@@ -607,6 +623,9 @@ draw :: proc() {
 	// 	}
 	// }
 
+	// Finalize ImGui draw data for this frame; gfx_imgui_render consumes it below.
+	im.Render()
+
 	final_image: vk.Image
 	switch game.view_state {
 	case .SceneDepth:
@@ -651,6 +670,7 @@ draw :: proc() {
 			final_image = gfx.r_ctx.resolve_image.image
 		} else {
 			post_processing_pass(cmd)
+
 			// Prepare swapchain image
 			gfx.transition_image(cmd, &gfx.r_ctx.draw_image, .TRANSFER_SRC_OPTIMAL)
 			final_image = gfx.r_ctx.draw_image.image
@@ -658,6 +678,16 @@ draw :: proc() {
 	}
 
 	gfx.copy_image_to_swapchain(cmd, final_image, gfx.r_ctx.draw_extent)
+
+    sc := &gfx.r_ctx.swapchain
+    sc_image := sc.swapchain_images[sc.swapchain_image_index]
+    sc_view := sc.swapchain_image_views[sc.swapchain_image_index]
+
+    gfx.transition_vk_image(cmd, sc_image, .TRANSFER_DST_OPTIMAL, .COLOR_ATTACHMENT_OPTIMAL)
+    im_gfx.gfx_imgui_render(cmd, sc_view, sc.swapchain_extent)
+    // submit() expects the swapchain image in TRANSFER_DST before it
+    // transitions to PRESENT, so hand it back in that layout.
+    gfx.transition_vk_image(cmd, sc_image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_DST_OPTIMAL)
 
 	swapchain_resized := gfx.submit(cmd)
 
@@ -1031,4 +1061,5 @@ update_buffers :: proc() {
 
 renderer_shutdown :: proc() {
 	// destroy_shaders()
+	im_gfx.gfx_imgui_destroy()
 }

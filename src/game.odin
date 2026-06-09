@@ -13,7 +13,7 @@ import ma "vendor:miniaudio"
 
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
+import im_gfx "gfx/imgui_backend"
 import px "deps:physx-odin"
 
 import "gfx"
@@ -78,8 +78,6 @@ main_game :: proc() {
 	init_sound_system()
 	// init_asset_system()
 
-	configure_im()
-
 	g_physx_error_callback := px.create_error_callback(user_error_callback, nil)
 
 	// Physics
@@ -133,6 +131,7 @@ main_game :: proc() {
 	// Rendering
 	{
 		init_game_renderer()
+        configure_im()
 	}
 
 	// Input
@@ -237,8 +236,8 @@ main_game :: proc() {
 		glfw.PollEvents()
 
 		if glfw.GetWindowAttrib(game.window, glfw.ICONIFIED) == 0 {
-			im_vk.NewFrame()
 			im_glfw.NewFrame()
+			im_gfx.gfx_imgui_new_frame()
 			im.NewFrame()
 		}
 
