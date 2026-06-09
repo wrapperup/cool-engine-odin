@@ -38,10 +38,10 @@ main :: proc() {
 
     arena := &gfx.r_ctx.global_arena
 
-	vertex_buffer := gfx.create_buffer([3]Vertex, len(vertices), {.STORAGE_BUFFER, .TRANSFER_DST, .SHADER_DEVICE_ADDRESS}, .GPU_ONLY)
+	vertex_buffer := gfx.create_buffer([3]Vertex, len(vertices), .Storage)
     gfx.defer_destroy(arena, vertex_buffer)
 
-	index_buffer := gfx.create_buffer([3]u32, len(indices), {.INDEX_BUFFER, .TRANSFER_DST}, .GPU_ONLY)
+	index_buffer := gfx.create_buffer([3]u32, len(indices), .Index)
     gfx.defer_destroy(arena, index_buffer)
 
 	gfx.staging_write_buffer_slice(&vertex_buffer, vertices[:])
