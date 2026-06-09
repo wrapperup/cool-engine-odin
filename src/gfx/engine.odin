@@ -15,7 +15,6 @@ import vk "vendor:vulkan"
 
 import im "deps:odin-imgui"
 import im_glfw "deps:odin-imgui/imgui_impl_glfw"
-import im_vk "deps:odin-imgui/imgui_impl_vulkan"
 
 log_normal :: proc(args: ..any) {
 	if r_ctx.enable_logs {
@@ -82,11 +81,6 @@ Renderer :: struct {
 	imm_fence:                   vk.Fence,
 	imm_command_buffer:          vk.CommandBuffer,
 	imm_command_pool:            vk.CommandPool,
-
-	// Dear Imgui
-	imgui_ctx:                   ^im.Context,
-	imgui_init:                  bool,
-	imgui_pool:                  vk.DescriptorPool,
 
 	// Bindless
 	bindless_system:             BindlessSystem,
@@ -551,53 +545,6 @@ init_vulkan :: proc(config: InitConfig) -> bool {
 		defer_destroy(&r_ctx.global_arena, r_ctx.imm_fence)
 	}
 
-	if r_ctx.window != nil {
-		pool_sizes := []vk.DescriptorPoolSize {
-			{.SAMPLER, 200},
-			{.SAMPLED_IMAGE, 200},
-			{.STORAGE_IMAGE, 200},
-		}
-
-		pool_info := vk.DescriptorPoolCreateInfo {
-			sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-			flags         = {.UPDATE_AFTER_BIND},
-			maxSets       = 10,
-			poolSizeCount = u32(len(pool_sizes)),
-			pPoolSizes    = raw_data(pool_sizes),
-		}
-
-		vk_check(vk.CreateDescriptorPool(r_ctx.device, &pool_info, nil, &r_ctx.imgui_pool))
-
-		r_ctx.imgui_ctx = im.CreateContext()
-		im.SetCurrentContext(r_ctx.imgui_ctx)
-
-		im_glfw.InitForVulkan(r_ctx.window, true)
-
-		// this initializes imgui for Vulkan
-		init_info := im_vk.InitInfo {
-			Instance              = r_ctx.instance,
-			PhysicalDevice        = r_ctx.physical_device,
-			Device                = r_ctx.device,
-			Queue                 = r_ctx.graphics_queue,
-			DescriptorPool        = r_ctx.imgui_pool,
-			MinImageCount         = 3,
-			ImageCount            = 3,
-			UseDynamicRendering   = true,
-			ColorAttachmentFormat = r_ctx.swapchain.swapchain_image_format,
-			MSAASamples           = {._1},
-		}
-
-		// We've already loaded the funcs with Odin's built-in loader,
-		// imgui needs the addresses of those functions now.
-		im_vk.LoadFunctions(proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-				return vk.GetInstanceProcAddr((cast(^vk.Instance)user_data)^, function_name)
-			}, &r_ctx.instance)
-
-		assert(im_vk.Init(&init_info, 0))
-
-		r_ctx.imgui_init = true
-	}
-
 	{
 		//create a descriptor pool that will hold 10 sets with 1 image each
 		ratio: f32 = 1.0 / 3.0
@@ -626,11 +573,6 @@ cleanup_vulkan :: proc() {
 
 		flush_vk_arena(&frame.arena)
 		delete_vk_arena(frame.arena)
-	}
-
-	if r_ctx.imgui_init {
-		im_vk.Shutdown()
-		vk.DestroyDescriptorPool(r_ctx.device, r_ctx.imgui_pool, nil)
 	}
 
 	destroy_pools(&r_ctx.global_descriptor_allocator, r_ctx.device)
@@ -754,24 +696,11 @@ copy_image_to_swapchain :: proc(cmd: vk.CommandBuffer, source: vk.Image, src_siz
 
 // Called by the user when they end drawing to the screen.
 submit :: proc(cmd: vk.CommandBuffer) -> (swapchain_resized: bool) {
-	render_imgui()
-
-	// set swapchain image layout to Attachment Optimal so we can draw it
-	transition_vk_image(
-		cmd,
-		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
-		.TRANSFER_DST_OPTIMAL,
-		.COLOR_ATTACHMENT_OPTIMAL,
-	)
-
-	//draw imgui into the swapchain image
-	draw_imgui(cmd, r_ctx.swapchain.swapchain_image_views[r_ctx.swapchain.swapchain_image_index])
-
 	// set swapchain image layout to Present so we can show it on the screen
 	transition_vk_image(
 		cmd,
 		r_ctx.swapchain.swapchain_images[r_ctx.swapchain.swapchain_image_index],
-		.COLOR_ATTACHMENT_OPTIMAL,
+		.TRANSFER_DST_OPTIMAL,
 		.PRESENT_SRC_KHR,
 	)
 
@@ -1059,10 +988,6 @@ load_vulkan_addresses :: proc() {
 	}
 
 	vk.load_proc_addresses_instance(r_ctx.instance)
-
-	im_vk.LoadFunctions(proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-			return vk.GetInstanceProcAddr((cast(^vk.Instance)user_data)^, function_name)
-		}, &r_ctx.instance)
 }
 
 
