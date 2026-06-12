@@ -24,6 +24,7 @@ Asset :: struct {
 	type:        Asset_Type,
 }
 
+// TODO: Replace this hack with meta files.
 asset_type_from_base :: proc(base: string) -> Asset_Type {
     asset_type := Asset_Type.Unknown
 
