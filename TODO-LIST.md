@@ -14,13 +14,9 @@
 
 ## General
 - [ ] Fixed ticks for everything
-- [ ] Asset system (UUID based)
-- - [ ] Sounds
-- - [ ] GLTF Meshes
-- - [ ] GLTF SkelMeshes
-- - [ ] Hard-coded Assets (for testing)
-- - [ ] File-based Assets (metadata? full binary?)
-- - [ ] Switch all hard-coded paths to use asset system
+- [ ] Asset system
+- - [ ] File-based
+- - [ ] File-based
 
 ## Scene management
 - [ ] Switch to Odin-native gltf2 library? (to make custom ext's cleaner)
@@ -40,8 +36,7 @@
 - [ ] Render Pass Abstraction
 - [ ] Render Graph
 
-## Editor
-- [ ] Blender control scheme (G, S, R)
+## Blender Editor (IPC) Plugin
 - [ ] Spawn Entities by type (?)
 
 ## Cleanup

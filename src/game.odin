@@ -18,8 +18,6 @@ import px "deps:physx-odin"
 
 import "gfx"
 
-//import lpp "deps:odin-livepp"
-ENABLE_LIVEPP :: false
 DEBUG :: ODIN_DEBUG
 
 start_live_time := time.tick_now()
@@ -34,23 +32,6 @@ main_game :: proc() {
     if !load_generated_assets() {
         fmt.eprintln("Failed to load assets!")
     }
-
-	when ENABLE_LIVEPP {
-        local_preferences := lpp.CreateDefaultLocalPreferences()
-        project_preferences := lpp.CreateDefaultProjectPreferences()
-        project_preferences.exceptionHandler.isEnabled = false
-
-		lpp_agent := lpp.CreateSynchronizedAgentWithPreferencesANSI(&local_preferences, "./deps/odin-livepp/LivePP", &project_preferences)
-
-		// bail out in case the agent is not valid
-		if !lpp.IsValidSynchronizedAgent(&lpp_agent) {
-			log.error("Failed to initialize LPP agent.")
-			return
-		}
-
-		// enable Live++ for all loaded modules
-		lpp_agent.EnableModule(lpp.GetCurrentModulePath(), .ALL_IMPORT_MODULES, nil, nil)
-	}
 
 	glfw.Init()
 
@@ -299,18 +280,6 @@ main_game :: proc() {
 		}
 
 		free_all(context.temp_allocator)
-
-        when ENABLE_LIVEPP {
-            if lpp_agent.WantsReload(.SYNCHRONIZE_WITH_RELOAD) {
-                lpp_agent.Reload(.WAIT_UNTIL_CHANGES_ARE_APPLIED)
-            }
-
-            if lpp_agent.WantsRestart() {
-                // The others don't seem to work. We would need to advance a frame to handle graceful termination,
-                // but this function doesn't return until the process is terminated.
-                lpp_agent.Restart(.INSTANT_TERMINATION, 0, nil)
-            }
-        }
 	}
 
 	free_all(context.temp_allocator)
@@ -322,8 +291,4 @@ main_game :: proc() {
 	px.foundation_release_mut(game.phys.foundation)
 
 	renderer_shutdown()
-
-    when ENABLE_LIVEPP {
-        lpp.DestroySynchronizedAgent(&lpp_agent)
-    }
 }
