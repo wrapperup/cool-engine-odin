@@ -31,22 +31,24 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-set BASE_FLAGS=src ^
+set BASE_FLAGS=entrypoints ^
     -collection:deps=deps ^
     -custom-attribute:shader_shared ^
     -show-timings ^
-    -extra-linker-flags:/NODEFAULTLIB:libcmt ^
     -linker=radlink
 
-:: If first arg is "1", do release; otherwise debug
+:: If first arg is "1", do release; otherwise hotreloadable debug (with hotreload)
 if "%~1"=="1" (
     set FLAGS=%BASE_FLAGS% ^
         -o:speed ^
         -out:build/release/main.exe
 ) else (
+    echo Building with hotreload
     set FLAGS=%BASE_FLAGS% ^
         -debug ^
         -o:none ^
+        -define:HOTRELOAD=true ^
+        -define:GLFW_SHARED=true ^
         -out:build/debug/main.exe
 )
 
