@@ -299,6 +299,7 @@ generate_shader_bindings :: proc(files: []^ast.File) {
 		assert(err_wef == nil)
 	}
 }
+
 generate_bind_lit :: proc(builder: ^strings.Builder, name: string, expr: ^ast.Basic_Lit, src_file: ^ast.File) {
 	fmt.sbprintln(builder, "#define", name, expr.tok.text)
 }

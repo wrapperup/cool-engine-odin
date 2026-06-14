@@ -9,4 +9,4 @@ set FLAGS=^
     -show-timings ^
     -define:GENERATING_META=true
 
-odin build src -out:build/meta.exe %FLAGS% || exit /b %ERRORLEVEL%
+odin build meta -out:build/meta.exe %FLAGS% || exit /b %ERRORLEVEL%
