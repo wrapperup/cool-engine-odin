@@ -50,6 +50,8 @@ if "%~1"=="1" (
         -define:HOTRELOAD=true ^
         -define:GLFW_SHARED=true ^
         -out:build/debug/main.exe
+
+    hotreload.bat
 )
 
 odin build %FLAGS% || exit /b %ERRORLEVEL%
