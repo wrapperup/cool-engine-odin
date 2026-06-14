@@ -232,6 +232,9 @@ game_hot_reloaded :: proc(mem: rawptr) {
 	im.SetCurrentContext(game.render_state.imgui_ctx)
 
 	fmt.println("Hot reloaded!")
+    glfw.SetWindowAttrib(game.window, glfw.FLOATING, 1)
+    glfw.SetWindowAttrib(game.window, glfw.FLOATING, 0)
+    glfw.FocusWindow(game.window)
 }
 
 @(export)
