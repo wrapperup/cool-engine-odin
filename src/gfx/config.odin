@@ -39,8 +39,20 @@ REQUIRED_VK_12_FEATURES := vk.PhysicalDeviceVulkan12Features {
 
 REQUIRED_VK_13_FEATURES := vk.PhysicalDeviceVulkan13Features {
 	sType            = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+	pNext            = &REQUIRED_VK_RAY_ACCEL_FEATURES,
 	dynamicRendering = true,
 	synchronization2 = true,
+}
+
+REQUIRED_VK_RAY_ACCEL_FEATURES := vk.PhysicalDeviceAccelerationStructureFeaturesKHR {
+	sType                 = .PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+	pNext                 = &REQUIRED_VK_RAY_QUERY_FEATURES,
+	accelerationStructure = true,
+}
+
+REQUIRED_VK_RAY_QUERY_FEATURES := vk.PhysicalDeviceRayQueryFeaturesKHR {
+	sType    = .PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+	rayQuery = true,
 }
 
 // Set required extensions to support.
