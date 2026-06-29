@@ -139,6 +139,7 @@ game_init :: proc() {
 		add_action_key_mapping(.ShowDebug, glfw.KEY_N)
 		add_action_key_mapping(.Fullscreen, glfw.KEY_F10)
 		add_action_key_mapping(.ExitGame, glfw.KEY_ESCAPE)
+		add_action_key_mapping(.ToggleDoor, glfw.KEY_E)
 
 		add_action_mouse_mapping(.Fire, glfw.MOUSE_BUTTON_LEFT)
 		add_action_mouse_mapping(.AltFire, glfw.MOUSE_BUTTON_RIGHT)
@@ -188,6 +189,9 @@ game_init :: proc() {
 		test_mesh := new_entity(StaticMesh)
 		init_static_mesh(test_mesh, .sm_map_test, 0)
 
+		door_mesh := new_entity(StaticMesh)
+		init_static_mesh(door_mesh, .sm_map_door, 0)
+
 		test_mesh2 := new_entity(StaticMesh)
 		init_static_mesh(test_mesh2, .sm_materialball2, 2)
 
@@ -199,6 +203,7 @@ game_init :: proc() {
 
 		game.state = GameState {
 			player_id = entity_id_of(player),
+			door_id = entity_id_of(door_mesh),
 			environment = Environment{sun_direction = linalg.normalize(Vec3{12, 15, 10}), sun_color = 2.0, sky_color = 1.0},
 		}
 	}
@@ -268,6 +273,12 @@ game_update :: proc() -> bool {
 
 	simulate_input()
 
+	if action_just_pressed(.ToggleDoor) {
+		if door := get_entity(game.state.door_id); door != nil {
+			door.hidden = !door.hidden
+		}
+	}
+
 	// Update Game State
 	{
 		scope_stat_time(.GameState)
@@ -329,6 +340,7 @@ game_update :: proc() -> bool {
 @(export)
 game_shutdown :: proc() {
 	px.controller_manager_release_mut(game.phys.controller_manager)
+	px.scene_release_mut(game.phys.scene)
 	px.scene_release_mut(game.phys.scene)
 	px.physics_release_mut(game.phys.physics)
 	px.default_cpu_dispatcher_release_mut(game.phys.dispatcher)
