@@ -35,6 +35,16 @@ public struct SamplerComparison {
     }
 }
 
+public struct AccelerationStructure {
+    public u64 address;
+    
+    public RaytracingAccelerationStructure get() {
+        return spirv_asm {
+            result:$$RaytracingAccelerationStructure = OpConvertUToAccelerationStructureKHR $address
+        };
+    }
+}
+
 // Take careful note of using the `Images` array VS the `RWTextures` array in the specialized extensions.
 // Read-only extensions should use `Images` and Read/Write ones should use `RWTextures`.
 
