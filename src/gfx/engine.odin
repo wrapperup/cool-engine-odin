@@ -205,7 +205,6 @@ create_swapchain :: proc() {
 }
 
 destroy_swapchain_resources :: proc() {
-
 	// We don't need to delete the images, it was created by the driver
 	// However, we did create the views, so we will destroy those now.
 	for image_view in r_ctx.swapchain.swapchain_image_views {
@@ -835,8 +834,18 @@ is_device_suitable :: proc(device: vk.PhysicalDevice) -> (is_suitable: bool, is_
 
     log_normal("GPU:", string(properties.deviceName[:]))
 
+    vk_ray_query_features := vk.PhysicalDeviceRayQueryFeaturesKHR {
+        sType = .PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+    }
+
+	vk_accel_features := vk.PhysicalDeviceAccelerationStructureFeaturesKHR {
+		sType = .PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+        pNext = &vk_ray_query_features,
+	}
+
 	vk_13_features := vk.PhysicalDeviceVulkan13Features {
 		sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        pNext = &vk_accel_features,
 	}
 
 	vk_12_features := vk.PhysicalDeviceVulkan12Features {

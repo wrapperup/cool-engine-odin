@@ -9,7 +9,7 @@ GPUBuffer :: struct($T: typeid) {
 	buffer:     vk.Buffer,
 	allocation: vma.Allocation,
 	info:       vma.AllocationInfo,
-	ptr:    GPUPtr(T),
+	ptr:        GPUPtr(T),
 }
 
 // This is hopefully very common kinds of buffers
@@ -17,25 +17,36 @@ GPUBuffer :: struct($T: typeid) {
 // buffers will always create a valid GPUPtr(T).
 BufferKind :: enum {
 	Storage, // Includes ptr
-	Uniform, // Includes ptr. However, prefer uniform access for speed.
-	DynUniform, // Mapped uniform buffer // TODO: HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
-	Index,
-	Staging, // For CPU -> GPU writes onto device-local buffers.
+    Index,
+    Staging, // For CPU -> GPU writes onto device-local buffers.
+    AccelStorage, // Raytracing accel structures.
+    Uniform, // Includes ptr. However, prefer uniform access for speed.
+    DynUniform, // Mapped uniform buffer // TODO: HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
 	Readback, // For GPU -> CPU reads from device-local buffers.
 }
 
 vk_buffer_flags :: proc(kind: BufferKind) -> (vk.BufferUsageFlags, vma.AllocationCreateFlags) {
+	rt := vk.BufferUsageFlags{}
+
+    // TODO: Query.
+	if true {
+		rt = {.ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR}
+	}
+
 	switch kind {
 	case .Storage:
-		return {.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS}, {}
+		return {.TRANSFER_DST, .STORAGE_BUFFER, .SHADER_DEVICE_ADDRESS} + rt, {}
+	case .Index:
+		return {.TRANSFER_DST, .INDEX_BUFFER, .SHADER_DEVICE_ADDRESS} + rt, {}
+	case .Staging:
+		return {.TRANSFER_SRC}, {.MAPPED, .HOST_ACCESS_SEQUENTIAL_WRITE}
+	case .AccelStorage:
+		return {.ACCELERATION_STRUCTURE_STORAGE_KHR}, {}
+    // LEGACY
 	case .Uniform:
 		return {.TRANSFER_DST, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, {}
 	case .DynUniform:
 		return {.TRANSFER_DST, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS}, {.MAPPED, .HOST_ACCESS_RANDOM}
-	case .Index:
-		return {.TRANSFER_DST, .INDEX_BUFFER}, {}
-	case .Staging:
-		return {.TRANSFER_SRC}, {.MAPPED, .HOST_ACCESS_SEQUENTIAL_WRITE}
 	case .Readback:
 		return {.TRANSFER_DST}, {.MAPPED, .HOST_ACCESS_RANDOM}
 	}
@@ -67,7 +78,10 @@ create_buffer :: proc(
 	}
 
 	new_buffer: GPUBuffer(T)
-	vk_check(vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info), loc)
+	vk_check(
+		vma.CreateBuffer(r_ctx.allocator, &buffer_info, &vma_alloc_info, &new_buffer.buffer, &new_buffer.allocation, &new_buffer.info),
+		loc,
+	)
 
 	if .SHADER_DEVICE_ADDRESS in vk_usage_flags {
 		new_buffer.ptr.address = get_buffer_device_address(new_buffer)
@@ -110,7 +124,7 @@ write_buffer :: proc(buffer: ^GPUBuffer($Z), in_data: ^$T, offset: vk.DeviceSize
 
 	data := cast([^]u8)buffer.info.pMappedData
 
-    assert(data != nil, "Buffer is not mapped.")
+	assert(data != nil, "Buffer is not mapped.")
 
 	mem.copy(data[offset:], in_data, size)
 }
