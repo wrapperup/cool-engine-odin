@@ -14,6 +14,10 @@ REQUIRED_FEATURES := vk.PhysicalDeviceFeatures2 {
 		shaderInt64 = true,
 		shaderInt16 = true,
 		shaderFloat64 = true,
+		// Previously force-enabled by the DEBUG_PRINTF validation feature; enable them
+		// explicitly so disabling Debug Printf doesn't pull them out from under us.
+		fragmentStoresAndAtomics = true,
+		vertexPipelineStoresAndAtomics = true,
 	},
 	pNext = &REQUIRED_VK_11_FEATURES,
 }
@@ -29,12 +33,17 @@ REQUIRED_VK_11_FEATURES := vk.PhysicalDeviceVulkan11Features {
 REQUIRED_VK_12_FEATURES := vk.PhysicalDeviceVulkan12Features {
 	sType                  = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 	pNext                  = &REQUIRED_VK_13_FEATURES,
-	bufferDeviceAddress    = true,
-	descriptorIndexing     = true,
-	storagePushConstant8   = true,
-	shaderInt8             = true,
-	runtimeDescriptorArray = true,
-	scalarBlockLayout      = true,
+	bufferDeviceAddress         = true,
+	descriptorIndexing          = true,
+	storagePushConstant8        = true,
+	shaderInt8                  = true,
+	runtimeDescriptorArray      = true,
+	scalarBlockLayout           = true,
+	// Previously force-enabled by DEBUG_PRINTF; the Slang compute shaders use the
+	// Vulkan memory model, so enable it (and timeline semaphores) explicitly.
+	vulkanMemoryModel           = true,
+	vulkanMemoryModelDeviceScope = true,
+	timelineSemaphore           = true,
 }
 
 REQUIRED_VK_13_FEATURES := vk.PhysicalDeviceVulkan13Features {
@@ -68,8 +77,10 @@ DEVICE_EXTENSIONS := []cstring {
 // Set validation layers to enable.
 VALIDATION_LAYERS := []cstring{"VK_LAYER_KHRONOS_validation"}
 
-// Set validation features to enable.
-VALIDATION_FEATURES := []vk.ValidationFeatureEnableEXT{.DEBUG_PRINTF}
+// Set validation features to enable. NOTE: .DEBUG_PRINTF (GPU-assisted) instruments
+// every shader and massively slows GPU work (and thus shutdown) — leave it off unless
+// actively debugging with shader printf.
+VALIDATION_FEATURES := []vk.ValidationFeatureEnableEXT{}
 
 // Number of frames to provide in flight.
 FRAME_OVERLAP :: 2
