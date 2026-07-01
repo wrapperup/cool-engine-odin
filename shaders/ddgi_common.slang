@@ -106,15 +106,23 @@ Vec2 ddgi_sample_depth(DDGIVolume* v, uint probe, Vec3 dir) {
 
 // Full DDGI irradiance lookup: 8 surrounding probes, trilinear weighted with Chebyshev
 // visibility (the depth atlas) to suppress light leaking through occluders.
+// Display/default path: uses the volume's (slider-controlled) normal_bias.
 Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal) {
+  return ddgi_sample(v, world_pos, normal, v.normal_bias);
+}
+
+// Explicit-bias overload. The feedback path (ddgi_trace) passes its own small bias so the
+// display path can use normal_bias = 0 (max contact detail) without the bounce loop
+// self-reinforcing into a white runaway in high-albedo rooms.
+Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal, float bias) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
-  let biased = world_pos + normal * v.normal_bias;
+  let biased = world_pos + normal * bias;
   let g = (biased - v.grid_origin) / v.probe_spacing;
   int3 base = int3(floor(g));
   let f = frac(g);
 
   Vec3 irr = Vec3(0.0);
-  float tri_sum = 0.0; // raw trilinear weight (denominator) -> full occlusion goes dark
+  float weight_sum = 0.0; // visibility-weighted (so edges get the weighted avg, not black)
   for (uint c = 0; c < 8; c++) {
     int3 off = int3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
     int3 pc = clamp(base + off, int3(0), int3(counts) - 1);
@@ -129,7 +137,6 @@ Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal) {
     if (probe_off.w < 0.5) {
       continue; // inactive (buried) probe -> excluded entirely, not even counted
     }
-    tri_sum += tri;
     let probe_pos = ddgi_probe_position(uint3(pc), v.grid_origin, v.probe_spacing) + probe_off.xyz;
 
     // Chebyshev visibility: compare actual probe->sample distance against the depth
@@ -145,9 +152,18 @@ Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal) {
       vis = pow(max(cheb, 0.0), v.cheb_sharpness);
     }
 
-    irr += ddgi_sample_irradiance(v, probe, normal) * (tri * vis);
+    // Backface weight: downweight probes sitting behind the surface (dot < 0 -> ~0), which
+    // are the ones that leak light from the far side of a wall. Squared for a smooth falloff.
+    let to_probe = -normalize(to_sample);
+    let backface = (dot(to_probe, normal) + 1.0) * 0.5;
+    let w_back = backface * backface;
+
+    let weight = tri * vis * w_back;
+    weight_sum += weight;
+    irr += ddgi_sample_irradiance(v, probe, normal) * weight;
   }
-  // Divide by the RAW trilinear sum (not the visibility-reduced sum) so a sample
-  // occluded from all probes fades to black instead of being renormalized back up.
-  return irr / max(tri_sum, 1e-5);
+  // Normalize by the visibility-weighted sum: an edge point reaches the weighted average of
+  // the probes it can see (slightly darker, not black). Leak control comes from occluded
+  // probes weighing less, not from crushing the result to zero.
+  return irr / max(weight_sum, 1e-5);
 }
