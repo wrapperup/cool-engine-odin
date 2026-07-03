@@ -48,7 +48,7 @@ uint ddgi_num_probes(uint3 counts) {
   return counts.x * counts.y * counts.z;
 }
 
-Vec4 ddgi_probe_offset(DDGIVolume* v, uint probe) {
+Vec4 ddgi_probe_offset(DDGIVolume v, uint probe) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let tile = ddgi_probe_tile(ddgi_probe_coord(probe, counts), counts);
   uint2 sz;
@@ -57,7 +57,7 @@ Vec4 ddgi_probe_offset(DDGIVolume* v, uint probe) {
   return v.offset.sample_level(v.sampler, uv, 0);
 }
 
-Vec3 ddgi_sample_irradiance(DDGIVolume* v, uint probe, Vec3 dir) {
+Vec3 ddgi_sample_irradiance(DDGIVolume v, uint probe, Vec3 dir) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let coord = ddgi_probe_coord(probe, counts);
   let tile = ddgi_probe_tile(coord, counts);
@@ -74,7 +74,7 @@ Vec3 ddgi_sample_irradiance(DDGIVolume* v, uint probe, Vec3 dir) {
   return v.irradiance.sample_level(v.sampler, uv, 0).rgb;
 }
 
-Vec2 ddgi_sample_depth(DDGIVolume* v, uint probe, Vec3 dir) {
+Vec2 ddgi_sample_depth(DDGIVolume v, uint probe, Vec3 dir) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let coord = ddgi_probe_coord(probe, counts);
   let tile = ddgi_probe_tile(coord, counts);
@@ -91,16 +91,16 @@ Vec2 ddgi_sample_depth(DDGIVolume* v, uint probe, Vec3 dir) {
   return v.depth.sample_level(v.sampler, uv, 0).rg;
 }
 
-Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal) {
+Vec3 ddgi_sample(DDGIVolume v, Vec3 world_pos, Vec3 normal) {
   return ddgi_sample(v, world_pos, normal, v.normal_bias);
 }
 
-// Explicit-bias overload. The feedback path (ddgi_trace) passes its own small bias so the
-// display path can use normal_bias = 0 (max contact detail) without the bounce loop
-// self-reinforcing into a white runaway in high-albedo rooms.
-Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal, float bias) {
+Vec3 ddgi_sample(DDGIVolume v, Vec3 world_pos, Vec3 normal, float bias) {
+  return ddgi_sample_biased(v, world_pos + normal * bias, normal);
+}
+
+Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
-  let biased = world_pos + normal * bias;
   let g = (biased - v.grid_origin) / v.probe_spacing;
   int3 base = int3(floor(g));
   let f = frac(g);
@@ -147,4 +147,76 @@ Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal, float bias) {
   // the probes it can see (slightly darker, not black). Leak control comes from occluded
   // probes weighing less, not from crushing the result to zero.
   return irr / max(weight_sum, 1e-5);
+}
+
+float ddgi_volume_weight(DDGIVolume v, Vec3 p) {
+  uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
+  let bmin = v.grid_origin;
+  let bmax = v.grid_origin + v.probe_spacing * Vec3(counts - 1);
+  let inward = min(p - bmin, bmax - p); // per-axis distance to the walls (negative outside)
+  let m = min(inward.x, min(inward.y, inward.z));
+  return saturate(1.0 + m / max(v.edge_fade, 1e-4));
+}
+
+Vec3 ddgi_surface_bias(Vec3 n, Vec3 view_dir, float scale) {
+  return (n * 0.2 + view_dir * 0.8) * scale;
+}
+
+Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias) {
+  if (use_bias) {
+    return ddgi_sample(v, pos, n, bias); // feedback path: pure normal offset
+  }
+  return ddgi_sample_biased(v, pos + ddgi_surface_bias(n, view_dir, v.normal_bias), n);
+}
+
+// leading (higher-priority) volumes claim coverage first; any uncovered remainder falls back to
+// the NEAREST volume's clamped-grid sample. That preserves the single-volume behavior everywhere
+Vec3 _ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias, bool apply_intensity) {
+  if (count == 0) {
+    return Vec3(0.0);
+  }
+
+  Vec3 sum = Vec3(0.0);
+  float wsum = 0.0;
+  float best_dist = 1e30;
+  u32 best = 0;
+
+  for (u32 i = 0; i < count; i++) {
+    let v = volumes[i];
+
+    // Track the nearest volume (distance outside its grid AABB; 0 inside) for the fallback fill.
+    uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
+    let bmax = v.grid_origin + v.probe_spacing * Vec3(counts - 1);
+    let outside = max(max(v.grid_origin - pos, pos - bmax), Vec3(0.0));
+    let dist = length(outside);
+    if (dist < best_dist) {
+      best_dist = dist;
+      best = i;
+    }
+
+    // Cheap containment reject before the 8-probe sample; cost scales with volume overlap.
+    let w = min(ddgi_volume_weight(v, pos), 1.0 - wsum);
+    if (w <= 0.0) {
+      continue;
+    }
+    let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+    sum += irr * (apply_intensity ? v.intensity : 1.0) * w;
+    wsum += w;
+    if (wsum >= 1.0) {
+      return sum; // fully covered
+    }
+  }
+
+  let v = volumes[best];
+  let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+  return sum + irr * (apply_intensity ? v.intensity : 1.0) * (1.0 - wsum);
+}
+
+Vec3 ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3 view_pos) {
+  let view_dir = normalize(view_pos - pos);
+  return _ddgi_sample_volumes(volumes, count, pos, n, view_dir, 0.0, false, true);
+}
+
+Vec3 ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, float bias) {
+  return _ddgi_sample_volumes(volumes, count, pos, n, Vec3(0.0), bias, true, false);
 }

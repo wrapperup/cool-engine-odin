@@ -12,7 +12,7 @@ DDGITracePush pc;
 [numthreads(384, 1, 1)]
 [shader("compute")]
 void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID) {
-  let v = pc.volume;
+  let v = pc.volume[0];
   let probe = group_id.x;
   let ray = thread_id.x;
 
@@ -92,11 +92,8 @@ void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID)
       }
     }
 
-    // Indirect bounce: this volume's previous-frame irradiance at the hit. Sky enters
-    // via sky-seeing probes (miss = sky) and bounces over frames -> infinite bounce.
-    // Scaled by intensity to tame multi-bounce buildup in high-albedo spaces.
     let fb_bias = 0.2 * min(v.probe_spacing.x, min(v.probe_spacing.y, v.probe_spacing.z));
-    let indirect = ddgi_sample(pc.volume, hit_pos, N, fb_bias) * v.feedback;
+    let indirect = ddgi_sample_volumes(pc.global.ddgi_volumes, pc.global.num_ddgi_volumes, hit_pos, N, fb_bias) * v.feedback;
 
     radiance = albedo * (pc.global.sun_color * ndotl * shadow + indirect);
   } else {
