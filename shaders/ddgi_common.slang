@@ -59,7 +59,7 @@ uint ddgi_num_probes(uint3 counts) {
 // Per-probe relocation offset + state (1 texel/probe in the offset atlas):
 // .xyz = world-space offset, .w = active flag (>=0.5 active, <0.5 buried-in-geometry).
 // Sampled at the texel center, so the LINEAR sampler returns the exact value.
-Vec4 ddgi_probe_offset(DDGIVolume* v, uint probe) {
+Vec4 ddgi_probe_offset(DDGIVolume v, uint probe) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let tile = ddgi_probe_tile(ddgi_probe_coord(probe, counts), counts);
   uint2 sz;
@@ -69,7 +69,7 @@ Vec4 ddgi_probe_offset(DDGIVolume* v, uint probe) {
 }
 
 // Sample a single probe's octahedral irradiance tile in direction `dir`.
-Vec3 ddgi_sample_irradiance(DDGIVolume* v, uint probe, Vec3 dir) {
+Vec3 ddgi_sample_irradiance(DDGIVolume v, uint probe, Vec3 dir) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let coord = ddgi_probe_coord(probe, counts);
   let tile = ddgi_probe_tile(coord, counts);
@@ -87,7 +87,7 @@ Vec3 ddgi_sample_irradiance(DDGIVolume* v, uint probe, Vec3 dir) {
 }
 
 // Sample a probe's octahedral depth tile (mean, mean^2) in direction `dir`.
-Vec2 ddgi_sample_depth(DDGIVolume* v, uint probe, Vec3 dir) {
+Vec2 ddgi_sample_depth(DDGIVolume v, uint probe, Vec3 dir) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let coord = ddgi_probe_coord(probe, counts);
   let tile = ddgi_probe_tile(coord, counts);
@@ -107,16 +107,20 @@ Vec2 ddgi_sample_depth(DDGIVolume* v, uint probe, Vec3 dir) {
 // Full DDGI irradiance lookup: 8 surrounding probes, trilinear weighted with Chebyshev
 // visibility (the depth atlas) to suppress light leaking through occluders.
 // Display/default path: uses the volume's (slider-controlled) normal_bias.
-Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal) {
+Vec3 ddgi_sample(DDGIVolume v, Vec3 world_pos, Vec3 normal) {
   return ddgi_sample(v, world_pos, normal, v.normal_bias);
 }
 
-// Explicit-bias overload. The feedback path (ddgi_trace) passes its own small bias so the
-// display path can use normal_bias = 0 (max contact detail) without the bounce loop
-// self-reinforcing into a white runaway in high-albedo rooms.
-Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal, float bias) {
+// Explicit normal-bias overload. The feedback path (ddgi_trace) passes its own small bias,
+// independent of the display path's surface bias, so the bounce loop stays stable.
+Vec3 ddgi_sample(DDGIVolume v, Vec3 world_pos, Vec3 normal, float bias) {
+  return ddgi_sample_biased(v, world_pos + normal * bias, normal);
+}
+
+// Core lookup at an already-biased sample position. Callers choose the bias shape: pure normal
+// offset (feedback path) or view-aware surface bias (display path) — see ddgi_surface_bias.
+Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
-  let biased = world_pos + normal * bias;
   let g = (biased - v.grid_origin) / v.probe_spacing;
   int3 base = int3(floor(g));
   let f = frac(g);
@@ -166,4 +170,100 @@ Vec3 ddgi_sample(DDGIVolume* v, Vec3 world_pos, Vec3 normal, float bias) {
   // the probes it can see (slightly darker, not black). Leak control comes from occluded
   // probes weighing less, not from crushing the result to zero.
   return irr / max(weight_sum, 1e-5);
+}
+
+// --- Multi-volume sampling ---------------------------------------------------
+// Influence weight of a volume at a world point: 1 everywhere inside the grid AABB (the grid has
+// probes on the walls, so its data is valid right up to them), fading to 0 over edge_fade OUTSIDE
+// the walls, where sampling is only clamped edge probes. NOTE: opposite of
+// reflection_probe_weight, which must fade inward because box-parallax breaks outside the box.
+// The outside fade is what makes exactly-adjacent volumes cross-fade at the seam: the volume
+// being left fades past its wall while the entered one is already at full strength.
+float ddgi_volume_weight(DDGIVolume v, Vec3 p) {
+  uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
+  let bmin = v.grid_origin;
+  let bmax = v.grid_origin + v.probe_spacing * Vec3(counts - 1);
+  let inward = min(p - bmin, bmax - p); // per-axis distance to the walls (negative outside)
+  let m = min(inward.x, min(inward.y, inward.z));
+  return saturate(1.0 + m / max(v.edge_fade, 1e-4));
+}
+
+// RTXGI-style surface bias for the display path: offset the sample point mostly back toward the
+// viewer and a little along the normal, scaled by the volume's normal_bias knob. The view term is
+// what kills Chebyshev self-shadowing at grazing angles (probe-frequency dark splotches on flat
+// walls): a pure normal offset barely changes the probe->point distance there, while stepping
+// toward the viewer pulls the point off the recorded surface in exactly the failing directions.
+Vec3 ddgi_surface_bias(Vec3 n, Vec3 view_dir, float scale) {
+  return (n * 0.2 + view_dir * 0.8) * scale;
+}
+
+// One volume's sample with the caller's bias mode (shared by the loop + fallback below).
+Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias) {
+  if (use_bias) {
+    return ddgi_sample(v, pos, n, bias); // feedback path: pure normal offset
+  }
+  return ddgi_sample_biased(v, pos + ddgi_surface_bias(n, view_dir, v.normal_bias), n);
+}
+
+// Irradiance at a world point from the packed, priority-sorted volume array. Budget fill:
+// leading (higher-priority) volumes claim coverage first; any uncovered remainder falls back to
+// the NEAREST volume's clamped-grid sample. That preserves the single-volume behavior everywhere
+// (in the fade band outside the grid, w + (1-w) of the same volume == the plain clamped sample),
+// so edge_fade only changes shading where volumes actually meet or overlap.
+// use_bias: explicit normal bias (feedback/trace path); otherwise the view-aware surface bias
+// scaled by each volume's normal_bias (display path), with view_dir = normalize(viewer - pos).
+// apply_intensity: display paths scale by per-volume display intensity; the feedback path must
+// not (its gain is the tracing volume's feedback, applied by the caller).
+Vec3 _ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias, bool apply_intensity) {
+  if (count == 0) {
+    return Vec3(0.0);
+  }
+
+  Vec3 sum = Vec3(0.0);
+  float wsum = 0.0;
+  float best_dist = 1e30;
+  u32 best = 0;
+
+  for (u32 i = 0; i < count; i++) {
+    let v = volumes[i];
+
+    // Track the nearest volume (distance outside its grid AABB; 0 inside) for the fallback fill.
+    uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
+    let bmax = v.grid_origin + v.probe_spacing * Vec3(counts - 1);
+    let outside = max(max(v.grid_origin - pos, pos - bmax), Vec3(0.0));
+    let dist = length(outside);
+    if (dist < best_dist) {
+      best_dist = dist;
+      best = i;
+    }
+
+    // Cheap containment reject before the 8-probe sample; cost scales with volume overlap.
+    let w = min(ddgi_volume_weight(v, pos), 1.0 - wsum);
+    if (w <= 0.0) {
+      continue;
+    }
+    let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+    sum += irr * (apply_intensity ? v.intensity : 1.0) * w;
+    wsum += w;
+    if (wsum >= 1.0) {
+      return sum; // fully covered
+    }
+  }
+
+  let v = volumes[best];
+  let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+  return sum + irr * (apply_intensity ? v.intensity : 1.0) * (1.0 - wsum);
+}
+
+// Display path (mesh, reflection capture): view-aware surface bias (scaled by each volume's
+// normal_bias) and per-volume display intensity. view_pos is whatever "sees" the point — the
+// camera for the forward pass, the capture center for reflection probes.
+Vec3 ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3 view_pos) {
+  let view_dir = normalize(view_pos - pos);
+  return _ddgi_sample_volumes(volumes, count, pos, n, view_dir, 0.0, false, true);
+}
+
+// Feedback/trace path: explicit normal bias, raw irradiance (caller applies its own bounce gain).
+Vec3 ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, float bias) {
+  return _ddgi_sample_volumes(volumes, count, pos, n, Vec3(0.0), bias, true, false);
 }
