@@ -18,7 +18,7 @@ struct V2F {
 
 [shader("vertex")]
 V2F vertex_main(uint vid: SV_VertexID, uint iid: SV_InstanceID) {
-  let v = pc.volume;
+  let v = pc.volume[0];
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let coord = ddgi_probe_coord(iid, counts);
   let probe_off = ddgi_probe_offset(v, iid);
@@ -42,6 +42,6 @@ Vec4 fragment_main(V2F i) : SV_Target {
   if (i.active < 0.5) {
     discard; // buried/inactive probe -> not drawn
   }
-  let irr = ddgi_sample_irradiance(pc.volume, i.probe, normalize(i.normal_ws));
+  let irr = ddgi_sample_irradiance(pc.volume[0], i.probe, normalize(i.normal_ws));
   return Vec4(irr, 1.0); // linear; tonemapped by post-processing
 }
