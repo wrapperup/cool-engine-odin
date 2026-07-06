@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cool Engine Editor",
     "author": "vivian",
-    "version": (2, 0, 0),
+    "version": (2, 1, 0),
     "blender": (4, 0, 0),
     "location": "View3D > N-panel > Engine",
     "description": "Tag Blender objects as engine entities (reflection probes, ...) with gizmos + exported extras.",
@@ -9,6 +9,7 @@ bl_info = {
 }
 
 import os
+import uuid
 
 import bpy
 import gpu
@@ -18,6 +19,14 @@ from mathutils import Vector
 # Every engine entity carries this ID custom property (a string). It exports to glTF node.extras,
 # so the engine dispatches entity creation on extras["engine_type"] instead of per-type booleans.
 ENGINE_TYPE_KEY = "engine_type"
+
+# Every engine entity also carries a stable unique id (uuid4, canonical 8-4-4-4-12 string) in this
+# custom property. It rides
+# along to glTF node.extras and is the join key the engine's editor-data layer / bake sidecar use to
+# attach derived data (baked atlases, bake status) to an entity across re-exports — surviving renames
+# and node reordering, which names and indices don't. Stamped on tag/create; a pre-export pass
+# (_ensure_engine_ids) guarantees uniqueness after Blender object duplication copies the prop verbatim.
+ENGINE_ID_KEY = "engine_id"
 
 # The engine loads asset paths relative to its working dir (project root), and everything lives under
 # assets/. A derived `asset` that doesn't start with this means Asset Root is set too deep (e.g. at
@@ -201,11 +210,47 @@ def _static_mesh_warnings(context):
     return out
 
 
+def _new_id():
+    """A fresh entity id: uuid4 in canonical 8-4-4-4-12 form (e.g. '3f2504e0-4f89-41d3-9a0c-0305e82c3301').
+    The dashed form is what the engine's core:encoding/uuid `read` expects — bare .hex (no dashes) is
+    rejected as Invalid_Length."""
+    return str(uuid.uuid4())
+
+
+def _tagged_objects(context):
+    """Every object in the view layer currently tagged as an engine entity (any type)."""
+    return [o for o in context.view_layer.objects if o.get(ENGINE_TYPE_KEY) in ENTITY_TYPES]
+
+
+def _ensure_engine_ids(context):
+    """Guarantee every tagged entity has a unique engine_id; return how many were (re)stamped.
+
+    Blender duplication (Shift+D / Alt+D / copy-paste) copies custom props verbatim, so a duplicate
+    inherits the source's engine_id — two entities sharing one join key would silently corrupt each
+    other's derived data. Run this right before export (the moment the id reaches the engine): scan in
+    name order so a stable winner keeps the id, then re-stamp anything missing or colliding. Blender
+    names duplicates 'X.001', which sorts after the original 'X', so the original keeps its id and the
+    duplicate takes the fresh one."""
+    seen = set()
+    stamped = 0
+    for obj in sorted(_tagged_objects(context), key=lambda o: o.name):
+        cur = obj.get(ENGINE_ID_KEY)
+        if not cur or cur in seen:
+            cur = _new_id()
+            obj[ENGINE_ID_KEY] = cur
+            stamped += 1
+        seen.add(cur)
+    return stamped
+
+
 def apply_entity_type(obj, type_id):
-    """Tag `obj` as `type_id` and (re)apply its default props + UI limits. Existing property
-    VALUES are preserved — only missing ones are seeded — so this doubles as a 'refresh limits'."""
+    """Tag `obj` as `type_id`, stamp a stable engine_id if it has none, and (re)apply default props +
+    UI limits. Existing property VALUES are preserved — only missing ones are seeded — so this doubles
+    as a 'refresh limits'."""
     spec = ENTITY_TYPES[type_id]
     obj[ENGINE_TYPE_KEY] = type_id
+    if not obj.get(ENGINE_ID_KEY):
+        obj[ENGINE_ID_KEY] = _new_id()
     for name, (default, ui) in spec["props"].items():
         if name not in obj.keys():
             obj[name] = default
@@ -436,6 +481,8 @@ class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
             spec = ENTITY_TYPES[t]
             box = layout.box()
             box.label(text=f"{spec['label']}  ({t})", icon='CHECKMARK')
+            eid = obj.get(ENGINE_ID_KEY)
+            box.label(text=("id: " + eid[:12] + "...") if eid else "id: (stamped on export)")
             for name in spec["props"]:
                 if name in obj.keys():
                     box.prop(obj, f'["{name}"]', slider=True)  # slider=True => shows the range
@@ -493,6 +540,7 @@ class SCENE_OT_engine_quick_export(bpy.types.Operator):
         # Sync (and optionally auto-tag) static_mesh paths against their linked libraries first,
         # then validate so a dead asset reference surfaces here instead of asserting in the engine.
         tagged, _ = _refresh_derived_assets(context, autotag=context.scene.engine_autotag_linked)
+        stamped = _ensure_engine_ids(context)
         warnings = _static_mesh_warnings(context)
         for w in warnings:
             print("[engine export] WARNING:", w)  # full detail in the system console
@@ -504,7 +552,12 @@ class SCENE_OT_engine_quick_export(bpy.types.Operator):
             export_tangents=True,          # bake tangents so the engine skips per-load mikktspace (needs a UV map)
             use_selection=False,
         )
-        suffix = f" (+{tagged} auto-tagged)" if tagged else ""
+        parts = []
+        if tagged:
+            parts.append(f"+{tagged} auto-tagged")
+        if stamped:
+            parts.append(f"+{stamped} id-stamped")
+        suffix = f" ({', '.join(parts)})" if parts else ""
         if warnings:
             self.report({'WARNING'},
                         "Exported " + os.path.basename(out) + " with " + str(len(warnings)) +
