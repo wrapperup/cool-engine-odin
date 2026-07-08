@@ -1,15 +1,15 @@
 import bindless;
 import common;
 import types;
-import world_space;
 import ddgi_common;
+import rt_common;
 
 [vk_push_constant]
 DDGITracePush pc;
 
 // Pass A: one workgroup per probe, one thread per ray. Trace the scene TLAS from the
-// probe center, shade the hit (direct sun + sky ambient), write linear radiance + hit
-// distance to radiance[probe * rays + ray]. (No bounce/shadow yet.)
+// probe center, shade the hit (direct sun + point lights + indirect bounce), write
+// linear radiance + hit distance to radiance[probe * rays + ray].
 [numthreads(384, 1, 1)]
 [shader("compute")]
 void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID) {
@@ -27,72 +27,17 @@ void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID)
   let rot = float(v.frame_index) * 0.61803399 * DDGI_TWO_PI;
   let dir = ddgi_ray_direction(ray, v.rays_per_probe, rot);
 
-  RayDesc r;
-  r.Origin = origin;
-  r.TMin = 0.0;
-  r.Direction = dir;
-  r.TMax = v.ray_max;
-
-  RayQuery<RAY_FLAG_NONE> q;
-  q.TraceRayInline(pc.tlas.get(), RAY_FLAG_NONE, 0xFF, r);
-  q.Proceed();
+  let s = rt_trace_surface(pc.tlas.get(), pc.geometries, pc.materials, pc.global, origin, dir, 0.0, v.ray_max);
 
   Vec3 radiance;
   float hit_t;
-  if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT && !q.CommittedTriangleFrontFace()) {
+  if (s.kind == RTHitKind.Backface) {
     // Backface hit: this probe is inside/behind geometry in this direction. Capture no
     // light and mark the distance negative so the depth pass knows it's an occluder.
     radiance = Vec3(0.0);
-    hit_t = -q.CommittedRayT();
-  } else if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-    hit_t = q.CommittedRayT();
-    let hit_pos = origin + dir * hit_t;
-
-    let geo = pc.geometries[q.CommittedInstanceID()];
-    let prim = q.CommittedPrimitiveIndex();
-    let i0 = geo.index_buffer[prim * 3 + 0];
-    let i1 = geo.index_buffer[prim * 3 + 1];
-    let i2 = geo.index_buffer[prim * 3 + 2];
-    let v0 = geo.vertex_buffer[i0];
-    let v1 = geo.vertex_buffer[i1];
-    let v2 = geo.vertex_buffer[i2];
-
-    let bc = q.CommittedTriangleBarycentrics();
-    let bary = Vec3(1.0 - bc.x - bc.y, bc.x, bc.y);
-    let n_interp = v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z;
-    // Front-face hit: the interpolated normal already points out toward the ray origin; do
-    // NOT negate (the old -n_interp pointed into the surface, killing sun + indirect bounce).
-    let N = normalize(mul((float3x3)q.CommittedObjectToWorld3x4(), n_interp));
-
-    var uv = Vec2(v0.uv_x, v0.uv_y) * bary.x + Vec2(v1.uv_x, v1.uv_y) * bary.y + Vec2(v2.uv_x, v2.uv_y) * bary.z;
-    if (geo.material_index == 0) {
-      uv = get_world_space_uv(hit_pos, N) / 4.0;
-    }
-    let vcolor = v0.color * bary.x + v1.color * bary.y + v2.color * bary.z;
-
-    let material = pc.materials[geo.material_index];
-    let albedo = material.base_color_id.sample_level(pc.global.default_sampler, uv, 0).xyz * vcolor.xyz;
-
-    let l = normalize(pc.global.sun_direction);
-    let ndotl = clamp(dot(N, l), 0.0, 1.0);
-
-    // Shadow ray toward the sun (first-hit terminate).
-    float shadow = 1.0;
-    if (ndotl > 0.0) {
-      RayDesc sr;
-      // Offset off the surface to avoid self-shadowing; scale with hit distance since
-      // ray-hit precision degrades with distance, plus a TMin floor.
-      sr.Origin = hit_pos + N * (0.05 + hit_t * 0.005);
-      sr.TMin = 0.01;
-      sr.Direction = l;
-      sr.TMax = 1e4;
-      RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
-      sq.TraceRayInline(pc.tlas.get(), RAY_FLAG_NONE, 0xFF, sr);
-      sq.Proceed();
-      if (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-        shadow = 0.0;
-      }
-    }
+    hit_t = -s.hit_t;
+  } else if (s.kind == RTHitKind.Hit) {
+    hit_t = s.hit_t;
 
     // Indirect bounce: previous-frame irradiance at the hit, selected from the FULL volume
     // array (world-space select) — a hit inside another volume samples that volume's probes,
@@ -101,9 +46,10 @@ void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID)
     // Feedback path uses its own small bias (independent of the display normal_bias) so the
     // bounce loop stays stable even when display bias is 0. ~0.2 cells off the surface.
     let fb_bias = 0.2 * min(v.probe_spacing.x, min(v.probe_spacing.y, v.probe_spacing.z));
-    let indirect = ddgi_sample_volumes(pc.global.ddgi_volumes, pc.global.num_ddgi_volumes, hit_pos, N, fb_bias) * v.feedback;
+    let indirect = ddgi_sample_volumes(pc.global.ddgi_volumes, pc.global.num_ddgi_volumes, s.pos_ws, s.normal, fb_bias) * v.feedback;
 
-    radiance = albedo * (pc.global.sun_color * ndotl * shadow + indirect);
+    let direct = rt_direct_lighting(pc.tlas.get(), pc.global, s.pos_ws, s.normal, s.hit_t, /*sun_shadow*/ true);
+    radiance = s.albedo * (direct + indirect);
   } else {
     hit_t = 1e30; // miss sentinel, independent of ray length (depth clamps it anyway)
     // Sky miss: sample the environment cubemap in the ray direction (matches skybox.slang),
