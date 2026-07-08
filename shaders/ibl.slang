@@ -17,8 +17,13 @@ Vec3 evaluate_specular_ibl(PBR_Params params, Vec3 r, f32 perceptualRoughness) {
 }
 
 Vec3 sample_dfg(PBR_Params params, f32 NoV, f32 p_roughness) {
-    let linear_roughness = p_roughness * p_roughness;
-    return params.dfg.sample(params.default_sampler, Vec2(NoV, linear_roughness)).rgb;
+    // The LUT's v axis is perceptual roughness (squared inside the generator) —
+    // sample with Vec2(NoV, perceptualRoughness), per Filament.
+    // env_sampler, NOT default_sampler: the LUT must CLAMP_TO_EDGE. default_sampler
+    // is REPEAT, which wraps the last half-texel of NoV around to the NoV~0 grazing
+    // column — a bright circular blob on flat surfaces wherever the view is
+    // perpendicular (and the mirrored error at grazing / roughness extremes).
+    return params.dfg.sample(params.env_sampler, Vec2(NoV, p_roughness)).rgb;
 }
 
 // Specular-only IBL: the environment reflection term. Diffuse irradiance now comes from
