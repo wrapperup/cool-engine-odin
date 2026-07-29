@@ -171,8 +171,8 @@ Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 view_dir, float bias,
 
 // leading (higher-priority) volumes claim coverage first; any uncovered remainder falls back to
 // the NEAREST volume's clamped-grid sample. That preserves the single-volume behavior everywhere
-Vec3 _ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias, bool apply_intensity) {
-  if (count == 0) {
+Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias, bool apply_intensity) {
+  if (volumes.count == 0) {
     return Vec3(0.0);
   }
 
@@ -181,7 +181,7 @@ Vec3 _ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3
   float best_dist = 1e30;
   u32 best = 0;
 
-  for (u32 i = 0; i < count; i++) {
+  for (u32 i = 0; i < volumes.count; i++) {
     let v = volumes[i];
 
     // Track the nearest volume (distance outside its grid AABB; 0 inside) for the fallback fill.
@@ -212,11 +212,11 @@ Vec3 _ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3
   return sum + irr * (apply_intensity ? v.intensity : 1.0) * (1.0 - wsum);
 }
 
-Vec3 ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, Vec3 view_pos) {
+Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view_pos) {
   let view_dir = normalize(view_pos - pos);
-  return _ddgi_sample_volumes(volumes, count, pos, n, view_dir, 0.0, false, true);
+  return _ddgi_sample_volumes(volumes, pos, n, view_dir, 0.0, false, true);
 }
 
-Vec3 ddgi_sample_volumes(DDGIVolume* volumes, u32 count, Vec3 pos, Vec3 n, float bias) {
-  return _ddgi_sample_volumes(volumes, count, pos, n, Vec3(0.0), bias, true, false);
+Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, float bias) {
+  return _ddgi_sample_volumes(volumes, pos, n, Vec3(0.0), bias, true, false);
 }
