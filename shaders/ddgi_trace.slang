@@ -46,7 +46,7 @@ void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID)
     // Feedback path uses its own small bias (independent of the display normal_bias) so the
     // bounce loop stays stable even when display bias is 0. ~0.2 cells off the surface.
     let fb_bias = 0.2 * min(v.probe_spacing.x, min(v.probe_spacing.y, v.probe_spacing.z));
-    let indirect = ddgi_sample_volumes(pc.global.ddgi_volumes, pc.global.num_ddgi_volumes, s.pos_ws, s.normal, fb_bias) * v.feedback;
+    let indirect = ddgi_sample_volumes(pc.global.ddgi_volumes, s.pos_ws, s.normal, fb_bias) * v.feedback;
 
     let direct = rt_direct_lighting(pc.tlas.get(), pc.global, s.pos_ws, s.normal, s.hit_t, /*sun_shadow*/ true);
     radiance = s.albedo * (direct + indirect);

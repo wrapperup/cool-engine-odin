@@ -80,8 +80,7 @@ Vec3 sample_reflection_probes(GlobalData* gd, Vec3 pos_ws, Vec3 r, f32 p_roughne
 
     // Perf: the influence weight is a cheap reject computed BEFORE any cube fetch, so cost scales
     // with probe *overlap* at this point, not the total probe count. Loop bound is uniform.
-    let probe_count = gd.num_reflection_probes;
-    for (uint pi = 0; pi < probe_count; pi++) {
+    for (uint pi = 0; pi < gd.reflection_probes.count; pi++) {
         let probe = gd.reflection_probes[pi];
 
         let w = reflection_probe_weight(probe, pos_ws);
