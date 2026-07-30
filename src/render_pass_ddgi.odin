@@ -8,38 +8,36 @@ import vk "vendor:vulkan"
 import "gfx"
 
 @(private = "file")
-GPUPtr :: gfx.GPUPtr
-@(private = "file")
 ImageId :: gfx.ImageId
 
 @(shader_shared)
 GPUDDGITracePush :: struct #max_field_align(16) {
-	volume:     GPUPtr(GPUDDGIVolume),
-	geometries: GPUPtr(GPUGeometry),
-	materials:  GPUPtr(GPUMaterial),
-	global:     GPUPtr(GPUGlobalData),
-	radiance:   GPUPtr(Vec4),
+	volume:     gfx.Ptr(GPUDDGIVolume),
+	geometries: gfx.Ptr(GPUGeometry),
+	materials:  gfx.Ptr(GPUMaterial),
+	global:     gfx.Ptr(GPUGlobalData),
+	radiance:   gfx.Ptr(Vec4),
 	tlas:       vk.DeviceAddress `AccelerationStructure`,
 }
 
 @(shader_shared)
 GPUDDGIUpdatePush :: struct #max_field_align(16) {
-	volume:     GPUPtr(GPUDDGIVolume),
-	radiance:   GPUPtr(Vec4),
+	volume:     gfx.Ptr(GPUDDGIVolume),
+	radiance:   gfx.Ptr(Vec4),
 	irradiance: ImageId `RWImage2D`,
 }
 
 @(shader_shared)
 GPUDDGIDebugAtlasPush :: struct #max_field_align(16) {
-	volume:    GPUPtr(GPUDDGIVolume),
+	volume:    gfx.Ptr(GPUDDGIVolume),
 	out_image: ImageId `RWImage2D`,
 }
 
 @(shader_shared)
 GPUDDGIProbePush :: struct #max_field_align(16) {
-	global:        GPUPtr(GPUGlobalData),
-	volume:        GPUPtr(GPUDDGIVolume),
-	vertex_buffer: GPUPtr(Vertex),
+	global:        gfx.Ptr(GPUGlobalData),
+	volume:        gfx.Ptr(GPUDDGIVolume),
+	vertex_buffer: gfx.Ptr(Vertex),
 	probe_radius:  f32,
 }
 
@@ -52,10 +50,10 @@ DDGIRenderPass :: struct {
 	relocate_pipeline:      ^gfx.ComputePipeline,
 	debug_pipeline:         ^gfx.ComputePipeline,
 	probe_pipeline:         ^gfx.GraphicsPipeline,
-	volumes_buffers:        [gfx.FRAME_OVERLAP]gfx.GPUBuffer(GPUDDGIVolume),
+	volumes_buffers:        [gfx.FRAME_OVERLAP]gfx.Buffer(GPUDDGIVolume),
 	debug_volume:           i32,
-	probe_vbuf:             gfx.GPUBuffer(Vertex),
-	probe_ibuf:             gfx.GPUBuffer(u32),
+	probe_vbuf:             gfx.Buffer(Vertex),
+	probe_ibuf:             gfx.Buffer(u32),
 	probe_index_count:      u32,
 	draw_probes:            bool,
 	draw_reflection_probes: bool,
@@ -179,14 +177,14 @@ ddgi_prepare :: proc(volumes: []DDGIVolume, advance_frame: bool) {
 		gfx.write_buffer_slice(&rp.volumes_buffers[frame_index], packed[:count])
 	}
 
-	game.render_state.global_data.ddgi_volumes = gfx.gpu_slice(
+	game.render_state.global_data.ddgi_volumes = gfx.slice(
 		rp.volumes_buffers[frame_index],
 		count = u64(count),
 	)
 }
 
 @(private = "file")
-ddgi_current_config :: proc(volume: ^DDGI_Volume_Resources) -> ^gfx.GPUBuffer(GPUDDGIVolume) {
+ddgi_current_config :: proc(volume: ^DDGI_Volume_Resources) -> ^gfx.Buffer(GPUDDGIVolume) {
 	return &volume.config_buffers[gfx.current_frame_index()]
 }
 
