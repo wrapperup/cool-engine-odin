@@ -1,24 +1,31 @@
 bl_info = {
     "name": "Cool Engine Editor",
     "author": "vivian",
-    "version": (2, 1, 0),
+    "version": (2, 6, 1),
     "blender": (4, 0, 0),
     "location": "View3D > N-panel > Engine",
     "description": "Tag Blender objects as engine entities (reflection probes, ...) with gizmos + exported extras.",
     "category": "Object",
 }
 
+import hashlib
+import math
 import os
+import struct
+import time
 import uuid
+from array import array
 
 import bpy
 import gpu
+from bpy.app.handlers import persistent
 from gpu_extras.batch import batch_for_shader
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 # Every engine entity carries this ID custom property (a string). It exports to glTF node.extras,
 # so the engine dispatches entity creation on extras["engine_type"] instead of per-type booleans.
 ENGINE_TYPE_KEY = "engine_type"
+EXPORT_EXCLUDE_KEY = "engine_exclude_export"
 
 # Every engine entity also carries a stable unique id (uuid4, canonical 8-4-4-4-12 string) in this
 # custom property. It rides
@@ -32,6 +39,28 @@ ENGINE_ID_KEY = "engine_id"
 # assets/. A derived `asset` that doesn't start with this means Asset Root is set too deep (e.g. at
 # the assets/ folder itself), so the engine's path would be missing the prefix and fail to load.
 EXPECTED_ASSET_PREFIX = "assets/"
+
+HEIGHTFIELD_MAGIC = b"HFLD"
+HEIGHTFIELD_VERSION = 1
+HEIGHTFIELD_HEADER = struct.Struct("<4sIIIffffff")
+
+HF_COUNT_X = "engine_heightfield_count_x"
+HF_COUNT_Z = "engine_heightfield_count_z"
+HF_MIN_X = "engine_heightfield_min_x"
+HF_MAX_Y = "engine_heightfield_max_y"
+HF_SPACING_X = "engine_heightfield_spacing_x"
+HF_SPACING_Y = "engine_heightfield_spacing_y"
+HF_TOPOLOGY_HASH = "engine_heightfield_topology_hash"
+
+_AUTO_EXPORT_STATUS_KEY = "engine_scene_prep_auto_export_status"
+_AUTO_EXPORT_RUNNING = False
+SCENE_ASSET_NAME_KEY = "engine_asset_name"
+SCENE_ASSET_ID_KEY = "engine_asset_id"
+SCENE_VARIANT_ASSET_NAME_KEY = "engine_modifier_asset_name"
+SCENE_VARIANT_ASSET_ID_KEY = "engine_modifier_asset_id"
+_TEMP_EXPORT_COLLECTION_PREFIX = "__ENGINE_SCENE_EXPORT__"
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -99,23 +128,44 @@ ENTITY_TYPES = {
             ),
         },
     },
-    # `tag_only` types are applied to an EXISTING object (a mesh, or a collection instance linked
-    # from an asset .blend) instead of spawning an empty — so the artist sees real geometry in the
-    # viewport while the engine only reads the `asset` path + node transform and ignores the mesh.
+    # `tag_only` types are applied to an EXISTING object (a local mesh, or a collection instance
+    # linked from an asset .blend) instead of spawning an empty. Local meshes are built beside the
+    # scene in <scene-name>/<asset-name>.glb; linked instances retain their external asset path.
     "static_mesh": {
         "label": "Static Mesh",
         "tag_only": True,
-        "note": "asset auto-derives from a linked collection instance on export",
+        "note": "linked assets stay external; local meshes build into the scene's asset folder",
         "props": {
             "asset": (
                 "",
                 dict(description="Engine mesh path relative to the asset root, e.g. "
-                     "assets/meshes/static/sm_x.glb (auto-derived for linked collection instances)"),
+                     "assets/meshes/static/sm_x.glb (derived automatically during scene export)"),
             ),
             "material": (
                 0.0,
                 dict(min=0.0, soft_min=0.0, soft_max=16.0, precision=0,
                      description="Material id/index the engine binds for this mesh"),
+            ),
+        },
+    },
+    "heightfield": {
+        "label": "Terrain Heightfield",
+        "tag_only": True,
+        "note": "fixed grid; Sculpt Terrain locks local X/Y and permits elevation changes only",
+        "props": {
+            "heightfield_asset": (
+                "",
+                dict(description="Generated collision/render data; assigned automatically on export"),
+            ),
+            "material": (
+                0.0,
+                dict(min=0.0, soft_min=0.0, soft_max=16.0, precision=0,
+                     description="Material id/index the engine binds for this terrain"),
+            ),
+            "uv_scale": (
+                1.0,
+                dict(min=0.001, soft_min=0.01, soft_max=32.0, precision=3,
+                     description="Number of texture repeats across the complete terrain"),
             ),
         },
     },
@@ -173,41 +223,389 @@ def _is_linked_instance(obj):
     return col is not None and col.library is not None
 
 
+def _is_local_scene_mesh(obj):
+    """A mesh authored by this scene rather than supplied by a linked Blender library."""
+    return (obj.type == 'MESH' and obj.library is None and obj.data is not None and
+            obj.data.library is None and not _is_linked_instance(obj) and
+            obj.get(ENGINE_TYPE_KEY) != "heightfield")
+
+
+
+
+def _export_objects(context):
+    return list(context.scene.objects)
+
+
 def _refresh_derived_assets(context, autotag=False):
-    """Keep every static-mesh instance's `asset` in sync with the collection it links. Called before
-    export. When `autotag` is on, also tag any *untagged* linked instance as a static_mesh first — so
-    props dragged from the Asset Browser export with no manual tagging step. Returns (#tagged, #synced)."""
+    """Classify scene geometry and refresh linked static-mesh paths before a scene build.
+
+    Linked collection instances keep their existing external assets. Untagged local mesh objects are
+    scene-owned static meshes; their generated paths are assigned later once the scene filename is
+    known. Returns (#tagged, #synced).
+    """
     tagged = synced = 0
-    for obj in context.view_layer.objects:
+    for obj in _export_objects(context):
         tag = obj.get(ENGINE_TYPE_KEY)
-        if tag is None and autotag and _is_linked_instance(obj):
-            apply_entity_type(obj, "static_mesh")  # only claims untagged objects, never reclassifies
-            tag = "static_mesh"
-            tagged += 1
+        if tag is None:
+            if autotag and _is_linked_instance(obj):
+                apply_entity_type(obj, "static_mesh")
+                tag = "static_mesh"
+                tagged += 1
         if tag == "static_mesh":
             derived = _derive_asset_path(context, obj)
             if derived:
-                obj["asset"] = derived
-                synced += 1
+                if obj.get("asset") != derived:
+                    obj["asset"] = derived
+                    synced += 1
     return tagged, synced
 
 
 def _static_mesh_warnings(context):
     """Read-only: problems with tagged static_mesh objects, so a dead asset reference is caught in
     Blender instead of crashing the engine at load. Safe from panel draw (no mutation). Flags:
-      - empty `asset` (object isn't a linked instance, or derive failed), and
+      - empty `asset` after path preparation, and
       - an `asset` path outside EXPECTED_ASSET_PREFIX (Asset Root set too deep)."""
     out = []
-    for obj in context.view_layer.objects:
+    for obj in _export_objects(context):
         if obj.get(ENGINE_TYPE_KEY) != "static_mesh":
             continue
         path = obj.get("asset", "")
         if not path:
-            out.append(obj.name + ": no asset path (not a linked collection instance?)")
+            out.append(obj.name + ": no linked or scene-local asset path")
         elif not path.startswith(EXPECTED_ASSET_PREFIX):
             out.append(obj.name + ": '" + path + "' not under '" + EXPECTED_ASSET_PREFIX +
                        "' (set Asset Root to the project root)")
     return out
+
+
+def _heightfield_topology_hash(mesh):
+    """Stable fingerprint for the vertex/face connectivity that terrain sculpting must preserve."""
+    digest = hashlib.sha256()
+    digest.update(struct.pack("<II", len(mesh.vertices), len(mesh.polygons)))
+    for polygon in mesh.polygons:
+        digest.update(struct.pack("<I", len(polygon.vertices)))
+        for vertex_index in polygon.vertices:
+            digest.update(struct.pack("<I", vertex_index))
+    return digest.hexdigest()
+
+
+def _set_heightfield_metadata(mesh, count_x, count_z, min_x, max_y, spacing_x, spacing_y):
+    mesh[HF_COUNT_X] = count_x
+    mesh[HF_COUNT_Z] = count_z
+    mesh[HF_MIN_X] = min_x
+    mesh[HF_MAX_Y] = max_y
+    mesh[HF_SPACING_X] = spacing_x
+    mesh[HF_SPACING_Y] = spacing_y
+    mesh[HF_TOPOLOGY_HASH] = _heightfield_topology_hash(mesh)
+
+
+def _heightfield_info(obj, check_xy=True):
+    """Return (sample metadata, errors) for a terrain created by this add-on.
+
+    Rows are stored in increasing engine Z order, which is decreasing Blender local Y because the
+    glTF coordinate conversion is (x, y, z) -> (x, z, -y).
+    """
+    errors = []
+    if obj.type != 'MESH':
+        return None, [obj.name + ": heightfield must be a mesh object"]
+    mesh = obj.data
+    required = (HF_COUNT_X, HF_COUNT_Z, HF_MIN_X, HF_MAX_Y, HF_SPACING_X, HF_SPACING_Y,
+                HF_TOPOLOGY_HASH)
+    missing = [key for key in required if key not in mesh]
+    if missing:
+        return None, [obj.name + ": not an Engine-created terrain grid (missing metadata)"]
+
+    count_x = int(mesh[HF_COUNT_X])
+    count_z = int(mesh[HF_COUNT_Z])
+    min_x = float(mesh[HF_MIN_X])
+    max_y = float(mesh[HF_MAX_Y])
+    spacing_x = float(mesh[HF_SPACING_X])
+    spacing_y = float(mesh[HF_SPACING_Y])
+    if count_x < 2 or count_z < 2 or spacing_x <= 0 or spacing_y <= 0:
+        errors.append(obj.name + ": invalid grid metadata")
+    expected_vertices = count_x * count_z
+    expected_faces = (count_x - 1) * (count_z - 1)
+    if len(mesh.vertices) != expected_vertices:
+        errors.append(f"{obj.name}: topology changed ({len(mesh.vertices)} vertices, expected "
+                      f"{expected_vertices})")
+    if len(mesh.polygons) != expected_faces:
+        errors.append(f"{obj.name}: topology changed ({len(mesh.polygons)} faces, expected "
+                      f"{expected_faces})")
+    if _heightfield_topology_hash(mesh) != mesh[HF_TOPOLOGY_HASH]:
+        errors.append(obj.name + ": face connectivity changed")
+    if obj.modifiers:
+        errors.append(obj.name + ": modifiers are not supported by the fixed-grid terrain MVP")
+
+    _, rotation, scale = obj.matrix_basis.decompose()
+    if any(abs(component - 1.0) > 1e-5 for component in scale):
+        errors.append(obj.name + ": apply object scale before export")
+    if abs(abs(rotation.normalized().w) - 1.0) > 1e-5:
+        errors.append(obj.name + ": apply object rotation before export")
+
+    if check_xy and len(mesh.vertices) == expected_vertices:
+        tolerance = max(spacing_x, spacing_y) * 1e-4
+        drifted = 0
+        for row in range(count_z):
+            expected_y = max_y - row * spacing_y
+            for column in range(count_x):
+                vertex = mesh.vertices[row * count_x + column]
+                expected_x = min_x + column * spacing_x
+                if abs(vertex.co.x - expected_x) > tolerance or abs(vertex.co.y - expected_y) > tolerance:
+                    drifted += 1
+        if drifted:
+            errors.append(f"{obj.name}: {drifted} grid vertices moved horizontally (use Repair XY Grid)")
+
+    heights = []
+    if len(mesh.vertices) == expected_vertices:
+        heights = [float(vertex.co.z) for vertex in mesh.vertices]
+        if any(not math.isfinite(height) for height in heights):
+            errors.append(obj.name + ": terrain contains a non-finite height")
+
+    return {
+        "count_x": count_x,
+        "count_z": count_z,
+        "min_x": min_x,
+        "origin_z": -max_y,
+        "spacing_x": spacing_x,
+        "spacing_z": spacing_y,
+        "heights": heights,
+    }, errors
+
+
+def _heightfield_objects(context):
+    return [obj for obj in _export_objects(context)
+            if obj.get(ENGINE_TYPE_KEY) == "heightfield"]
+
+
+def _heightfield_relative_path(obj):
+    return "assets/gen/heightfields/" + obj[ENGINE_ID_KEY] + ".hfld"
+
+
+def _export_heightfields(context):
+    """Validate every terrain first, then atomically write all sidecars. Returns (count, errors)."""
+    terrains = _heightfield_objects(context)
+    if not terrains:
+        return 0, []
+
+    root = os.path.normpath(_asset_root(context))
+    if not os.path.isdir(os.path.join(root, "assets")):
+        return 0, ["Asset Root must be the project root containing the assets/ folder: " + root]
+
+    prepared = []
+    errors = []
+    for obj in terrains:
+        info, obj_errors = _heightfield_info(obj)
+        errors.extend(obj_errors)
+        if not obj_errors:
+            relative = _heightfield_relative_path(obj)
+            prepared.append((obj, info, relative, os.path.join(root, *relative.split("/"))))
+    if errors:
+        return 0, errors
+
+    for obj, info, relative, absolute in prepared:
+        heights = info["heights"]
+        minimum = min(heights)
+        maximum = max(heights)
+        header = HEIGHTFIELD_HEADER.pack(
+            HEIGHTFIELD_MAGIC,
+            HEIGHTFIELD_VERSION,
+            info["count_x"],
+            info["count_z"],
+            info["spacing_x"],
+            info["spacing_z"],
+            info["min_x"],
+            info["origin_z"],
+            minimum,
+            maximum,
+        )
+        try:
+            os.makedirs(os.path.dirname(absolute), exist_ok=True)
+            temporary = absolute + ".tmp"
+            with open(temporary, "wb") as output:
+                output.write(header)
+                output.write(struct.pack(f"<{len(heights)}f", *heights))
+            os.replace(temporary, absolute)
+        except OSError as exc:
+            errors.append(f"{obj.name}: failed to write {absolute}: {exc}")
+            continue
+        if obj.get("heightfield_asset") != relative:
+            obj["heightfield_asset"] = relative
+
+    return len(prepared) - len(errors), errors
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def _new_temp_export_collection(context):
+    collection = bpy.data.collections.new(_TEMP_EXPORT_COLLECTION_PREFIX + uuid.uuid4().hex[:8])
+    context.scene.collection.children.link(collection)
+    return collection
+
+
+def _remove_temp_export_collection(collection):
+    for obj in list(collection.objects):
+        mesh = obj.data if obj.type == 'MESH' else None
+        bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh is not None and mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
+    bpy.data.collections.remove(collection)
+
+
+
+
+def _copy_entity_properties(source, proxy):
+    type_id = source.get(ENGINE_TYPE_KEY)
+    keys = (ENGINE_TYPE_KEY, ENGINE_ID_KEY, *ENTITY_TYPES[type_id]["props"].keys())
+    for key in keys:
+        if key in source:
+            proxy[key] = source[key]
+
+
+def _export_scene_proxies(context, out):
+    """Export only engine entity proxies; mesh payloads live in their separate asset GLBs."""
+    collection = _new_temp_export_collection(context)
+    temporary = out + ".tmp.glb"
+    try:
+        for source in sorted(_tagged_objects(context), key=lambda obj: obj.name):
+            proxy = bpy.data.objects.new("Entity_" + source.name, None)
+            collection.objects.link(proxy)
+            proxy.matrix_world = source.matrix_world.copy()
+            _copy_entity_properties(source, proxy)
+        result = bpy.ops.export_scene.gltf(
+            'EXEC_DEFAULT',
+            filepath=temporary,
+            export_format='GLB',
+            export_extras=True,
+            export_materials='NONE',
+            collection=collection.name,
+        )
+        if 'FINISHED' in result:
+            os.replace(temporary, out)
+        return result
+    finally:
+        if os.path.exists(temporary):
+            try:
+                os.remove(temporary)
+            except OSError:
+                pass
+        _remove_temp_export_collection(collection)
+
+
+def _prepare_export_metadata(context, blend=None):
+    """Apply lightweight metadata mutations before a .blend save or an explicit export."""
+    tagged, synced = _refresh_derived_assets(
+        context,
+        autotag=getattr(context.scene, "engine_autotag_linked", True),
+    )
+    stamped = _ensure_engine_ids(context)
+    scene_mesh_jobs = []
+    for obj in _heightfield_objects(context):
+        relative = _heightfield_relative_path(obj)
+        if obj.get("heightfield_asset") != relative:
+            obj["heightfield_asset"] = relative
+    return tagged, synced, stamped, scene_mesh_jobs
+
+
+
+
+def _set_auto_export_status(message):
+    bpy.app.driver_namespace[_AUTO_EXPORT_STATUS_KEY] = message
+
+
+def _layer_collections(root):
+    """Yield a view layer's collection tree, including descendants of excluded collections."""
+    yield root
+    for child in root.children:
+        yield from _layer_collections(child)
+
+
+def _include_excluded_engine_collections(context):
+    """Temporarily include excluded collections that contain engine entities.
+
+    Blender 5.2 can export stale identity matrix_world values for objects in collections excluded
+    from the active view layer. The glTF still contains those nodes when use_selection/use_visible
+    filtering is disabled, but their translation and scale are lost. Including them long enough for
+    a dependency-graph update makes the exporter see the correct transforms.
+    """
+    changed = []
+    excluded = set()
+    for layer_collection in _layer_collections(context.view_layer.layer_collection):
+        if not layer_collection.exclude:
+            continue
+        if any(obj not in excluded and
+               (obj.get(ENGINE_TYPE_KEY) in ENTITY_TYPES or _is_local_scene_mesh(obj))
+               for obj in layer_collection.collection.all_objects):
+            layer_collection.exclude = False
+            changed.append(layer_collection)
+    if changed:
+        context.view_layer.update()
+    return changed
+
+
+def _restore_excluded_collections(context, changed):
+    for layer_collection in reversed(changed):
+        layer_collection.exclude = True
+    if changed:
+        context.view_layer.update()
+
+
+def _export_scene(context, blend):
+    """Shared manual/automatic export path. Returns (success, message, warnings)."""
+    if not blend:
+        return False, "Save the .blend first — export writes <blend>.glb next to it", []
+
+    start = time.perf_counter()
+    out = os.path.splitext(blend)[0] + ".glb"
+    included_collections = _include_excluded_engine_collections(context)
+    try:
+        tagged, _, stamped, scene_mesh_jobs = _prepare_export_metadata(context, blend)
+        heightfield_count, heightfield_errors = _export_heightfields(context)
+        if heightfield_errors:
+            for error in heightfield_errors:
+                print("[engine terrain] ERROR:", error)
+            message = "Terrain export failed: " + heightfield_errors[0]
+            if len(heightfield_errors) > 1:
+                message += " (see console)"
+            return False, message, []
+
+        warnings = _static_mesh_warnings(context)
+        for warning in warnings:
+            print("[engine export] WARNING:", warning)
+
+        try:
+            result = _export_scene_proxies(context, out)
+        except Exception as exc:
+            print("[engine export] ERROR:", exc)
+            return False, "Scene GLB export failed — see System Console", warnings
+        if 'FINISHED' not in result:
+            return False, "glTF export was cancelled", warnings
+
+        parts = []
+        if tagged:
+            parts.append(f"+{tagged} auto-tagged")
+        if stamped:
+            parts.append(f"+{stamped} id-stamped")
+        if heightfield_count:
+            parts.append(f"{heightfield_count} terrain baked")
+        suffix = f" ({', '.join(parts)})" if parts else ""
+        message = f"Exported {os.path.basename(out)} in {time.perf_counter() - start:.2f}s" + suffix
+        if warnings:
+            return True, message + f" with {len(warnings)} asset issue(s) — see System Console", warnings
+        return True, message, warnings
+    finally:
+        _restore_excluded_collections(context, included_collections)
 
 
 def _new_id():
@@ -218,8 +616,8 @@ def _new_id():
 
 
 def _tagged_objects(context):
-    """Every object in the view layer currently tagged as an engine entity (any type)."""
-    return [o for o in context.view_layer.objects if o.get(ENGINE_TYPE_KEY) in ENTITY_TYPES]
+    """Exportable objects currently tagged as an engine entity (any type)."""
+    return [o for o in _export_objects(context) if o.get(ENGINE_TYPE_KEY) in ENTITY_TYPES]
 
 
 def _ensure_engine_ids(context):
@@ -251,6 +649,23 @@ def apply_entity_type(obj, type_id):
     obj[ENGINE_TYPE_KEY] = type_id
     if not obj.get(ENGINE_ID_KEY):
         obj[ENGINE_ID_KEY] = _new_id()
+    if type_id == "static_mesh" and _is_local_scene_mesh(obj):
+        mesh = obj.data
+        if not mesh.get(SCENE_ASSET_ID_KEY):
+            mesh[SCENE_ASSET_ID_KEY] = _new_id()
+        if not mesh.get(SCENE_ASSET_NAME_KEY):
+            mesh[SCENE_ASSET_NAME_KEY] = _safe_asset_name(mesh.name or obj.name)
+        mesh.id_properties_ui(SCENE_ASSET_NAME_KEY).update(
+            description="Stable filename inside the scene's generated asset folder",
+        )
+        if obj.modifiers:
+            if not obj.get(SCENE_VARIANT_ASSET_ID_KEY):
+                obj[SCENE_VARIANT_ASSET_ID_KEY] = _new_id()
+            if not obj.get(SCENE_VARIANT_ASSET_NAME_KEY):
+                obj[SCENE_VARIANT_ASSET_NAME_KEY] = _safe_asset_name(obj.name)
+            obj.id_properties_ui(SCENE_VARIANT_ASSET_NAME_KEY).update(
+                description="Stable filename for this evaluated modifier result",
+            )
     for name, (default, ui) in spec["props"].items():
         if name not in obj.keys():
             obj[name] = default
@@ -383,7 +798,10 @@ def _draw():
     shader = gpu.shader.from_builtin('UNIFORM_COLOR')  # '3D_UNIFORM_COLOR' on Blender 3.x
     gpu.state.blend_set('ALPHA')
     gpu.state.line_width_set(1.5)
-    for obj in bpy.context.view_layer.objects:
+    view_layer = bpy.context.view_layer
+    for obj in view_layer.objects:
+        if not obj.visible_get(view_layer=view_layer):
+            continue
         drawer = GIZMOS.get(obj.get(ENGINE_TYPE_KEY))
         if drawer is not None:
             drawer(obj, shader)
@@ -411,6 +829,164 @@ class OBJECT_OT_engine_add_entity(bpy.types.Operator):
         obj.name = spec["label"].replace(" ", "")
         obj.empty_display_size = 1.0
         apply_entity_type(obj, self.type_id)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_engine_add_heightfield(bpy.types.Operator):
+    bl_idname = "object.engine_add_heightfield"
+    bl_label = "Add Terrain"
+    bl_description = "Create a fixed quad grid suitable for constrained heightfield sculpting"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    resolution_x: bpy.props.IntProperty(
+        name="Resolution X", default=129, min=2, max=1025,
+        description="Number of height samples along local X",
+    )
+    resolution_z: bpy.props.IntProperty(
+        name="Resolution Z", default=129, min=2, max=1025,
+        description="Number of height samples along engine Z (Blender local Y)",
+    )
+    size_x: bpy.props.FloatProperty(
+        name="Size X", default=128.0, min=0.001, soft_max=2048.0,
+    )
+    size_z: bpy.props.FloatProperty(
+        name="Size Z", default=128.0, min=0.001, soft_max=2048.0,
+    )
+
+    def execute(self, context):
+        count_x = self.resolution_x
+        count_z = self.resolution_z
+        spacing_x = self.size_x / (count_x - 1)
+        spacing_y = self.size_z / (count_z - 1)
+        min_x = -0.5 * self.size_x
+        max_y = 0.5 * self.size_z
+
+        # Rows run from +Blender-Y to -Blender-Y so their existing row-major order becomes
+        # increasing engine Z after Blender's glTF axis conversion (engine Z = -Blender Y).
+        vertices = [
+            (min_x + column * spacing_x, max_y - row * spacing_y, 0.0)
+            for row in range(count_z)
+            for column in range(count_x)
+        ]
+        faces = []
+        for row in range(count_z - 1):
+            for column in range(count_x - 1):
+                top_left = row * count_x + column
+                top_right = top_left + 1
+                bottom_left = top_left + count_x
+                bottom_right = bottom_left + 1
+                faces.append((top_left, bottom_left, bottom_right, top_right))
+
+        mesh = bpy.data.meshes.new("TerrainHeightfield")
+        mesh.from_pydata(vertices, [], faces)
+        mesh.update()
+        _set_heightfield_metadata(mesh, count_x, count_z, min_x, max_y, spacing_x, spacing_y)
+
+        obj = bpy.data.objects.new("Terrain", mesh)
+        context.collection.objects.link(obj)
+        obj.location = context.scene.cursor.location
+        obj.lock_rotation = (True, True, True)
+        obj.lock_scale = (True, True, True)
+        apply_entity_type(obj, "heightfield")
+
+        for selected in context.selected_objects:
+            selected.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        self.report({'INFO'}, f"Created {count_x} x {count_z} terrain ({len(vertices)} samples)")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_engine_sculpt_heightfield(bpy.types.Operator):
+    bl_idname = "object.engine_sculpt_heightfield"
+    bl_label = "Sculpt Terrain"
+    bl_description = "Enter Sculpt Mode with local X/Y deformation locked and Z elevation unlocked"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.get(ENGINE_TYPE_KEY) == "heightfield"
+
+    def execute(self, context):
+        obj = context.active_object
+        _, errors = _heightfield_info(obj)
+        if errors:
+            self.report({'ERROR'}, errors[0])
+            return {'CANCELLED'}
+        if obj.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.mode_set(mode='SCULPT')
+
+        sculpt = context.scene.tool_settings.sculpt
+        sculpt.lock_x = True
+        sculpt.lock_y = True
+        sculpt.lock_z = False
+        if getattr(obj, "use_dynamic_topology_sculpting", False):
+            bpy.ops.sculpt.dynamic_topology_toggle()
+        self.report({'INFO'}, "Terrain sculpt: local X/Y locked, Z unlocked, Dyntopo disabled")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_engine_validate_heightfield(bpy.types.Operator):
+    bl_idname = "object.engine_validate_heightfield"
+    bl_label = "Validate Terrain"
+    bl_description = "Check transforms, topology, grid positions, and height samples"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.get(ENGINE_TYPE_KEY) == "heightfield"
+
+    def execute(self, context):
+        obj = context.active_object
+        info, errors = _heightfield_info(obj)
+        if errors:
+            for error in errors:
+                print("[engine terrain] ERROR:", error)
+            self.report({'ERROR'}, errors[0] + (" (see console)" if len(errors) > 1 else ""))
+            return {'CANCELLED'}
+        minimum = min(info["heights"])
+        maximum = max(info["heights"])
+        self.report({'INFO'}, f"Valid {info['count_x']} x {info['count_z']} terrain; "
+                    f"height {minimum:.3f} .. {maximum:.3f}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_engine_repair_heightfield_xy(bpy.types.Operator):
+    bl_idname = "object.engine_repair_heightfield_xy"
+    bl_label = "Repair XY Grid"
+    bl_description = "Restore every sample's original local X/Y while preserving sculpted heights"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.get(ENGINE_TYPE_KEY) == "heightfield"
+
+    def execute(self, context):
+        obj = context.active_object
+        if obj.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        info, errors = _heightfield_info(obj, check_xy=False)
+        structural = [error for error in errors if "topology changed" in error or
+                      "connectivity changed" in error or "metadata" in error]
+        if structural:
+            self.report({'ERROR'}, structural[0])
+            return {'CANCELLED'}
+
+        mesh = obj.data
+        max_y = float(mesh[HF_MAX_Y])
+        spacing_y = float(mesh[HF_SPACING_Y])
+        for row in range(info["count_z"]):
+            expected_y = max_y - row * spacing_y
+            for column in range(info["count_x"]):
+                vertex = mesh.vertices[row * info["count_x"] + column]
+                vertex.co.x = info["min_x"] + column * info["spacing_x"]
+                vertex.co.y = expected_y
+        mesh.update()
+        self.report({'INFO'}, "Restored terrain XY grid; sculpted heights were preserved")
         return {'FINISHED'}
 
 
@@ -457,6 +1033,8 @@ class OBJECT_OT_engine_refresh(bpy.types.Operator):
         return {'FINISHED'}
 
 
+
+
 class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -466,8 +1044,14 @@ class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
 
+        if context.collection is not None:
+            box = layout.box()
+            box.label(text="Collection: " + context.collection.name, icon='OUTLINER_COLLECTION')
+            box.prop(context.collection, EXPORT_EXCLUDE_KEY)
+
         col = layout.column(align=True)
         col.label(text="Add / tag entity:")
+        col.operator("object.engine_add_heightfield", text="Terrain Heightfield", icon='MESH_GRID')
         # tag_only types (static_mesh) have no button: linked instances are auto-tagged on export,
         # and the object.engine_tag_entity operator stays available via search for manual cases.
         for type_id, spec in ENTITY_TYPES.items():
@@ -484,8 +1068,39 @@ class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
             eid = obj.get(ENGINE_ID_KEY)
             box.label(text=("id: " + eid[:12] + "...") if eid else "id: (stamped on export)")
             for name in spec["props"]:
+                if t == "static_mesh" and _is_local_scene_mesh(obj) and name == "asset":
+                    continue
                 if name in obj.keys():
                     box.prop(obj, f'["{name}"]', slider=True)  # slider=True => shows the range
+            if t == "static_mesh":
+                if _is_linked_instance(obj):
+                    box.label(text="Source: Linked Asset", icon='LINKED')
+                elif _is_local_scene_mesh(obj):
+                    box.label(text="Source: Scene Local", icon='MESH_DATA')
+                    mesh = obj.data
+                    box.label(text=f"Mesh: {mesh.name} ({mesh.users} object users)")
+                    if obj.modifiers:
+                        box.label(text=f"Evaluated modifiers: {len(obj.modifiers)}", icon='MODIFIER')
+                        if SCENE_VARIANT_ASSET_NAME_KEY in obj:
+                            box.prop(obj, f'["{SCENE_VARIANT_ASSET_NAME_KEY}"]', text="Asset Name")
+                        else:
+                            box.label(text="Modifier asset name assigned on export", icon='INFO')
+                    elif SCENE_ASSET_NAME_KEY in mesh:
+                        box.prop(mesh, f'["{SCENE_ASSET_NAME_KEY}"]', text="Asset Name")
+                    if obj.get("asset"):
+                        box.label(text=obj["asset"])
+            if t == "heightfield" and obj.type == 'MESH':
+                mesh = obj.data
+                if HF_COUNT_X in mesh and HF_COUNT_Z in mesh:
+                    box.label(text=f"Grid: {mesh[HF_COUNT_X]} x {mesh[HF_COUNT_Z]}")
+                row = box.row(align=True)
+                row.operator("object.engine_sculpt_heightfield", icon='SCULPTMODE_HLT')
+                row.operator("object.engine_validate_heightfield", text="Validate", icon='CHECKMARK')
+                box.operator("object.engine_repair_heightfield_xy", icon='LOOP_BACK')
+                sculpt = context.scene.tool_settings.sculpt
+                constrained = sculpt.lock_x and sculpt.lock_y and not sculpt.lock_z
+                box.label(text="X/Y locked; Z editable" if constrained else
+                          "Use Sculpt Terrain to lock X/Y", icon='LOCKED' if constrained else 'ERROR')
             box.operator("object.engine_refresh", icon='FILE_REFRESH')
             if spec.get("note"):
                 box.label(text=spec["note"])
@@ -501,6 +1116,7 @@ class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
         col.operator("scene.engine_register_asset_library", icon='ASSET_MANAGER')
         col.prop(context.scene, "engine_autotag_linked")
         col.label(text="Drag props with Import Method = Link", icon='INFO')
+        col.label(text="Local meshes build into <scene-name>/", icon='MESH_DATA')
 
         # Quick Export: write <current_blend>.glb next to the file, no dialog. Right-click the
         # button -> Assign Shortcut to bind a key for fast iterate-in-game loops.
@@ -511,6 +1127,9 @@ class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
         else:
             col.label(text="Save the .blend to enable export", icon='ERROR')
         col.operator("scene.engine_quick_export", icon='EXPORT')
+        auto_status = bpy.app.driver_namespace.get(_AUTO_EXPORT_STATUS_KEY, "")
+        if auto_status:
+            col.label(text=auto_status, icon='INFO')
 
         warnings = _static_mesh_warnings(context)
         if warnings:
@@ -530,40 +1149,15 @@ class SCENE_OT_engine_quick_export(bpy.types.Operator):
     )
 
     def execute(self, context):
-        # Target mirrors the source: props/barrel.blend -> props/barrel.glb, which is exactly the
-        # path _derive_asset_path reconstructs. Press it while authoring a prop to refresh its .glb.
-        blend = bpy.data.filepath
-        if not blend:
-            self.report({'ERROR'}, "Save the .blend first — export writes <blend>.glb next to it")
+        success, message, warnings = _export_scene(context, bpy.data.filepath)
+        _set_auto_export_status(message)
+        if not success:
+            self.report({'ERROR'}, message)
             return {'CANCELLED'}
-        out = os.path.splitext(blend)[0] + ".glb"
-        # Sync (and optionally auto-tag) static_mesh paths against their linked libraries first,
-        # then validate so a dead asset reference surfaces here instead of asserting in the engine.
-        tagged, _ = _refresh_derived_assets(context, autotag=context.scene.engine_autotag_linked)
-        stamped = _ensure_engine_ids(context)
-        warnings = _static_mesh_warnings(context)
-        for w in warnings:
-            print("[engine export] WARNING:", w)  # full detail in the system console
-        bpy.ops.export_scene.gltf(
-            'EXEC_DEFAULT',                 # execute directly, skip the file browser
-            filepath=out,
-            export_format='GLB',
-            export_extras=True,            # object custom props -> node.extras (engine_type, priority, ...)
-            export_tangents=True,          # bake tangents so the engine skips per-load mikktspace (needs a UV map)
-            use_selection=False,
-        )
-        parts = []
-        if tagged:
-            parts.append(f"+{tagged} auto-tagged")
-        if stamped:
-            parts.append(f"+{stamped} id-stamped")
-        suffix = f" ({', '.join(parts)})" if parts else ""
         if warnings:
-            self.report({'WARNING'},
-                        "Exported " + os.path.basename(out) + " with " + str(len(warnings)) +
-                        " asset issue(s) — see System Console")
+            self.report({'WARNING'}, message)
         else:
-            self.report({'INFO'}, "Exported " + os.path.basename(out) + suffix)
+            self.report({'INFO'}, message)
         return {'FINISHED'}
 
 
@@ -590,9 +1184,17 @@ class SCENE_OT_engine_register_asset_library(bpy.types.Operator):
         return {'FINISHED'}
 
 
+
+
+
+
 _classes = (
     EngineScenePrepPreferences,
     OBJECT_OT_engine_add_entity,
+    OBJECT_OT_engine_add_heightfield,
+    OBJECT_OT_engine_sculpt_heightfield,
+    OBJECT_OT_engine_validate_heightfield,
+    OBJECT_OT_engine_repair_heightfield_xy,
     OBJECT_OT_engine_tag_entity,
     OBJECT_OT_engine_refresh,
     SCENE_OT_engine_register_asset_library,
@@ -608,6 +1210,8 @@ def _remove_stale_draw_handler():
             bpy.types.SpaceView3D.draw_handler_remove(old, 'WINDOW')
         except Exception:
             pass
+
+
 
 
 def register():
