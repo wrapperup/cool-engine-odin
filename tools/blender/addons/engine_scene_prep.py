@@ -251,6 +251,10 @@ def _refresh_derived_assets(context, autotag=False):
                 apply_entity_type(obj, "static_mesh")
                 tag = "static_mesh"
                 tagged += 1
+            elif _is_local_scene_mesh(obj):
+                apply_entity_type(obj, "static_mesh")
+                tag = "static_mesh"
+                tagged += 1
         if tag == "static_mesh":
             derived = _derive_asset_path(context, obj)
             if derived:
@@ -434,18 +438,247 @@ def _export_heightfields(context):
     return len(prepared) - len(errors), errors
 
 
+def _safe_asset_name(name):
+    """Turn a Blender data name into a stable, readable filename stem."""
+    cleaned = []
+    previous_was_separator = False
+    for character in name.strip():
+        keep = character.isalnum() or character in "-_"
+        if keep:
+            cleaned.append(character)
+            previous_was_separator = False
+        elif not previous_was_separator:
+            cleaned.append("_")
+            previous_was_separator = True
+    result = "".join(cleaned).strip("_. ")
+    return result or "mesh"
 
 
+def _scene_mesh_objects(context):
+    return [obj for obj in _export_objects(context)
+            if obj.get(ENGINE_TYPE_KEY) == "static_mesh" and _is_local_scene_mesh(obj)]
 
 
+def _hash_foreach(digest, collection, property_name, value_count, typecode):
+    values = array(typecode, [0]) * value_count
+    collection.foreach_get(property_name, values)
+    digest.update(values.tobytes())
 
 
+def _evaluated_mesh(context, obj):
+    depsgraph = context.evaluated_depsgraph_get()
+    return bpy.data.meshes.new_from_object(
+        obj.evaluated_get(depsgraph),
+        preserve_all_data_layers=True,
+        depsgraph=depsgraph,
+    )
 
 
+def _mesh_signature(mesh):
+    """Fingerprint static mesh payload, including normals and texture/color layers."""
+    mesh.calc_loop_triangles()
+
+    digest = hashlib.sha256()
+    digest.update(struct.pack(
+        "<IIII",
+        len(mesh.vertices),
+        len(mesh.loops),
+        len(mesh.polygons),
+        len(mesh.loop_triangles),
+    ))
+    _hash_foreach(digest, mesh.vertices, "co", len(mesh.vertices) * 3, 'f')
+    _hash_foreach(digest, mesh.loop_triangles, "vertices", len(mesh.loop_triangles) * 3, 'I')
+    _hash_foreach(digest, mesh.loop_triangles, "loops", len(mesh.loop_triangles) * 3, 'I')
+    _hash_foreach(digest, mesh.polygons, "material_index", len(mesh.polygons), 'i')
+    _hash_foreach(digest, mesh.polygons, "use_smooth", len(mesh.polygons), 'b')
+
+    corner_normals = getattr(mesh, "corner_normals", None)
+    if corner_normals is not None:
+        _hash_foreach(digest, corner_normals, "vector", len(corner_normals) * 3, 'f')
+
+    for layer in mesh.uv_layers:
+        digest.update(layer.name.encode("utf-8") + b"\0")
+        _hash_foreach(digest, layer.data, "uv", len(layer.data) * 2, 'f')
+
+    for attribute in mesh.color_attributes:
+        digest.update((attribute.name + "\0" + attribute.domain + "\0" + attribute.data_type).encode("utf-8"))
+        _hash_foreach(digest, attribute.data, "color", len(attribute.data) * 4, 'f')
+
+    for layer in mesh.uv_layers:
+        digest.update(bytes([layer.active_render]))
+    digest.update(struct.pack("<iii", mesh.uv_layers.active_index,
+                              mesh.color_attributes.active_color_index,
+                              mesh.color_attributes.render_color_index))
+    if mesh.shape_keys:
+        for key in mesh.shape_keys.key_blocks:
+            digest.update(key.name.encode("utf-8") + b"\0")
+            _hash_foreach(digest, key.data, "co", len(key.data) * 3, 'f')
+    return digest.hexdigest()
 
 
+def _evaluated_mesh_signature(context, obj):
+    """Hash the payload-relevant result of an Object's evaluated modifier stack."""
+    mesh = None
+    try:
+        mesh = _evaluated_mesh(context, obj)
+        if not mesh.vertices or not mesh.polygons:
+            return None, obj.name + ": evaluated mesh has no triangles"
+        return _mesh_signature(mesh), None
+    except Exception as exc:
+        return None, f"{obj.name}: failed to evaluate modifiers: {exc}"
+    finally:
+        if mesh is not None and mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
 
 
+def _prepare_scene_mesh_jobs(context, blend):
+    """Build raw Mesh assets plus deduplicated evaluated variants for modified Objects."""
+    objects = sorted(_scene_mesh_objects(context), key=lambda obj: obj.name)
+    if not objects:
+        return [], []
+    if not blend:
+        return [], ["Save the .blend before exporting scene-local meshes"]
+
+    root = os.path.normpath(_asset_root(context))
+    scene_folder = os.path.splitext(os.path.abspath(blend))[0]
+    try:
+        inside_root = os.path.normcase(os.path.commonpath((root, scene_folder))) == os.path.normcase(root)
+    except ValueError:
+        inside_root = False
+    if not inside_root:
+        return [], ["Scene must be inside the configured Asset Root: " + root]
+
+    mesh_groups = {}
+    for obj in objects:
+        key = obj.data.as_pointer()
+        if key not in mesh_groups:
+            mesh_groups[key] = [obj.data, []]
+        mesh_groups[key][1].append(obj)
+
+    meshes = sorted(mesh_groups.values(), key=lambda group: (group[0].name.casefold(), group[0].name))
+    seen_ids = set()
+    for mesh, _ in meshes:
+        asset_id = mesh.get(SCENE_ASSET_ID_KEY)
+        if not asset_id or asset_id in seen_ids:
+            asset_id = _new_id()
+            mesh[SCENE_ASSET_ID_KEY] = asset_id
+        seen_ids.add(asset_id)
+        mesh.id_properties_ui(SCENE_ASSET_ID_KEY).update(
+            description="Stable identity for this scene-owned mesh asset",
+        )
+
+    entries = []
+    errors = []
+    for mesh, users in meshes:
+        plain_users = [obj for obj in users if not obj.modifiers]
+        if plain_users:
+            entries.append({
+                "mesh": mesh,
+                "signature": _mesh_signature(mesh),
+                "representative": None,
+                "users": plain_users,
+                "sort_key": (mesh.name.casefold(), "", mesh.name),
+            })
+
+        variants = {}
+        for obj in (candidate for candidate in users if candidate.modifiers):
+            signature, error = _evaluated_mesh_signature(context, obj)
+            if error:
+                errors.append(error)
+                continue
+            variants.setdefault(signature, []).append(obj)
+        for signature, variant_users in variants.items():
+            representative = variant_users[0]
+            entries.append({
+                "mesh": mesh,
+                "signature": signature,
+                "representative": representative,
+                "users": variant_users,
+                "sort_key": (mesh.name.casefold(), representative.name.casefold(), signature),
+            })
+
+    entries.sort(key=lambda entry: entry["sort_key"])
+    seen_asset_ids = set()
+    for entry in entries:
+        mesh = entry["mesh"]
+        representative = entry["representative"]
+        users = entry["users"]
+        if representative is None:
+            asset_id = mesh[SCENE_ASSET_ID_KEY]
+        else:
+            asset_id = next(
+                (obj.get(SCENE_VARIANT_ASSET_ID_KEY) for obj in users
+                 if obj.get(SCENE_VARIANT_ASSET_ID_KEY)),
+                "",
+            )
+            if not asset_id or asset_id in seen_asset_ids:
+                asset_id = _new_id()
+            for obj in users:
+                obj[SCENE_VARIANT_ASSET_ID_KEY] = asset_id
+                obj.id_properties_ui(SCENE_VARIANT_ASSET_ID_KEY).update(
+                    description="Stable identity for this evaluated modifier result",
+                )
+        if asset_id in seen_asset_ids:
+            asset_id = _new_id()
+            if representative is None:
+                mesh[SCENE_ASSET_ID_KEY] = asset_id
+            else:
+                for obj in users:
+                    obj[SCENE_VARIANT_ASSET_ID_KEY] = asset_id
+        seen_asset_ids.add(asset_id)
+
+        if representative is None:
+            # v2.4.0 stored this on the Object. Adopt that value when upgrading a file.
+            legacy_name = next(
+                (obj.get(SCENE_ASSET_NAME_KEY) for obj in users if obj.get(SCENE_ASSET_NAME_KEY)),
+                "",
+            )
+            base = _safe_asset_name(mesh.get(SCENE_ASSET_NAME_KEY, "") or legacy_name or mesh.name)
+        else:
+            legacy_name = next(
+                (obj.get(SCENE_VARIANT_ASSET_NAME_KEY) for obj in users
+                 if obj.get(SCENE_VARIANT_ASSET_NAME_KEY)),
+                "",
+            )
+            base = _safe_asset_name(legacy_name or representative.name or mesh.name)
+        entry["asset_id"] = asset_id
+        entry["base_name"] = base
+
+    used_names = set()
+    jobs = []
+    for entry in entries:
+        mesh = entry["mesh"]
+        representative = entry["representative"]
+        users = entry["users"]
+        asset_id = entry["asset_id"]
+        base = entry["base_name"]
+        candidate = base
+        if candidate.casefold() in used_names:
+            candidate = base + "_" + asset_id[:8]
+        serial = 2
+        while candidate.casefold() in used_names:
+            candidate = base + "_" + asset_id[:8] + "_" + str(serial)
+            serial += 1
+        used_names.add(candidate.casefold())
+        if representative is None:
+            mesh[SCENE_ASSET_NAME_KEY] = candidate
+            mesh.id_properties_ui(SCENE_ASSET_NAME_KEY).update(
+                description="Stable filename inside the scene's generated asset folder",
+            )
+        else:
+            for obj in users:
+                obj[SCENE_VARIANT_ASSET_NAME_KEY] = candidate
+                obj.id_properties_ui(SCENE_VARIANT_ASSET_NAME_KEY).update(
+                    description="Stable filename for this evaluated modifier result",
+                )
+
+        absolute = os.path.join(scene_folder, candidate + ".glb")
+        relative = os.path.relpath(absolute, root).replace("\\", "/")
+        for obj in users:
+            if obj.get("asset") != relative:
+                obj["asset"] = relative
+        jobs.append((mesh, representative, users, relative, absolute, entry["signature"]))
+    return jobs, errors
 
 
 def _new_temp_export_collection(context):
@@ -463,6 +696,61 @@ def _remove_temp_export_collection(collection):
     bpy.data.collections.remove(collection)
 
 
+def _export_scene_mesh_job(context, job):
+    """Export a raw Mesh datablock or one deduplicated evaluated modifier result."""
+    source_mesh, representative, _, _, absolute, _ = job
+    collection = _new_temp_export_collection(context)
+    temporary = absolute + ".tmp.glb"
+    previously_selected = list(context.selected_objects)
+    previously_active = context.view_layer.objects.active
+    try:
+        mesh = _evaluated_mesh(context, representative) if representative else source_mesh.copy()
+        if not mesh.vertices or not mesh.polygons:
+            label = representative.name if representative else source_mesh.name
+            return label + ": mesh has no triangles"
+        proxy = bpy.data.objects.new("Mesh", mesh)
+        collection.objects.link(proxy)
+        proxy.matrix_world = Matrix.Identity(4)
+
+        # Select the evaluated proxy explicitly to avoid exporting Geometry Nodes
+        # pieces again as separate depsgraph objects.
+        for selected in previously_selected:
+            selected.select_set(False)
+        proxy.select_set(True)
+        context.view_layer.objects.active = proxy
+
+        os.makedirs(os.path.dirname(absolute), exist_ok=True)
+        result = bpy.ops.export_scene.gltf(
+            'EXEC_DEFAULT',
+            filepath=temporary,
+            export_format='GLB',
+            export_extras=False,
+            export_tangents=True,
+            export_materials='NONE',
+            collection=collection.name,
+            use_selection=True,
+        )
+        if 'FINISHED' not in result:
+            label = representative.name if representative else source_mesh.name
+            return label + ": mesh GLB export was cancelled"
+        os.replace(temporary, absolute)
+        return None
+    except Exception as exc:
+        label = representative.name if representative else source_mesh.name
+        return f"{label}: mesh GLB export failed: {exc}"
+    finally:
+        if os.path.exists(temporary):
+            try:
+                os.remove(temporary)
+            except OSError:
+                pass
+        _remove_temp_export_collection(collection)
+        for selected in previously_selected:
+            if selected.name in context.view_layer.objects:
+                selected.select_set(True)
+        if (previously_active is not None and
+                previously_active.name in context.view_layer.objects):
+            context.view_layer.objects.active = previously_active
 
 
 def _copy_entity_properties(source, proxy):
@@ -510,7 +798,9 @@ def _prepare_export_metadata(context, blend=None):
         autotag=getattr(context.scene, "engine_autotag_linked", True),
     )
     stamped = _ensure_engine_ids(context)
-    scene_mesh_jobs = []
+    scene_mesh_jobs, scene_mesh_errors = _prepare_scene_mesh_jobs(context, blend)
+    if scene_mesh_errors:
+        raise RuntimeError(scene_mesh_errors[0])
     for obj in _heightfield_objects(context):
         relative = _heightfield_relative_path(obj)
         if obj.get("heightfield_asset") != relative:
@@ -584,6 +874,13 @@ def _export_scene(context, blend):
         for warning in warnings:
             print("[engine export] WARNING:", warning)
 
+        scene_mesh_count = 0
+        for job in scene_mesh_jobs:
+            error = _export_scene_mesh_job(context, job)
+            if error is not None:
+                return False, "Scene mesh export failed: " + error, warnings
+            scene_mesh_count += 1
+
         try:
             result = _export_scene_proxies(context, out)
         except Exception as exc:
@@ -599,6 +896,8 @@ def _export_scene(context, blend):
             parts.append(f"+{stamped} id-stamped")
         if heightfield_count:
             parts.append(f"{heightfield_count} terrain baked")
+        if scene_mesh_count:
+            parts.append(f"{scene_mesh_count} mesh asset(s) rebuilt")
         suffix = f" ({', '.join(parts)})" if parts else ""
         message = f"Exported {os.path.basename(out)} in {time.perf_counter() - start:.2f}s" + suffix
         if warnings:
