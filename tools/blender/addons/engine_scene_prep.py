@@ -1425,6 +1425,7 @@ class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
             col.label(text="Export -> " + os.path.splitext(os.path.basename(bpy.data.filepath))[0] + ".glb")
         else:
             col.label(text="Save the .blend to enable export", icon='ERROR')
+        col.prop(context.scene, "engine_auto_export_on_save")
         col.operator("scene.engine_quick_export", icon='EXPORT')
         auto_status = bpy.app.driver_namespace.get(_AUTO_EXPORT_STATUS_KEY, "")
         if auto_status:
@@ -1483,8 +1484,45 @@ class SCENE_OT_engine_register_asset_library(bpy.types.Operator):
         return {'FINISHED'}
 
 
+@persistent
+def _engine_auto_export_save_pre(filepath):
+    """Persist generated IDs/paths in the .blend that is about to be written."""
+    context = bpy.context
+    scene = getattr(context, "scene", None)
+    if scene is None or not getattr(scene, "engine_auto_export_on_save", False):
+        return
+    try:
+        _prepare_export_metadata(context, filepath or bpy.data.filepath)
+    except Exception as exc:
+        message = "Auto-export preparation failed — see System Console"
+        _set_auto_export_status(message)
+        print("[engine auto-export] ERROR:", exc)
 
 
+@persistent
+def _engine_auto_export_save_post(filepath):
+    """Export beside a successfully-saved .blend; glTF export itself does not save recursively."""
+    global _AUTO_EXPORT_RUNNING
+    context = bpy.context
+    scene = getattr(context, "scene", None)
+    if scene is None or not getattr(scene, "engine_auto_export_on_save", False):
+        return
+    if _AUTO_EXPORT_RUNNING:
+        print("[engine auto-export] Ignoring re-entrant save notification")
+        return
+
+    blend = filepath or bpy.data.filepath
+    _AUTO_EXPORT_RUNNING = True
+    try:
+        success, message, _ = _export_scene(context, blend)
+        _set_auto_export_status(message)
+        prefix = "OK:" if success else "ERROR:"
+        print("[engine auto-export]", prefix, message)
+    except Exception as exc:
+        _set_auto_export_status("Auto-export failed — see System Console")
+        print("[engine auto-export] ERROR:", exc)
+    finally:
+        _AUTO_EXPORT_RUNNING = False
 
 
 _classes = (
@@ -1511,10 +1549,20 @@ def _remove_stale_draw_handler():
             pass
 
 
+def _remove_stale_save_handlers():
+    """Remove handlers left by an add-on reload, whose function identities are now stale."""
+    for handler_list, function_name in (
+        (bpy.app.handlers.save_pre, "_engine_auto_export_save_pre"),
+        (bpy.app.handlers.save_post, "_engine_auto_export_save_post"),
+    ):
+        for handler in list(handler_list):
+            if getattr(handler, "__name__", "") == function_name:
+                handler_list.remove(handler)
 
 
 def register():
     _remove_stale_draw_handler()
+    _remove_stale_save_handlers()
     for c in _classes:
         try:
             bpy.utils.unregister_class(c)
@@ -1527,6 +1575,13 @@ def register():
                     "so props dragged from the Asset Browser export without a manual tag step",
         default=True,
     )
+    bpy.types.Scene.engine_auto_export_on_save = bpy.props.BoolProperty(
+        name="Auto Export on Save",
+        description="After a successful .blend save, bake sidecars and export a GLB beside it",
+        default=False,
+    )
+    bpy.app.handlers.save_pre.append(_engine_auto_export_save_pre)
+    bpy.app.handlers.save_post.append(_engine_auto_export_save_post)
     bpy.app.driver_namespace[_DRAW_NS_KEY] = bpy.types.SpaceView3D.draw_handler_add(
         _draw, (), 'WINDOW', 'POST_VIEW'
     )
@@ -1534,6 +1589,9 @@ def register():
 
 def unregister():
     _remove_stale_draw_handler()
+    _remove_stale_save_handlers()
+    if hasattr(bpy.types.Scene, "engine_auto_export_on_save"):
+        del bpy.types.Scene.engine_auto_export_on_save
     if hasattr(bpy.types.Scene, "engine_autotag_linked"):
         del bpy.types.Scene.engine_autotag_linked
     for c in reversed(_classes):
