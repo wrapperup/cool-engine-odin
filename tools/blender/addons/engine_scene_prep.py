@@ -60,7 +60,10 @@ SCENE_VARIANT_ASSET_NAME_KEY = "engine_modifier_asset_name"
 SCENE_VARIANT_ASSET_ID_KEY = "engine_modifier_asset_id"
 _TEMP_EXPORT_COLLECTION_PREFIX = "__ENGINE_SCENE_EXPORT__"
 
-
+# Successful mesh exports in this add-on session. Re-hash geometry on each export,
+# and check the output file's stat so edits, undo and missing/overwritten files rebuild.
+# Reloading the add-on starts with a full export; no persistent cache can go stale.
+_MESH_EXPORT_CACHE = {}
 
 
 # ---------------------------------------------------------------------------
@@ -824,6 +827,13 @@ def _prepare_export_metadata(context, blend=None):
     return tagged, synced, stamped, scene_mesh_jobs
 
 
+def _mesh_export_state(job):
+    mesh, _, _, _, absolute, signature = job
+    try:
+        info = os.stat(absolute)
+    except OSError:
+        return None
+    return (mesh.name, signature, info.st_size, info.st_mtime_ns)
 
 
 def _set_auto_export_status(message):
@@ -891,11 +901,19 @@ def _export_scene(context, blend):
             print("[engine export] WARNING:", warning)
 
         scene_mesh_count = 0
+        reused_mesh_count = 0
         for job in scene_mesh_jobs:
+            cache_key = os.path.normcase(os.path.abspath(job[4]))
+            state = _mesh_export_state(job)
+            if state is not None and _MESH_EXPORT_CACHE.get(cache_key) == state:
+                reused_mesh_count += 1
+                continue
             error = _export_scene_mesh_job(context, job)
             if error is not None:
+                print("[engine scene mesh] ERROR:", error)
                 return False, "Scene mesh export failed: " + error, warnings
             scene_mesh_count += 1
+            _MESH_EXPORT_CACHE[cache_key] = _mesh_export_state(job)
 
         try:
             result = _export_scene_proxies(context, out)
@@ -914,6 +932,8 @@ def _export_scene(context, blend):
             parts.append(f"{heightfield_count} terrain baked")
         if scene_mesh_count:
             parts.append(f"{scene_mesh_count} mesh asset(s) rebuilt")
+        if reused_mesh_count:
+            parts.append(f"{reused_mesh_count} mesh asset(s) reused")
         suffix = f" ({', '.join(parts)})" if parts else ""
         message = f"Exported {os.path.basename(out)} in {time.perf_counter() - start:.2f}s" + suffix
         if warnings:
