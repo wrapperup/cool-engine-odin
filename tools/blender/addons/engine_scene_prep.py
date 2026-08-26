@@ -230,10 +230,26 @@ def _is_local_scene_mesh(obj):
             obj.get(ENGINE_TYPE_KEY) != "heightfield")
 
 
+def _export_excluded_objects(context):
+    """Exclusion wins if an object is also linked into an included collection."""
+    excluded = set()
+    visited = set()
+    pending = [context.scene.collection]
+    while pending:
+        collection = pending.pop()
+        if collection in visited:
+            continue
+        visited.add(collection)
+        if getattr(collection, EXPORT_EXCLUDE_KEY, False):
+            excluded.update(collection.all_objects)
+        else:
+            pending.extend(collection.children)
+    return excluded
 
 
 def _export_objects(context):
-    return list(context.scene.objects)
+    excluded = _export_excluded_objects(context)
+    return [obj for obj in context.scene.objects if obj not in excluded]
 
 
 def _refresh_derived_assets(context, autotag=False):
@@ -830,7 +846,7 @@ def _include_excluded_engine_collections(context):
     a dependency-graph update makes the exporter see the correct transforms.
     """
     changed = []
-    excluded = set()
+    excluded = _export_excluded_objects(context)
     for layer_collection in _layer_collections(context.view_layer.layer_collection):
         if not layer_collection.exclude:
             continue
@@ -1332,6 +1348,19 @@ class OBJECT_OT_engine_refresh(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class COLLECTION_PT_engine_export(bpy.types.Panel):
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "collection"
+    bl_label = "Engine Export"
+
+    @classmethod
+    def poll(cls, context):
+        return context.collection is not None
+
+    def draw(self, context):
+        self.layout.prop(context.collection, EXPORT_EXCLUDE_KEY)
+        self.layout.label(text="Applies to all objects and child collections")
 
 
 class VIEW3D_PT_engine_scene_prep(bpy.types.Panel):
@@ -1536,6 +1565,7 @@ _classes = (
     OBJECT_OT_engine_refresh,
     SCENE_OT_engine_register_asset_library,
     SCENE_OT_engine_quick_export,
+    COLLECTION_PT_engine_export,
     VIEW3D_PT_engine_scene_prep,
 )
 
@@ -1563,6 +1593,12 @@ def _remove_stale_save_handlers():
 def register():
     _remove_stale_draw_handler()
     _remove_stale_save_handlers()
+    bpy.types.Collection.engine_exclude_export = bpy.props.BoolProperty(
+        name="Exclude from Engine Export",
+        description="Skip all objects in this collection and its children during engine export, "
+                    "even if also linked into included collections",
+        default=False,
+    )
     for c in _classes:
         try:
             bpy.utils.unregister_class(c)
@@ -1590,6 +1626,8 @@ def register():
 def unregister():
     _remove_stale_draw_handler()
     _remove_stale_save_handlers()
+    if hasattr(bpy.types.Collection, EXPORT_EXCLUDE_KEY):
+        del bpy.types.Collection.engine_exclude_export
     if hasattr(bpy.types.Scene, "engine_auto_export_on_save"):
         del bpy.types.Scene.engine_auto_export_on_save
     if hasattr(bpy.types.Scene, "engine_autotag_linked"):
