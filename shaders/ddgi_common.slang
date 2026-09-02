@@ -100,6 +100,15 @@ Vec3 ddgi_sample(DDGIVolume v, Vec3 world_pos, Vec3 normal, float bias) {
 }
 
 Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
+  return ddgi_sample_biased(v, biased, normal, normal);
+}
+
+Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal, Vec3 surface_normal) {
+  float support;
+  return ddgi_sample_biased(v, biased, normal, surface_normal, support);
+}
+
+Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal, Vec3 surface_normal, out float support) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let g = (biased - v.grid_origin) / v.probe_spacing;
   int3 base = int3(floor(g));
@@ -107,6 +116,7 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
 
   Vec3 irr = Vec3(0.0);
   float weight_sum = 0.0; // visibility-weighted
+  support = 0.0;
   for (uint c = 0; c < 8; c++) {
     int3 off = int3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
     int3 pc = clamp(base + off, int3(0), int3(counts) - 1);
@@ -121,6 +131,7 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
     if (probe_off.w < 0.5) {
       continue; // inactive (buried) probe -> excluded entirely, not even counted
     }
+    support += tri;
     let probe_pos = ddgi_probe_position(uint3(pc), v.grid_origin, v.probe_spacing) + probe_off.xyz;
 
     // chebyshev visibility
@@ -136,17 +147,14 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
     }
 
     let to_probe = -normalize(to_sample);
-    let backface = (dot(to_probe, normal) + 1.0) * 0.5;
+    let backface = (dot(to_probe, surface_normal) + 1.0) * 0.5;
     let w_back = backface * backface;
 
     let weight = tri * vis * w_back;
     weight_sum += weight;
     irr += ddgi_sample_irradiance(v, probe, normal) * weight;
   }
-  // Normalize by the visibility-weighted sum: an edge point reaches the weighted average of
-  // the probes it can see (slightly darker, not black). Leak control comes from occluded
-  // probes weighing less, not from crushing the result to zero.
-  return irr / max(weight_sum, 1e-5);
+  return weight_sum > 0.0 ? irr / weight_sum : Vec3(0.0);
 }
 
 float ddgi_volume_weight(DDGIVolume v, Vec3 p) {
@@ -162,16 +170,28 @@ Vec3 ddgi_surface_bias(Vec3 n, Vec3 view_dir, float scale) {
   return (n * 0.2 + view_dir * 0.8) * scale;
 }
 
-Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias) {
-  if (use_bias) {
-    return ddgi_sample(v, pos, n, bias); // feedback path: pure normal offset
-  }
-  return ddgi_sample_biased(v, pos + ddgi_surface_bias(n, view_dir, v.normal_bias), n);
+Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 surface_normal, Vec3 view_dir, float bias, bool use_bias) {
+  float support;
+  return _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias, support);
 }
 
-// leading (higher-priority) volumes claim coverage first; any uncovered remainder falls back to
-// the NEAREST volume's clamped-grid sample. That preserves the single-volume behavior everywhere
-Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias, bool apply_intensity) {
+Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 surface_normal, Vec3 view_dir, float bias, bool use_bias, out float support) {
+  if (use_bias) {
+    return ddgi_sample_biased(v, pos + n * bias, n, n, support);
+  }
+  return ddgi_sample_biased(v, pos + ddgi_surface_bias(surface_normal, view_dir, v.normal_bias), n, surface_normal, support);
+}
+
+Vec3 _ddgi_sample_volumes(
+  Slice<DDGIVolume> volumes,
+  Vec3 pos,
+  Vec3 n,
+  Vec3 surface_normal,
+  Vec3 view_dir,
+  float bias,
+  bool use_bias,
+  bool apply_intensity
+) {
   if (volumes.count == 0) {
     return Vec3(0.0);
   }
@@ -195,11 +215,14 @@ Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view
     }
 
     // Cheap containment reject before the 8-probe sample; cost scales with volume overlap.
-    let w = min(ddgi_volume_weight(v, pos), 1.0 - wsum);
-    if (w <= 0.0) {
+    let volume_weight = ddgi_volume_weight(v, pos);
+    if (volume_weight <= 0.0) {
       continue;
     }
-    let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+    float support;
+    let irr = _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias, support);
+    let exterior = smoothstep(0.0, 0.5 * min(v.probe_spacing.x, min(v.probe_spacing.y, v.probe_spacing.z)), dist);
+    let w = min(volume_weight * lerp(1.0, saturate(support), exterior), 1.0 - wsum);
     sum += irr * (apply_intensity ? v.intensity : 1.0) * w;
     wsum += w;
     if (wsum >= 1.0) {
@@ -208,15 +231,19 @@ Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view
   }
 
   let v = volumes[best];
-  let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+  let irr = _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias);
   return sum + irr * (apply_intensity ? v.intensity : 1.0) * (1.0 - wsum);
 }
 
 Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view_pos) {
+  return ddgi_sample_volumes(volumes, pos, n, n, view_pos);
+}
+
+Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 surface_normal, Vec3 view_pos) {
   let view_dir = normalize(view_pos - pos);
-  return _ddgi_sample_volumes(volumes, pos, n, view_dir, 0.0, false, true);
+  return _ddgi_sample_volumes(volumes, pos, n, surface_normal, view_dir, 0.0, false, true);
 }
 
 Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, float bias) {
-  return _ddgi_sample_volumes(volumes, pos, n, Vec3(0.0), bias, true, false);
+  return _ddgi_sample_volumes(volumes, pos, n, n, Vec3(0.0), bias, true, false);
 }
