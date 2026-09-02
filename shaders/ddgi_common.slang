@@ -120,6 +120,19 @@ Vec3 ddgi_sample(DDGIVolume v, Vec3 world_pos, Vec3 normal, float bias) {
 // Core lookup at an already-biased sample position. Callers choose the bias shape: pure normal
 // offset (feedback path) or view-aware surface bias (display path) — see ddgi_surface_bias.
 Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
+  return ddgi_sample_biased(v, biased, normal, normal);
+}
+
+// Material normals select irradiance direction, but must not move the lookup or
+// change which probes are behind the actual surface.
+Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal, Vec3 surface_normal) {
+  float support;
+  return ddgi_sample_biased(v, biased, normal, surface_normal, support);
+}
+
+// Keep active trilinear support separate from normalized irradiance so boundary
+// coverage can fade without treating valid black irradiance as missing data.
+Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal, Vec3 surface_normal, out float support) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let g = (biased - v.grid_origin) / v.probe_spacing;
   int3 base = int3(floor(g));
@@ -127,6 +140,7 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
 
   Vec3 irr = Vec3(0.0);
   float weight_sum = 0.0; // visibility-weighted (so edges get the weighted avg, not black)
+  support = 0.0;
   for (uint c = 0; c < 8; c++) {
     int3 off = int3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
     int3 pc = clamp(base + off, int3(0), int3(counts) - 1);
@@ -141,6 +155,7 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
     if (probe_off.w < 0.5) {
       continue; // inactive (buried) probe -> excluded entirely, not even counted
     }
+    support += tri;
     let probe_pos = ddgi_probe_position(uint3(pc), v.grid_origin, v.probe_spacing) + probe_off.xyz;
 
     // Chebyshev visibility: compare actual probe->sample distance against the depth
@@ -159,17 +174,16 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal) {
     // Backface weight: downweight probes sitting behind the surface (dot < 0 -> ~0), which
     // are the ones that leak light from the far side of a wall. Squared for a smooth falloff.
     let to_probe = -normalize(to_sample);
-    let backface = (dot(to_probe, normal) + 1.0) * 0.5;
+    let backface = (dot(to_probe, surface_normal) + 1.0) * 0.5;
     let w_back = backface * backface;
 
     let weight = tri * vis * w_back;
     weight_sum += weight;
     irr += ddgi_sample_irradiance(v, probe, normal) * weight;
   }
-  // Normalize by the visibility-weighted sum: an edge point reaches the weighted average of
-  // the probes it can see (slightly darker, not black). Leak control comes from occluded
-  // probes weighing less, not from crushing the result to zero.
-  return irr / max(weight_sum, 1e-5);
+  // Visibility chooses the relative contribution of probes, not an extra occlusion term.
+  // Clamping a small nonzero sum darkens the result and exposes depth-atlas texel patterns.
+  return weight_sum > 0.0 ? irr / weight_sum : Vec3(0.0);
 }
 
 // --- Multi-volume sampling ---------------------------------------------------
@@ -198,23 +212,38 @@ Vec3 ddgi_surface_bias(Vec3 n, Vec3 view_dir, float scale) {
 }
 
 // One volume's sample with the caller's bias mode (shared by the loop + fallback below).
-Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias) {
+Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 surface_normal, Vec3 view_dir, float bias, bool use_bias) {
+  float support;
+  return _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias, support);
+}
+
+Vec3 _ddgi_sample_one(DDGIVolume v, Vec3 pos, Vec3 n, Vec3 surface_normal, Vec3 view_dir, float bias, bool use_bias, out float support) {
   if (use_bias) {
-    return ddgi_sample(v, pos, n, bias); // feedback path: pure normal offset
+    return ddgi_sample_biased(v, pos + n * bias, n, n, support);
   }
-  return ddgi_sample_biased(v, pos + ddgi_surface_bias(n, view_dir, v.normal_bias), n);
+  return ddgi_sample_biased(v, pos + ddgi_surface_bias(surface_normal, view_dir, v.normal_bias), n, surface_normal, support);
 }
 
 // Irradiance at a world point from the packed, priority-sorted volume array. Budget fill:
-// leading (higher-priority) volumes claim coverage first; any uncovered remainder falls back to
-// the NEAREST volume's clamped-grid sample. That preserves the single-volume behavior everywhere
+// leading (higher-priority) volumes claim coverage first; missing probes soften the boundary.
+// Any uncovered remainder falls back to the NEAREST volume's clamped-grid sample.
+// That preserves the single-volume behavior everywhere
 // (in the fade band outside the grid, w + (1-w) of the same volume == the plain clamped sample),
 // so edge_fade only changes shading where volumes actually meet or overlap.
 // use_bias: explicit normal bias (feedback/trace path); otherwise the view-aware surface bias
 // scaled by each volume's normal_bias (display path), with view_dir = normalize(viewer - pos).
 // apply_intensity: display paths scale by per-volume display intensity; the feedback path must
 // not (its gain is the tracing volume's feedback, applied by the caller).
-Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view_dir, float bias, bool use_bias, bool apply_intensity) {
+Vec3 _ddgi_sample_volumes(
+  Slice<DDGIVolume> volumes,
+  Vec3 pos,
+  Vec3 n,
+  Vec3 surface_normal,
+  Vec3 view_dir,
+  float bias,
+  bool use_bias,
+  bool apply_intensity
+) {
   if (volumes.count == 0) {
     return Vec3(0.0);
   }
@@ -238,11 +267,17 @@ Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view
     }
 
     // Cheap containment reject before the 8-probe sample; cost scales with volume overlap.
-    let w = min(ddgi_volume_weight(v, pos), 1.0 - wsum);
-    if (w <= 0.0) {
+    let volume_weight = ddgi_volume_weight(v, pos);
+    if (volume_weight <= 0.0) {
       continue;
     }
-    let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+    float support;
+    let irr = _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias, support);
+    // Preserve local coverage all the way to the grid walls, including floors
+    // beside inactive probes. Only soften clamped extrapolation OUTSIDE the grid;
+    // an inward transition admits coarse outdoor lighting along interior surfaces.
+    let exterior = smoothstep(0.0, 0.5 * min(v.probe_spacing.x, min(v.probe_spacing.y, v.probe_spacing.z)), dist);
+    let w = min(volume_weight * lerp(1.0, saturate(support), exterior), 1.0 - wsum);
     sum += irr * (apply_intensity ? v.intensity : 1.0) * w;
     wsum += w;
     if (wsum >= 1.0) {
@@ -251,7 +286,7 @@ Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view
   }
 
   let v = volumes[best];
-  let irr = _ddgi_sample_one(v, pos, n, view_dir, bias, use_bias);
+  let irr = _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias);
   return sum + irr * (apply_intensity ? v.intensity : 1.0) * (1.0 - wsum);
 }
 
@@ -259,11 +294,16 @@ Vec3 _ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view
 // normal_bias) and per-volume display intensity. view_pos is whatever "sees" the point — the
 // camera for the forward pass, the capture center for reflection probes.
 Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 view_pos) {
+  return ddgi_sample_volumes(volumes, pos, n, n, view_pos);
+}
+
+// Raster materials supply the outward mesh normal separately from normal-map detail.
+Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 surface_normal, Vec3 view_pos) {
   let view_dir = normalize(view_pos - pos);
-  return _ddgi_sample_volumes(volumes, pos, n, view_dir, 0.0, false, true);
+  return _ddgi_sample_volumes(volumes, pos, n, surface_normal, view_dir, 0.0, false, true);
 }
 
 // Feedback/trace path: explicit normal bias, raw irradiance (caller applies its own bounce gain).
 Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, float bias) {
-  return _ddgi_sample_volumes(volumes, pos, n, Vec3(0.0), bias, true, false);
+  return _ddgi_sample_volumes(volumes, pos, n, n, Vec3(0.0), bias, true, false);
 }
