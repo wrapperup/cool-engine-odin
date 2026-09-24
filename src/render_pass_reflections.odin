@@ -101,7 +101,7 @@ reflection_probe_prepare :: proc(probes: []ReflectionProbe) {
 	)
 }
 
-record_reflection_probe_pass :: proc(cmd: vk.CommandBuffer, probes: []ReflectionProbe, volumes: []DDGIVolume) {
+record_reflection_probe_pass :: proc(cmd: gfx.CommandBuffer, probes: []ReflectionProbe, volumes: []DDGIVolume) {
 	if current_frame_game().rt.tlas.address == 0 do return
 
 	converged := true
@@ -124,7 +124,7 @@ record_reflection_probe_pass :: proc(cmd: vk.CommandBuffer, probes: []Reflection
 
 // Debug gizmo: draw a perfect mirror sphere at each probe's capture point, sampling its
 // captured cube. Reuses the DDGI debug-sphere mesh. Renders into the HDR scene.
-record_reflection_probe_debug_pass :: proc(cmd: vk.CommandBuffer, probes: []ReflectionProbe) {
+record_reflection_probe_debug_pass :: proc(cmd: gfx.CommandBuffer, probes: []ReflectionProbe) {
 	if !game.render_state.ddgi_rp.draw_reflection_probes do return
 
 	rp := &game.render_state.ddgi_rp
@@ -179,7 +179,7 @@ reflection_probe_debug_draw_box :: proc(probe: ^ReflectionProbe) {
 // Record an RT capture of all 6 cube faces (mip 0), then GGX-prefilter the roughness mips.
 // Uses the per-frame scene TLAS, so call after record_rt_scene_pass + DDGI update.
 @(private = "file")
-record_reflection_probe_capture :: proc(cmd: vk.CommandBuffer, probe: ^ReflectionProbe) {
+record_reflection_probe_capture :: proc(cmd: gfx.CommandBuffer, probe: ^ReflectionProbe) {
 	// The cube is sampled by prior frame shading and may also have been cleared
 	// through transfer. Complete those accesses before recapturing mip 0.
 	gfx.image_barrier(
