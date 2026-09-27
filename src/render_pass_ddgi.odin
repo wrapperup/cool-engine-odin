@@ -97,8 +97,8 @@ init_ddgi_rp :: proc() {
 			polygon_mode = .FILL,
 			cull_mode = {},
 			front_face = .COUNTER_CLOCKWISE,
-			depth = {format = gfx.r_ctx.depth_image.format, compare_op = .GREATER_OR_EQUAL, write_enabled = true},
-			color_format = gfx.r_ctx.draw_image.format,
+			depth = {format = .D32_SFLOAT, compare_op = .GREATER_OR_EQUAL, write_enabled = true},
+			color_format = .R32G32B32A32_SFLOAT,
 			multisampling_samples = gfx.msaa_samples(),
 			push_constants = GPUDDGIProbePush,
 		)
@@ -212,8 +212,8 @@ record_ddgi_debug_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Re
 	gfx.cmd_begin_rendering(
 		cmd,
 		area = gfx.r_ctx.draw_extent,
-		color_attachment = &{view = gfx.r_ctx.draw_image.image_view, layout = .COLOR_ATTACHMENT_OPTIMAL},
-		depth_attachment = &{view = gfx.r_ctx.depth_image.image_view, layout = .DEPTH_ATTACHMENT_OPTIMAL},
+		color_attachment = &{view = gfx.r_ctx.draw_image, layout = .COLOR_ATTACHMENT_OPTIMAL},
+		depth_attachment = &{view = gfx.r_ctx.depth_image, layout = .DEPTH_ATTACHMENT_OPTIMAL},
 	)
 	gfx.set_viewport_and_scissor(cmd, gfx.r_ctx.draw_extent)
 	gfx.cmd_bind_pipeline(cmd, rp.probe_pipeline)
@@ -248,19 +248,19 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	)
 	gfx.image_barrier(
 		cmd,
-		&volume.irradiance,
+		volume.irradiance,
 		src_access = .AllReadsWrites,
 		dst_access = .ComputeShaderReadWrite,
 	)
 	gfx.image_barrier(
 		cmd,
-		&volume.depth,
+		volume.depth,
 		src_access = .AllReadsWrites,
 		dst_access = .ComputeShaderReadWrite,
 	)
 	gfx.image_barrier(
 		cmd,
-		&volume.offset,
+		volume.offset,
 		src_access = .AllReadsWrites,
 		dst_access = .ComputeShaderReadWrite,
 	)
@@ -299,7 +299,7 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	// interior write -> read before the border copy reads edge texels.
 	gfx.image_barrier(
 		cmd,
-		&volume.irradiance,
+		volume.irradiance,
 		src_access = .ComputeShaderWrite,
 		dst_access = .ComputeShaderRead,
 	)
@@ -313,7 +313,7 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
 	gfx.image_barrier(
 		cmd,
-		&volume.irradiance,
+		volume.irradiance,
 		src_access = .ComputeShaderWrite,
 		dst_access = .AllShaderRead,
 	)
@@ -327,7 +327,7 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
 	gfx.image_barrier(
 		cmd,
-		&volume.depth,
+		volume.depth,
 		src_access = .ComputeShaderWrite,
 		dst_access = .ComputeShaderRead,
 	)
@@ -341,7 +341,7 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
 	gfx.image_barrier(
 		cmd,
-		&volume.depth,
+		volume.depth,
 		src_access = .ComputeShaderWrite,
 		dst_access = .AllShaderRead,
 	)
@@ -355,14 +355,14 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	vk.CmdDispatch(cmd, (num_probes + 63) / 64, 1, 1)
 	gfx.image_barrier(
 		cmd,
-		&volume.offset,
+		volume.offset,
 		src_access = .ComputeShaderWrite,
 		dst_access = .AllShaderRead,
 	)
 }
 
 record_ddgi_debug_atlas_pass :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resources) {
-	gfx.transition_image(cmd, &gfx.r_ctx.resolve_image, .GENERAL)
+	gfx.transition_image(cmd, gfx.r_ctx.resolve_image, .GENERAL)
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.debug_pipeline)
 	gfx.cmd_push_constants(
 		cmd,
