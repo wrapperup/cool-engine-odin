@@ -177,10 +177,7 @@ ddgi_prepare :: proc(volumes: []DDGIVolume, advance_frame: bool) {
 		gfx.write_buffer_slice(&rp.volumes_buffers[frame_index], packed[:count])
 	}
 
-	game.render_state.global_data.ddgi_volumes = gfx.slice(
-		rp.volumes_buffers[frame_index],
-		count = u64(count),
-	)
+	game.render_state.global_data.ddgi_volumes = gfx.slice(rp.volumes_buffers[frame_index], count = u64(count))
 }
 
 @(private = "file")
@@ -240,30 +237,10 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 
 	// These resources persist across frames. Finish prior shading/feedback reads
 	// before rewriting them for this frame.
-	gfx.buffer_barrier(
-		cmd,
-		volume.radiance_buffer,
-		src_access = .AllReadsWrites,
-		dst_access = .ComputeShaderWrite,
-	)
-	gfx.image_barrier(
-		cmd,
-		volume.irradiance,
-		src_access = .AllReadsWrites,
-		dst_access = .ComputeShaderReadWrite,
-	)
-	gfx.image_barrier(
-		cmd,
-		volume.depth,
-		src_access = .AllReadsWrites,
-		dst_access = .ComputeShaderReadWrite,
-	)
-	gfx.image_barrier(
-		cmd,
-		volume.offset,
-		src_access = .AllReadsWrites,
-		dst_access = .ComputeShaderReadWrite,
-	)
+	gfx.buffer_barrier(cmd, volume.radiance_buffer, src_access = .AllReadsWrites, dst_access = .ComputeShaderWrite)
+	gfx.image_barrier(cmd, volume.irradiance, src_access = .AllReadsWrites, dst_access = .ComputeShaderReadWrite)
+	gfx.image_barrier(cmd, volume.depth, src_access = .AllReadsWrites, dst_access = .ComputeShaderReadWrite)
+	gfx.image_barrier(cmd, volume.offset, src_access = .AllReadsWrites, dst_access = .ComputeShaderReadWrite)
 
 	// Pass A: trace.
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.trace_pipeline)
@@ -281,42 +258,35 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
 
 	// radiance write -> read barrier before the update integrates it.
-	gfx.buffer_barrier(
-		cmd,
-		volume.radiance_buffer,
-		src_access = .ComputeShaderWrite,
-		dst_access = .ComputeShaderRead,
-	)
+	gfx.buffer_barrier(cmd, volume.radiance_buffer, src_access = .ComputeShaderWrite, dst_access = .ComputeShaderRead)
 
 	// Pass B: update irradiance atlas.
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.update_pipeline)
 	gfx.cmd_push_constants(
 		cmd,
-		GPUDDGIUpdatePush{volume = ddgi_current_config(volume).ptr, radiance = volume.radiance_buffer.ptr, irradiance = volume.gpu.irradiance},
+		GPUDDGIUpdatePush {
+			volume = ddgi_current_config(volume).ptr,
+			radiance = volume.radiance_buffer.ptr,
+			irradiance = volume.gpu.irradiance,
+		},
 	)
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
 
 	// interior write -> read before the border copy reads edge texels.
-	gfx.image_barrier(
-		cmd,
-		volume.irradiance,
-		src_access = .ComputeShaderWrite,
-		dst_access = .ComputeShaderRead,
-	)
+	gfx.image_barrier(cmd, volume.irradiance, src_access = .ComputeShaderWrite, dst_access = .ComputeShaderRead)
 
 	// Pass B2: octahedral border copy (seamless sampling).
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.border_pipeline)
 	gfx.cmd_push_constants(
 		cmd,
-		GPUDDGIUpdatePush{volume = ddgi_current_config(volume).ptr, radiance = volume.radiance_buffer.ptr, irradiance = volume.gpu.irradiance},
+		GPUDDGIUpdatePush {
+			volume = ddgi_current_config(volume).ptr,
+			radiance = volume.radiance_buffer.ptr,
+			irradiance = volume.gpu.irradiance,
+		},
 	)
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
-	gfx.image_barrier(
-		cmd,
-		volume.irradiance,
-		src_access = .ComputeShaderWrite,
-		dst_access = .AllShaderRead,
-	)
+	gfx.image_barrier(cmd, volume.irradiance, src_access = .ComputeShaderWrite, dst_access = .AllShaderRead)
 
 	// Pass C: depth update (Chebyshev moments). pc.irradiance bound to the DEPTH atlas.
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.depth_update_pipeline)
@@ -325,12 +295,7 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 		GPUDDGIUpdatePush{volume = ddgi_current_config(volume).ptr, radiance = volume.radiance_buffer.ptr, irradiance = volume.gpu.depth},
 	)
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
-	gfx.image_barrier(
-		cmd,
-		volume.depth,
-		src_access = .ComputeShaderWrite,
-		dst_access = .ComputeShaderRead,
-	)
+	gfx.image_barrier(cmd, volume.depth, src_access = .ComputeShaderWrite, dst_access = .ComputeShaderRead)
 
 	// Pass C2: depth border copy.
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.depth_border_pipeline)
@@ -339,12 +304,7 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 		GPUDDGIUpdatePush{volume = ddgi_current_config(volume).ptr, radiance = volume.radiance_buffer.ptr, irradiance = volume.gpu.depth},
 	)
 	vk.CmdDispatch(cmd, num_probes, 1, 1)
-	gfx.image_barrier(
-		cmd,
-		volume.depth,
-		src_access = .ComputeShaderWrite,
-		dst_access = .AllShaderRead,
-	)
+	gfx.image_barrier(cmd, volume.depth, src_access = .ComputeShaderWrite, dst_access = .AllShaderRead)
 
 	// Pass D: probe relocation (offset atlas, 1 thread/probe). Reads the same radiance.
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.relocate_pipeline)
@@ -353,20 +313,12 @@ record_ddgi_volume :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resource
 		GPUDDGIUpdatePush{volume = ddgi_current_config(volume).ptr, radiance = volume.radiance_buffer.ptr, irradiance = volume.gpu.offset},
 	)
 	vk.CmdDispatch(cmd, (num_probes + 63) / 64, 1, 1)
-	gfx.image_barrier(
-		cmd,
-		volume.offset,
-		src_access = .ComputeShaderWrite,
-		dst_access = .AllShaderRead,
-	)
+	gfx.image_barrier(cmd, volume.offset, src_access = .ComputeShaderWrite, dst_access = .AllShaderRead)
 }
 
 record_ddgi_debug_atlas_pass :: proc(cmd: gfx.CommandBuffer, volume: ^DDGI_Volume_Resources) {
 	gfx.transition_image(cmd, gfx.r_ctx.resolve_image, .GENERAL)
 	gfx.cmd_bind_pipeline(cmd, game.render_state.ddgi_rp.debug_pipeline)
-	gfx.cmd_push_constants(
-		cmd,
-		GPUDDGIDebugAtlasPush{volume = ddgi_current_config(volume).ptr, out_image = game.render_state.temp_resources.resolved_image_id},
-	)
+	gfx.cmd_push_constants(cmd, GPUDDGIDebugAtlasPush{volume = ddgi_current_config(volume).ptr, out_image = gfx.r_ctx.resolve_image})
 	vk.CmdDispatch(cmd, u32(gfx.r_ctx.draw_extent.width + 15) / 16, u32(gfx.r_ctx.draw_extent.height + 15) / 16, 1)
 }
