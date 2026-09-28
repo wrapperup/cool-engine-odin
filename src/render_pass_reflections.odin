@@ -9,7 +9,7 @@ import "gfx"
 @(shader_shared)
 GPUReflectionCapturePush :: struct #max_field_align(16) {
 	global:     gfx.Ptr(GPUGlobalData),
-	geometries: gfx.Ptr(GPUGeometry),
+	instances: gfx.Ptr(GPURenderInstance),
 	materials:  gfx.Ptr(GPUMaterial),
 	tlas:       vk.DeviceAddress `AccelerationStructure`,
 	out_cube:   gfx.ImageId `RWImage2DArray`, // D2_ARRAY storage view of the cube (mip 0, 6 layers)
@@ -177,7 +177,7 @@ reflection_probe_debug_draw_box :: proc(probe: ^ReflectionProbe) {
 }
 
 // Record an RT capture of all 6 cube faces (mip 0), then GGX-prefilter the roughness mips.
-// Uses the per-frame scene TLAS, so call after record_rt_scene_pass + DDGI update.
+// Uses the per-frame scene TLAS, so call after record_raytracing + DDGI update.
 @(private = "file")
 record_reflection_probe_capture :: proc(cmd: gfx.CommandBuffer, probe: ^ReflectionProbe) {
 	// The cube is sampled by prior frame shading and may also have been cleared
@@ -195,7 +195,7 @@ record_reflection_probe_capture :: proc(cmd: gfx.CommandBuffer, probe: ^Reflecti
 		cmd,
 		GPUReflectionCapturePush {
 			global = current_frame_game().global_buffer.ptr,
-			geometries = current_frame_game().rt.geometries_buffer.ptr,
+			instances = current_frame_game().instances_buffer.ptr,
 			materials = game.render_state.material_store.materials_buffer.ptr,
 			tlas = current_frame_game().rt.tlas.address,
 			out_cube = probe.cube_mip_storage_ids[0],
