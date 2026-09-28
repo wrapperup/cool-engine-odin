@@ -24,7 +24,7 @@ void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID)
   let rot = float(v.frame_index) * 0.61803399 * DDGI_TWO_PI;
   let dir = ddgi_ray_direction(ray, v.rays_per_probe, rot);
 
-  let s = rt_trace_surface(pc.tlas.get(), pc.geometries, pc.materials, pc.global, origin, dir, 0.0, v.ray_max);
+  let s = rt_trace_surface(pc.tlas.get(), pc.instances, pc.materials, pc.global, origin, dir, 0.0, v.ray_max);
 
   Vec3 radiance;
   float hit_t;
