@@ -22,7 +22,7 @@ V2F vertex_main(uint vid: SV_VertexID, uint iid: SV_InstanceID) {
   let center = ddgi_probe_position(coord, v.grid_origin, v.probe_spacing) + probe_off.xyz;
 
   let vert = pc.vertex_buffer[vid];
-  let world = center + vert.position * pc.probe_radius;
+  let world = center + vert.position;
 
   let world_to_clip = mul(pc.global.view_to_clip, pc.global.world_to_view);
 
