@@ -35,6 +35,7 @@ void compute_main(uint3 group_id: SV_GroupID, uint3 thread_id: SV_GroupThreadID)
     let w = pow(max(0.0, dot(texel_dir, ray_dir)), SHARPNESS);
     if (w > 1e-6) {
       let raw = pc.radiance[probe * v.rays_per_probe + i].w;
+
       // backface bias
       let d = raw < 0.0 ? min(-raw, v.max_distance) * 0.2 : min(raw + v.depth_bias, v.max_distance);
       sum += Vec2(d, d * d) * w;

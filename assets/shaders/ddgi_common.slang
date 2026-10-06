@@ -51,9 +51,11 @@ uint ddgi_num_probes(uint3 counts) {
 Vec4 ddgi_probe_offset(DDGIVolume v, uint probe) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
   let tile = ddgi_probe_tile(ddgi_probe_coord(probe, counts), counts);
+
   uint2 sz;
   v.offset.get_dimensions(sz.x, sz.y);
   let uv = (Vec2(tile) + 0.5) / Vec2(sz);
+
   return v.offset.sample_level(v.sampler, uv, 0);
 }
 
@@ -117,6 +119,7 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal, Vec3 surface_nor
   Vec3 irr = Vec3(0.0);
   float weight_sum = 0.0; // visibility-weighted
   support = 0.0;
+
   for (uint c = 0; c < 8; c++) {
     int3 off = int3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
     int3 pc = clamp(base + off, int3(0), int3(counts) - 1);
@@ -159,10 +162,12 @@ Vec3 ddgi_sample_biased(DDGIVolume v, Vec3 biased, Vec3 normal, Vec3 surface_nor
 
 float ddgi_volume_weight(DDGIVolume v, Vec3 p) {
   uint3 counts = uint3(v.grid_counts[0], v.grid_counts[1], v.grid_counts[2]);
+
   let bmin = v.grid_origin;
   let bmax = v.grid_origin + v.probe_spacing * Vec3(counts - 1);
   let inward = min(p - bmin, bmax - p); // per-axis distance to the walls (negative outside)
   let m = min(inward.x, min(inward.y, inward.z));
+
   return saturate(1.0 + m / max(v.edge_fade, 1e-4));
 }
 
@@ -221,6 +226,7 @@ Vec3 _ddgi_sample_volumes(
     }
     float support;
     let irr = _ddgi_sample_one(v, pos, n, surface_normal, view_dir, bias, use_bias, support);
+
     let exterior = smoothstep(0.0, 0.5 * min(v.probe_spacing.x, min(v.probe_spacing.y, v.probe_spacing.z)), dist);
     let w = min(volume_weight * lerp(1.0, saturate(support), exterior), 1.0 - wsum);
     sum += irr * (apply_intensity ? v.intensity : 1.0) * w;
