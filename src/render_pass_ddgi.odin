@@ -157,6 +157,8 @@ ddgi_prepare :: proc(volumes: []DDGIVolume, advance_frame: bool) {
 	count: u32
 
 	for &volume in volumes {
+		ddgi_do_bake(&volume)
+
 		if advance_frame {
 			volume.gpu.frame_index += 1
 		}
@@ -182,15 +184,17 @@ ddgi_current_config :: proc(volume: ^DDGI_Volume_Resources) -> ^gfx.Buffer(GPUDD
 }
 
 record_ddgi_pass :: proc(cmd: gfx.CommandBuffer, volumes: []DDGIVolume) {
-	if current_frame_game().rt.tlas.address == 0 || !game.state.update_ddgi do return
+	if current_frame_game().rt.tlas.address == 0 || !game.state.update_ddgi {
+		return
+	}
 
 	for &volume in volumes {
-		record_ddgi_volume(cmd, &volume.volume)
+		if volume.bake_state != .Baked {
+			record_ddgi_volume(cmd, &volume.volume)
+		}
 	}
 }
 
-// Overlay: draws an instanced sphere per probe into the HDR scene, each shaded
-// by its own irradiance. Depth-tested against the scene.
 record_ddgi_debug_probes_pass :: proc(cmd: gfx.CommandBuffer, volumes: []DDGIVolume) {
 	when EDITOR {
 		if .Irradiance_Probes not_in editor.settings.vis_flags {
