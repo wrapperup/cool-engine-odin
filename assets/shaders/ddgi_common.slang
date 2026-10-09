@@ -1,5 +1,6 @@
 import bindless;
 import common;
+import standard_brdf;
 import types;
 
 static const float DDGI_TWO_PI = 6.28318530718;
@@ -252,4 +253,9 @@ Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, Vec3 surfa
 
 Vec3 ddgi_sample_volumes(Slice<DDGIVolume> volumes, Vec3 pos, Vec3 n, float bias) {
   return _ddgi_sample_volumes(volumes, pos, n, n, Vec3(0.0), bias, true, false);
+}
+
+Vec3 shade_indirect_diffuse(PBR_Surface surface, GlobalData* global) {
+  let irradiance = ddgi_sample_volumes(global.ddgi_volumes, surface.pos_ws, surface.normal, surface.geometric_normal, global.camera_pos);
+  return surface.diffuse_color * surface.ao * irradiance;
 }
